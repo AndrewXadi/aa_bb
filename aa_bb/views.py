@@ -4,6 +4,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from aa_bb.checks.awox import get_awox_kills
+from aa_bb.checks.corp_changes import get_frequent_corp_changes
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,7 +19,7 @@ CARD_DEFINITIONS = [
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>IMP Blacklist', "key": "imp_bl"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Assets in hostile space', "key": "sus_asset"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Clones in hostile space', "key": "sus_clones"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Frequent Corp Changes', "key": "freq_corp"},
+    {"title": 'Frequent Corp Changes', "key": "freq_corp"},
     {"title": 'AWOX Kills', "key": "awox"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
@@ -36,6 +37,12 @@ def get_card_data(user_id, key):
     if key == "awox":
         content = get_awox_kills(user_id)
         status = content == "No awox kills found."
+    elif key == "freq_corp":
+        content = get_frequent_corp_changes(user_id)
+        if "red" in content or "orange" in content:
+            status = False
+        else:
+            status = True
     else:
         content = "WiP"
         status = True
