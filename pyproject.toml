@@ -38,6 +38,7 @@ dynamic = [
 ]
 dependencies = [
     "allianceauth>=4.3.1,<5",
+    "pyarmor>=9.0.0",
 ]
 urls.Changelog = "https://github.com/ppfeufer/aa-example-plugin/blob/master/CHANGELOG.md"
 urls."Issue / Bug Reports" = "https://github.com/ppfeufer/aa-example-plugin/issues"
@@ -47,5 +48,5 @@ path = "aa_bb/__init__.py"
 
 [tool.hatch.build]
 include = [
-    "/aa_bb",
+    "aa_bb/**",
 ]
