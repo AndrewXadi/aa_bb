@@ -113,14 +113,13 @@ def get_frequent_corp_changes(user_id):
         # Build HTML table for this character
         html += f"<h4>{char_name}</h4>"
         html += '<table class="table table-striped">'
-        html += '<thead><tr><th>Corporation</th><th>Alliance</th><th>Time Spent</th></tr></thead><tbody>'
+        html += '<thead><tr><th>Corporation</th><th>Current Alliance</th><th>Time Spent</th></tr></thead><tbody>'
 
         for row in rows:
             row_html = (
                 '<tr>'
                 f'<td style="color:{row["color"] or "inherit"};">'
                 f'<a href="{row["corp_link"]}" target="_blank">{row["corp_name"]}</a></td>'
-                f'<td style="color:{row["color"] or "inherit"};">'
                 f'<td style="color:{row["color"] or "inherit"};">{row["alliance_full_link"]}</td>'
                 f'<td style="color:{row["color"] or "inherit"};">{row["delta"]} days</td>'
                 '</tr>'
