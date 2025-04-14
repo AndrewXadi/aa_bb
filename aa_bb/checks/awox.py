@@ -19,20 +19,20 @@ def get_awox_kills(user_id, delay=0.2):
     char_ids = [c.character.character_id for c in characters]
     char_id_map = {c.character.character_id: c.character.character_name for c in characters}
 
-    logger.debug(f"Fetching AWOX kills for user {user_id}: {char_id_map}")
+    logger.debug("Fetching AWOX kills for user {}: {}".format(user_id, char_id_map))
 
     kills_by_id = {}
 
     for char_id in char_ids:
-        zkill_url = f"https://zkillboard.com/api/characterID/{char_id}/awox/1/"
+        zkill_url = "https://zkillboard.com/api/characterID/{}/awox/1/".format(char_id)
         response = requests.get(zkill_url, headers=HEADERS)
 
         if response.status_code != 200:
-            logger.warning(f"Failed to fetch kills for char {char_id}: {response.status_code}")
+            logger.warning("Failed to fetch kills for char {}: {}".format(char_id, response.status_code))
             continue
 
         killmails = response.json()
-        logger.debug(f"Character {char_id} has {len(killmails)} potential awox kills")
+        logger.debug("Character {} has {} potential awox kills".format(char_id, len(killmails)))
 
         for kill in killmails:
             kill_id = kill.get("killmail_id")
@@ -42,16 +42,14 @@ def get_awox_kills(user_id, delay=0.2):
             if not kill_id or not hash_:
                 continue
 
-            # Skip if already processed
             if kill_id in kills_by_id:
-                continue  # Already handled
+                continue
 
-            # Delay slightly to be polite
             time.sleep(delay)
             try:
                 esi_resp = requests.get(ESI_URL.format(kill_id, hash_), headers=HEADERS)
                 if esi_resp.status_code != 200:
-                    logger.warning(f"Failed to fetch ESI killmail {kill_id}: {esi_resp.status_code}")
+                    logger.warning("Failed to fetch ESI killmail {}: {}".format(kill_id, esi_resp.status_code))
                     continue
 
                 full_kill = esi_resp.json()
@@ -65,16 +63,16 @@ def get_awox_kills(user_id, delay=0.2):
                         attacker_names.add(char_id_map.get(a_id))
 
                 if not attacker_names:
-                    continue  # No valid attacker from user's chars
+                    continue
 
                 kills_by_id[kill_id] = {
                     "value": int(value),
-                    "link": f"https://zkillboard.com/kill/{kill_id}/",
+                    "link": "https://zkillboard.com/kill/{}/".format(kill_id),
                     "chars": attacker_names
                 }
 
             except Exception as e:
-                logger.error(f"Error processing killmail {kill_id}: {e}")
+                logger.error("Error processing killmail {}: {}".format(kill_id, e))
 
     if not kills_by_id:
         return "No awox kills found."
@@ -83,7 +81,7 @@ def get_awox_kills(user_id, delay=0.2):
     html += '<thead><tr><th>Character(s)</th><th>Value</th><th>Link</th></tr></thead><tbody>'
     for kill in kills_by_id.values():
         char_list = ", ".join(sorted(kill["chars"]))
-        value_formatted = "{:,}".format(kill["value"])  # Format ISK value
+        value_formatted = "{:,}".format(kill["value"])
         html += format_html(
             '<tr><td>{}</td><td>{} ISK</td><td><a href="{}" target="_blank">View</a></td></tr>',
             char_list, value_formatted, kill["link"]
