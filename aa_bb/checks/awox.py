@@ -80,13 +80,15 @@ def get_awox_kills(user_id, delay=0.2):
     html = '<table class="table table-striped">'
     html += '<thead><tr><th>Character(s)</th><th>Value</th><th>Link</th></tr></thead><tbody>'
     for kill in kills_by_id.values():
-        char_list = ", ".join(sorted(kill["chars"]))
-        value_formatted = "{:,}".format(kill["value"])
-        link = kill["link"]
-        html += format_html(
-            '<tr><td>{}</td><td>{} ISK</td><td><a href="{}" target="_blank">View</a></td></tr>',
-            char_list, value_formatted, link
-        )
+        chars = kill.get("chars", [])
+        value = kill.get("value", 0)
+        link = kill.get("link", "#")
+
+        char_list = ", ".join(sorted(chars))
+        value_str = "{:,}".format(value)
+
+        row_html = '<tr><td>{}</td><td>{} ISK</td><td><a href="{}" target="_blank">View</a></td></tr>'
+        html += format_html(row_html, char_list, value_str, link)
     html += '</tbody></table>'
 
     return html
