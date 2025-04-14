@@ -5,16 +5,16 @@ requires = [
 ]
 
 [project]
-name = "aa-example-plugin"
-description = "Example Plugin for Alliance Auth (GitHub Version)"
+name = "aa_bb"
+description = "BigBrother"
 readme = "README.md"
 keywords = [
     "allianceauth",
-    "example",
+    "aa_bb",
 ]
 license = { file = "LICENSE" }
 authors = [
-    { name = "Peter Pfeufer", email = "develop@ppfeufer.de" },
+    { name = "Andrew Xadi", email = "andrewxadi@gmail.com" },
 ]
 requires-python = ">=3.10"
 classifiers = [
@@ -43,9 +43,9 @@ urls.Changelog = "https://github.com/ppfeufer/aa-example-plugin/blob/master/CHAN
 urls."Issue / Bug Reports" = "https://github.com/ppfeufer/aa-example-plugin/issues"
 
 [tool.hatch.version]
-path = "example/__init__.py"
+path = "aa_bb/__init__.py"
 
 [tool.hatch.build]
 include = [
-    "/example",
+    "/aa_bb",
 ]

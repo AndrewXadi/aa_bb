@@ -1,0 +1,17 @@
+{% extends 'allianceauth/base-bs5.html' %}
+
+{% load i18n %}
+
+{% block page_title %}
+    {% translate "BigBrother" %}
+{% endblock %}
+
+{% block header_nav_brand %}
+    {% translate "BigBrother" %}
+{% endblock header_nav_brand %}
+
+{% block content %}
+    <div class="aa_bb">
+        {% block details %}{% endblock %}
+    </div>
+{% endblock %}

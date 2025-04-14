@@ -1,5 +1,5 @@
-appname = example
-package = example
+appname = aa_bb
+package = aa_bb
 
 # Default goal
 .DEFAULT_GOAL := help

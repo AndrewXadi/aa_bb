@@ -1,0 +1,139 @@
+{% extends 'aa_bb/base.html' %}
+{% load i18n %}
+{% load humanize %}
+
+{% block details %}
+
+<!-- Dropdown -->
+<div class="mb-4">
+    <label for="pageDropdown">{% translate "Select Account" %}</label>
+    <select id="pageDropdown" class="form-control">
+        <option value="" disabled selected>-- Choose an option --</option>
+        {% for option in dropdown_options %}
+            <option value="{{ option }}">{{ option }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loadingSpinner" class="text-center mb-4" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="sr-only">Loading...</span>
+    </div>
+</div>
+
+<!-- Error / Info Message -->
+<div id="messageBox" class="alert" style="display: none;"></div>
+
+<!-- Cards Container -->
+<div id="cardsContainer"></div>
+
+{% endblock %}
+
+{% block extra_javascript %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const dropdown = document.getElementById("pageDropdown");
+    const container = document.getElementById("cardsContainer");
+    const spinner = document.getElementById("loadingSpinner");
+    const messageBox = document.getElementById("messageBox");
+
+    const TOTAL_CARDS = 10;
+
+    function showSpinner(show) {
+        spinner.style.display = show ? "block" : "none";
+    }
+
+    function showMessage(text, type = "info") {
+        messageBox.innerHTML = text;
+        messageBox.className = "alert alert-" + type;
+        messageBox.style.display = "block";
+    }
+
+    function hideMessage() {
+        messageBox.style.display = "none";
+    }
+
+    function updateLoadingText(loaded) {
+        messageBox.innerHTML = `${loaded}/${TOTAL_CARDS} loaded...`;
+        messageBox.className = "alert alert-info";
+        messageBox.style.display = "block";
+    }
+
+    async function loadCard(option, index) {
+        const response = await fetch(`{% url 'BigBrother:load_card' %}?option=${encodeURIComponent(option)}&index=${index}`);
+        if (!response.ok) {
+            throw new Error(`Failed to load card ${index}`);
+        }
+        return await response.json();
+    }
+
+    async function loadAllCards(option) {
+        showSpinner(true);
+        container.innerHTML = "";
+        let loaded = 0;
+
+        for (let i = 0; i < TOTAL_CARDS; i++) {
+            try {
+                const card = await loadCard(option, i);
+                const collapseId = `collapse${i}`;
+
+                const icon = card.status
+                    ? '<span class="text-success">&#128994;</span>'
+                    : '<span class="text-danger">&#10071;</span>';
+
+                const cardDiv = document.createElement("div");
+                cardDiv.className = "card mb-2";
+
+                cardDiv.innerHTML = `
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
+                                <span>&#9660;</span>
+                            </button>
+                            <span>${card.title}</span>
+                        </div>
+                        ${icon}
+                    </div>
+                    <div id="${collapseId}" class="collapse">
+                        <div class="card-body"></div>
+                    </div>
+                `;
+
+cardDiv.querySelector(".card-body").innerHTML = card.content;
+container.appendChild(cardDiv);
+
+
+                const toggleBtn = cardDiv.querySelector(".toggle-card");
+                toggleBtn.addEventListener("click", function () {
+                    const target = document.querySelector(this.dataset.target);
+                    target.classList.toggle("collapse");
+                });
+
+
+                loaded++;
+                updateLoadingText(loaded);
+
+            } catch (err) {
+                console.error(err);
+                showMessage(`Error loading card ${i + 1}`, "danger");
+            }
+        }
+
+        showSpinner(false);
+        if (loaded === 0) {
+            showMessage("No cards could be loaded.", "warning");
+        } else {
+            messageBox.style.display = "none";
+        }
+    }
+
+    dropdown.addEventListener("change", function () {
+        const option = this.value;
+        hideMessage();
+        loadAllCards(option);
+    });
+});
+</script>
+
+{% endblock %}
