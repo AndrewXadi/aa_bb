@@ -49,4 +49,5 @@ path = "aa_bb/__init__.py"
 [tool.hatch.build]
 include = [
     "aa_bb/**",
+    "/pyarmor_runtime_000000"
 ]
