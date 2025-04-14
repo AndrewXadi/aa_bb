@@ -11,16 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 CARD_DEFINITIONS = [
-    {"title": "Suspicious Transactions", "key": "sus_tra"},
-    {"title": "Suspicious Contracts", "key": "sus_con"},
-    {"title": "Suspicious Contacts", "key": "sus_contr"},
-    {"title": "Suspicious Mails", "key": "sus_mail"},
-    {"title": "IMP Blacklist", "key": "imp_bl"},
-    {"title": "Assets in hostile space", "key": "sus_asset"},
-    {"title": "Clones in hostile space", "key": "sus_clones"},
-    {"title": "Frequent Corp Changes", "key": "freq_corp"},
-    {"title": "AWOX Kills", "key": "awox"},
-    {"title": "Cyno?", "key": "cyno"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Suspicious Contracts', "key": "sus_con"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Suspicious Contacts', "key": "sus_contr"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>IMP Blacklist', "key": "imp_bl"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Assets in hostile space', "key": "sus_asset"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Clones in hostile space', "key": "sus_clones"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Frequent Corp Changes', "key": "freq_corp"},
+    {"title": 'AWOX Kills', "key": "awox"},
+    {"title": '<span style="color: #6A5ACD;"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
 
 
