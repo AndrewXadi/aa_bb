@@ -92,9 +92,11 @@ def render_assets(user_id: int) -> Optional[str]:
 
     for system in sorted(systems):
         owner_info = get_system_owner(system)
+
         if owner_info:
             try:
-                oid = int(owner_info["owner_id"])
+                # owner_id might be '' or None
+                oid = int(owner_info["owner_id"]) if owner_info["owner_id"] else None
             except (ValueError, TypeError):
                 oid = None
 
@@ -108,9 +110,13 @@ def render_assets(user_id: int) -> Optional[str]:
             oname = "—"
             hostile = False
 
-    row_tpl = '<tr><td>{}</td><td style="color: red;">{}</td></tr>' if hostile else '<tr><td>{}</td><td>{}</td></tr>'
-    html += format_html(row_tpl, system, oname)
-
+        # ← THIS must be indented inside the loop!
+        row_tpl = (
+            '<tr><td>{}</td><td style="color: red;">{}</td></tr>'
+            if hostile
+            else '<tr><td>{}</td><td>{}</td></tr>'
+        )
+        html += format_html(row_tpl, system, oname)
 
     html += "</tbody></table>"
     return html
