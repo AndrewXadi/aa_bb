@@ -1,20 +1,20 @@
 import requests
+import time
+import logging
 from django.utils.html import format_html
 from allianceauth.authentication.models import CharacterOwnership
-import logging
-import time
+from ..app_settings import get_site_url, get_contact_email, get_owner_name
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "https://yourwebsite.com/ Maintainer: Your Name your@email.com"
+USER_AGENT = f"{get_site_url()} Maintainer: {get_owner_name()} {get_contact_email()}"
 HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept-Encoding": "gzip"
 }
-
 ESI_URL = "https://esi.evetech.net/latest/killmails/{}/{}"
 
-def get_awox_kills(user_id, delay=0.2):
+def fetch_awox_kills(user_id, delay=0.2):
     characters = CharacterOwnership.objects.filter(user__id=user_id)
     char_ids = [c.character.character_id for c in characters]
     char_id_map = {c.character.character_id: c.character.character_name for c in characters}
@@ -24,7 +24,7 @@ def get_awox_kills(user_id, delay=0.2):
     kills_by_id = {}
 
     for char_id in char_ids:
-        zkill_url = "https://zkillboard.com/api/characterID/{}/awox/1/".format(char_id)
+        zkill_url = f"https://zkillboard.com/api/characterID/{char_id}/awox/1/"
         response = requests.get(zkill_url, headers=HEADERS)
 
         if response.status_code != 200:
@@ -41,7 +41,6 @@ def get_awox_kills(user_id, delay=0.2):
 
             if not kill_id or not hash_:
                 continue
-
             if kill_id in kills_by_id:
                 continue
 
@@ -67,28 +66,38 @@ def get_awox_kills(user_id, delay=0.2):
 
                 kills_by_id[kill_id] = {
                     "value": int(value),
-                    "link": "https://zkillboard.com/kill/{}/".format(kill_id),
+                    "link": f"https://zkillboard.com/kill/{kill_id}/",
                     "chars": attacker_names
                 }
 
             except Exception as e:
                 logger.error("Error processing killmail {}: {}".format(kill_id, e))
 
-    if not kills_by_id:
-        return "No awox kills found."
+    return list(kills_by_id.values()) if kills_by_id else None
+
+
+def render_awox_kills_html(userID):
+    kills = fetch_awox_kills(userID)
+    if not kills:
+        return None
 
     html = '<table class="table table-striped">'
     html += '<thead><tr><th>Character(s)</th><th>Value</th><th>Link</th></tr></thead><tbody>'
-    for kill in kills_by_id.values():
-        chars = kill.get("chars", [])
-        value = kill.get("value", 0)
+
+    for kill in kills:
+        chars = ", ".join(sorted(kill.get("chars", [])))
+        value = "{:,}".format(kill.get("value", 0))
         link = kill.get("link", "#")
 
-        char_list = ", ".join(sorted(chars))
-        value_str = "{:,}".format(value)
-
         row_html = '<tr><td>{}</td><td>{} ISK</td><td><a href="{}" target="_blank">View</a></td></tr>'
-        html += format_html(row_html, char_list, value_str, link)
-    html += '</tbody></table>'
+        html += format_html(row_html, chars, value, link)
 
+    html += '</tbody></table>'
     return html
+
+def get_awox_kill_links(user_id):
+    kills = fetch_awox_kills(user_id)
+    if not kills:
+        return []
+
+    return [kill["link"] for kill in kills if "link" in kill]

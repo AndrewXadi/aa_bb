@@ -3,8 +3,20 @@ from django.core.handlers.wsgi import WSGIRequest
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
-from aa_bb.checks.awox import get_awox_kills
+from aa_bb.checks.awox import render_awox_kills_html
 from aa_bb.checks.corp_changes import get_frequent_corp_changes
+from aa_bb.checks.cyno import cyno
+from aa_bb.checks.hostile_assets import render_assets
+from aa_bb.checks.hostile_clones import render_clones
+from aa_bb.checks.imp_blacklist import imp_bl
+from aa_bb.checks.lawn_blacklist import lawn_bl
+from aa_bb.checks.notifications import game_time
+from aa_bb.checks.notifications import skill_injected
+from aa_bb.checks.sus_contacts import sus_conta
+from aa_bb.checks.sus_contracts import sus_contra
+from aa_bb.checks.sus_mails import sus_mail
+from aa_bb.checks.sus_trans import sus_tra
+from .app_settings import get_system_owner
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,8 +29,8 @@ CARD_DEFINITIONS = [
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Contacts', "key": "sus_contr"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>IMP Blacklist', "key": "imp_bl"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Assets in hostile space', "key": "sus_asset"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Clones in hostile space', "key": "sus_clones"},
+    {"title": 'Assets in hostile space', "key": "sus_asset"},
+    {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Frequent Corp Changes', "key": "freq_corp"},
     {"title": 'AWOX Kills', "key": "awox"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Cyno?', "key": "cyno"},
@@ -35,11 +47,23 @@ def get_user_id(character_name):
 
 def get_card_data(user_id, key):
     if key == "awox":
-        content = get_awox_kills(user_id)
-        status = content == "No awox kills found."
+        content = render_awox_kills_html(user_id)
+        status = content == None
     elif key == "freq_corp":
         content = get_frequent_corp_changes(user_id)
-        if "red" in content or "orange" in content:
+        if "red" in content:
+            status = False
+        else:
+            status = True
+    elif key == "sus_clones":
+        content = render_clones(user_id)
+        if "danger" in content or "warning" in content:
+            status = False
+        else:
+            status = True
+    elif key == "sus_asset":
+        content = render_assets(user_id)
+        if "red" in content:
             status = False
         else:
             status = True
