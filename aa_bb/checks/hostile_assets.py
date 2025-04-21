@@ -93,15 +93,24 @@ def render_assets(user_id: int) -> Optional[str]:
     for system in sorted(systems):
         owner_info = get_system_owner(system)
         if owner_info:
-            oid = int(owner_info["owner_id"])
-            oname = owner_info["owner_name"] or f"ID {oid}"
-            hostile = oid in hostile_ids
+            try:
+                oid = int(owner_info["owner_id"])
+            except (ValueError, TypeError):
+                oid = None
+
+            if oid is not None:
+                oname = owner_info["owner_name"] or f"ID {oid}"
+                hostile = oid in hostile_ids
+            else:
+                oname = "—"
+                hostile = False
         else:
             oname = "—"
             hostile = False
 
-        row_tpl = '<tr><td>{}</td><td style="color: red;">{}</td></tr>' if hostile else '<tr><td>{}</td><td>{}</td></tr>'
-        html += format_html(row_tpl, system, oname)
+    row_tpl = '<tr><td>{}</td><td style="color: red;">{}</td></tr>' if hostile else '<tr><td>{}</td><td>{}</td></tr>'
+    html += format_html(row_tpl, system, oname)
+
 
     html += "</tbody></table>"
     return html
