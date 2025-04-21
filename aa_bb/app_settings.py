@@ -6,6 +6,7 @@ from allianceauth.authentication.models import UserProfile, CharacterOwnership
 import logging
 from esi.clients import EsiClientProvider
 import subprocess
+import sys
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict
@@ -243,7 +244,7 @@ def send_message(message):
 
 def uninstall(reason):
     send_message(f"@everyone BigBrother is uninstalling for the following reason: {reason}.\nThe app *should* continue to work although in an inactive state until you restart your auth. To avoid breaking your auth, please remove aa_bb from installed apps in your local.py before restarting")
-    subprocess.run(["pip", "uninstall", "-y", "aa_bb"])
+    subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "aa_bb"])
     return None
 
 def get_main_corp_id():
