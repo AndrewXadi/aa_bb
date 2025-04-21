@@ -55,6 +55,8 @@ class BigBrotherConfig(SingletonModel):
     
     pingroleID = models.CharField(
         max_length=255,
+        null=True,
+        blank=True,
         default=None,
         help_text="Input the role ID you want pinged when people need to investigate"
     )
