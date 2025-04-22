@@ -150,7 +150,7 @@ def get_system_owner(system_name: str) -> Optional[Dict[str, str]]:
     else:
         logger.info(f"System {system_id} has no alliance or faction ownership.")
         return {
-            "owner_id": "",
+            "owner_id": "0",
             "owner_name": "Unclaimed",
             "owner_type": "unknown",
         }
