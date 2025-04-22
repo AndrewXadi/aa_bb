@@ -93,10 +93,12 @@ def BB_run_regular_updates():
                 uninstall("**Your corp isn't allowed to run this plugin**")
 
         instance.save()
+        send_message(f"is active 1: {instance.is_active}")
 
         # Check user statuses
         if instance.is_active:
             users = get_users()
+            send_message(f"is active 2: {instance.is_active}")
 
             for char_name in users:
                 user_id = get_user_id(char_name)
@@ -233,8 +235,10 @@ def BB_run_regular_updates():
                     send_message(msg)
 
                 status.save()
+                send_message(f"is active 3: {instance.is_active}")
 
     except Exception as e:
         logger.error(f"Task failed: {e}")
         instance.is_active = False
         instance.save()
+        send_message(f"is active 4: {instance.is_active}, error: {e}")
