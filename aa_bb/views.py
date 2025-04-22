@@ -10,7 +10,7 @@ from aa_bb.checks.corp_changes import get_frequent_corp_changes
 from aa_bb.checks.cyno import cyno
 from aa_bb.checks.hostile_assets import render_assets
 from aa_bb.checks.hostile_clones import render_clones
-from aa_bb.checks.imp_blacklist import get_user_character_names
+from aa_bb.checks.imp_blacklist import generate_blacklist_links
 from aa_bb.checks.lawn_blacklist import get_user_character_names_lawn
 from aa_bb.checks.notifications import game_time, skill_injected
 from aa_bb.checks.sus_contacts import sus_conta
@@ -64,8 +64,10 @@ def get_card_data(user_id, key):
         content = render_assets(user_id)
         status = "red" not in content
     elif key == "imp_bl":
-        content = f"<a href='https://gice.goonfleet.com/Blacklist?q={get_user_character_names(user_id)}'>Click here</a>"
+        links = generate_blacklist_links(user_id)
+        content = "<br>".join(links)
         status = False
+
     elif key == "lawn_bl":
         content = (
             "Go <a href=https://auth.lawnalliance.space/blacklist/blacklist/>here</a> "

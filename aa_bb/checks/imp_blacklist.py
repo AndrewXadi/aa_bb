@@ -1,16 +1,28 @@
 from allianceauth.authentication.models import CharacterOwnership
 
-def get_user_character_names(user_id):
-    """
-    Given an Alliance Auth User ID, returns a comma-separated string
-    of all character names linked to that user.
-    """
+def generate_blacklist_links(user_id, base_url="https://gice.goonfleet.com/Blacklist", max_url_length=2000):
     characters = CharacterOwnership.objects.filter(user__id=user_id)
-    names =[]
-    for char in characters:
-        char_name = str(char.character)
-        names.append(char_name)
-    return ",".join(names)
+    names = [str(char.character) for char in characters]
+    
+    links = []
+    current_names = []
 
-def imp_bl(userID):
-    return None
+    for name in names:
+        test_list = current_names + [name]
+        query_string = ",".join(test_list)
+        url = f"{base_url}?q={query_string}"
+
+        if len(url) >= max_url_length:
+            # Finalize the current URL and start a new batch
+            link_label = "Click here" if not links else "and here"
+            links.append(f"<a href='{base_url}?q={','.join(current_names)}'>{link_label}</a>")
+            current_names = [name]
+        else:
+            current_names = test_list
+
+    # Add the final batch if anything's left
+    if current_names:
+        link_label = "Click here" if not links else "and here"
+        links.append(f"<a href='{base_url}?q={','.join(current_names)}'>{link_label}</a>")
+
+    return links
