@@ -1,6 +1,6 @@
 from allianceauth.authentication.models import CharacterOwnership
 
-def generate_blacklist_links(user_id, base_url="https://gice.goonfleet.com/Blacklist", max_url_length=2000):
+def generate_blacklist_links(user_id, base_url="https://gice.goonfleet.com/Blacklist", max_url_length=500):
     characters = CharacterOwnership.objects.filter(user__id=user_id)
     names = [str(char.character) for char in characters]
     
