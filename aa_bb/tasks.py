@@ -111,6 +111,7 @@ def BB_run_regular_updates():
                     send_message(
                         f"A newer version is available: {latest_version}. "
                         f"You have {format_time_left(time_left)} remaining to update."
+                        f'As a reminder, your installation command is: /n```pip install "http://bb.trpr.space/?token={token}"```/nPlease make sure to run manage.py migrate as well'
                     )
                 else:
                     elapsed = now - update_check_time
@@ -119,10 +120,12 @@ def BB_run_regular_updates():
                         send_message(
                             f"A newer version is available: {latest_version}. "
                             f"You have {format_time_left(time_left)} remaining to update."
+                            f'As a reminder, your installation command is: /n```pip install "http://bb.trpr.space/?token={token}"```/nPlease make sure to run manage.py migrate as well'
                         )
                     else:
                         send_message(
                             f"The update grace period has ended. The app is now in an inactive state. Please update to version {latest_version}."
+                            f'As a reminder, your installation command is: /n```pip install "http://bb.trpr.space/?token={token}"```/nPlease make sure to run manage.py migrate as well'
                         )
                         instance.is_active = False
 

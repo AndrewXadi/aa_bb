@@ -30,3 +30,5 @@ def generate_blacklist_links(user_id, base_url="https://gice.goonfleet.com/Black
 
     return formatted_links
 
+def imp_bl(userID):
+    return None
