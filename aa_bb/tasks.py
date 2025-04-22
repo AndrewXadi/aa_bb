@@ -15,6 +15,11 @@ from aa_bb.checks.sus_contacts import sus_conta
 from aa_bb.checks.sus_contracts import sus_contra
 from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
+from datetime import datetime, timedelta
+
+# You'd typically store this in persistent storage (e.g., file, DB)
+update_check_time = None
+timer_duration = timedelta(days=7)
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +29,17 @@ def BB_run_regular_updates():
     instance.is_active = True
 
     try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        # Try to find a character from any superuser
+        superusers = User.objects.filter(is_superuser=True)
         char = EveCharacter.objects.filter(
-            character_ownership__user__is_superuser=True
+            character_ownership__user__in=superusers
         ).first()
+
+        # If no superuser character found, fall back to any character
+        if not char:
+            char = EveCharacter.objects.all().first()
         if char:
             corp_info = get_corp_info(char.corporation_id)
             corp_name = corp_info["name"]
@@ -80,10 +93,39 @@ def BB_run_regular_updates():
                 )
                 return
 
+
+
             elif result.startswith("v="):
                 latest_version = result.split("=")[1]
-                send_message(f"A newer version is available: {latest_version}")
-                # Add update notification/logic here
+                now = datetime.now()
+
+                def format_time_left(delta):
+                    days = delta.days
+                    hours, remainder = divmod(delta.seconds, 3600)
+                    minutes = remainder // 60
+                    return f"{days} days, {hours} hours, {minutes} minutes"
+
+                if update_check_time is None:
+                    update_check_time = now
+                    time_left = timer_duration
+                    send_message(
+                        f"A newer version is available: {latest_version}. "
+                        f"You have {format_time_left(time_left)} remaining to update."
+                    )
+                else:
+                    elapsed = now - update_check_time
+                    if elapsed < timer_duration:
+                        time_left = timer_duration - elapsed
+                        send_message(
+                            f"A newer version is available: {latest_version}. "
+                            f"You have {format_time_left(time_left)} remaining to update."
+                        )
+                    else:
+                        send_message(
+                            f"The update grace period has ended. The app is now in an inactive state. Please update to version {latest_version}."
+                        )
+                        instance.is_active = False
+
 
             elif result == "OK":
                 logger.info("Token validation successful.")
@@ -170,7 +212,10 @@ def BB_run_regular_updates():
                     # Compare and find new links
                     old_links = set(status.hostile_assets or [])
                     new_links = set(hostile_assets_result) - old_links
-                    link_list = "\n".join(f"🔗 {link}" for link in new_links)
+                    link_list = "\n".join(
+                        f"{system} owned by {hostile_assets_result[system]}" 
+                        for system in (set(hostile_assets_result) - set(status.hostile_assets or []))
+                    )
                     logger.info(f"{char_name} new assets {link_list}")
                     link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
                     logger.info(f"{char_name} old assets {link_list2}")
@@ -187,7 +232,10 @@ def BB_run_regular_updates():
                     # Compare and find new links
                     old_links = set(status.hostile_clones or [])
                     new_links = set(hostile_clones_result) - old_links
-                    link_list = "\n".join(f"🔗 {link}" for link in new_links)
+                    link_list = "\n".join(
+                        f"{system} owned by {hostile_clones_result[system]}" 
+                        for system in (set(hostile_clones_result) - set(status.hostile_clones or []))
+                    )
                     logger.info(f"{char_name} new clones {link_list}")
                     link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
                     logger.info(f"{char_name} old clones {link_list2}")

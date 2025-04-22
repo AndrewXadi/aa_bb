@@ -191,7 +191,7 @@ def validate_token_with_server(token, client_version=None, self_des=None, self_d
 
     try:
         params = {"token": token}
-        headers = {"User-Agent": "c"}
+        headers = {"User-Agent": "6eq8cJSNKBoA4sSLwINMY7iA4oNznAmtvSFSXlsd"}
 
         if client_version:
             params["v"] = client_version

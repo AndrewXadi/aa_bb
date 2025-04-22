@@ -8,7 +8,7 @@
 <div class="mb-4">
     <label for="pageDropdown">{% translate "Select Account" %}</label>
     <select id="pageDropdown" class="form-control">
-        <option value="" disabled selected>-- Choose an option --</option>
+        <option value="" disabled selected>-- Choose an account --</option>
         {% for option in dropdown_options %}
             <option value="{{ option }}">{{ option }}</option>
         {% endfor %}
@@ -25,6 +25,9 @@
 <!-- Error / Info Message -->
 <div id="messageBox" class="alert" style="display: none;"></div>
 
+<!-- Persistent Error Messages -->
+<div id="errorMessages"></div>
+
 <!-- Cards Container -->
 <div id="cardsContainer"></div>
 
@@ -37,11 +40,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const container = document.getElementById("cardsContainer");
     const spinner = document.getElementById("loadingSpinner");
     const messageBox = document.getElementById("messageBox");
+    const errorMessages = document.getElementById("errorMessages");
 
-    const TOTAL_CARDS = 10;
+    const TOTAL_CARDS = 12;  // you can keep 12 or use template count
 
-    function showSpinner(show) {
-        spinner.style.display = show ? "block" : "none";
+    function showSpinner(on) {
+        spinner.style.display = on ? "block" : "none";
     }
 
     function showMessage(text, type = "info") {
@@ -55,68 +59,70 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function updateLoadingText(loaded) {
-        messageBox.innerHTML = `${loaded}/${TOTAL_CARDS} loaded...`;
-        messageBox.className = "alert alert-info";
-        messageBox.style.display = "block";
+        showMessage(`${loaded}/${TOTAL_CARDS} loaded... This may take a while, do not refresh`, "info");
     }
 
+    function appendPersistentError(msg) {
+        const d = document.createElement("div");
+        d.className = "alert alert-danger";
+        d.innerText = msg;
+        errorMessages.appendChild(d);
+    }
+
+    // Fetch one card, throw server-side message if error
     async function loadCard(option, index) {
-        const response = await fetch(`{% url 'BigBrother:load_card' %}?option=${encodeURIComponent(option)}&index=${index}`);
+        const url = `{% url 'BigBrother:load_card' %}?option=${encodeURIComponent(option)}&index=${index}`;
+        const response = await fetch(url);
+        const data = await response.json();
         if (!response.ok) {
-            throw new Error(`Failed to load card ${index}`);
+            throw new Error(data.error || `Failed to load card ${index + 1}`);
         }
-        return await response.json();
+        return data;
     }
 
     async function loadAllCards(option) {
         showSpinner(true);
         container.innerHTML = "";
-        let loaded = 0;
+        errorMessages.innerHTML = "";
+        hideMessage();
 
+        let loaded = 0;
         for (let i = 0; i < TOTAL_CARDS; i++) {
             try {
                 const card = await loadCard(option, i);
                 const collapseId = `collapse${i}`;
-
                 const icon = card.status
                     ? '<span class="text-success">&#128994;</span>'
                     : '<span class="text-danger">&#128681;</span>';
 
                 const cardDiv = document.createElement("div");
                 cardDiv.className = "card mb-2";
-
                 cardDiv.innerHTML = `
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center">
-                            <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
-                                <span>&#9660;</span>
-                            </button>
-                            <span>${card.title}</span>
-                        </div>
-                        ${icon}
+                      <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
+                          <span>&#9660;</span>
+                        </button>
+                        <span>${card.title}</span>
+                      </div>
+                      ${icon}
                     </div>
                     <div id="${collapseId}" class="collapse">
-                        <div class="card-body"></div>
+                      <div class="card-body">${card.content}</div>
                     </div>
                 `;
-
-cardDiv.querySelector(".card-body").innerHTML = card.content;
-container.appendChild(cardDiv);
-
-
-                const toggleBtn = cardDiv.querySelector(".toggle-card");
-                toggleBtn.addEventListener("click", function () {
-                    const target = document.querySelector(this.dataset.target);
-                    target.classList.toggle("collapse");
-                });
-
+                container.appendChild(cardDiv);
+                cardDiv.querySelector(".toggle-card")
+                       .addEventListener("click", e => {
+                           document.querySelector(e.currentTarget.dataset.target)
+                                   .classList.toggle("collapse");
+                       });
 
                 loaded++;
                 updateLoadingText(loaded);
-
             } catch (err) {
                 console.error(err);
-                showMessage(`Error loading card ${i + 1}`, "danger");
+                appendPersistentError(`Error loading card ${i + 1}: ${err.message}`);
             }
         }
 
@@ -124,16 +130,13 @@ container.appendChild(cardDiv);
         if (loaded === 0) {
             showMessage("No cards could be loaded.", "warning");
         } else {
-            messageBox.style.display = "none";
+            hideMessage();
         }
     }
 
     dropdown.addEventListener("change", function () {
-        const option = this.value;
-        hideMessage();
-        loadAllCards(option);
+        loadAllCards(this.value);
     });
 });
 </script>
-
 {% endblock %}
