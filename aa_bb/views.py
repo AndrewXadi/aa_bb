@@ -8,7 +8,7 @@ from aa_bb.checks.corp_changes import get_frequent_corp_changes
 from aa_bb.checks.cyno import cyno
 from aa_bb.checks.hostile_assets import render_assets
 from aa_bb.checks.hostile_clones import render_clones
-from aa_bb.checks.imp_blacklist import imp_bl
+from aa_bb.checks.imp_blacklist import get_user_character_names
 from aa_bb.checks.lawn_blacklist import lawn_bl
 from aa_bb.checks.notifications import game_time
 from aa_bb.checks.notifications import skill_injected
@@ -17,6 +17,7 @@ from aa_bb.checks.sus_contracts import sus_contra
 from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
 from .app_settings import get_system_owner
+from .models import BigBrotherConfig
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -28,7 +29,7 @@ CARD_DEFINITIONS = [
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Contracts', "key": "sus_con"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Contacts', "key": "sus_contr"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>IMP Blacklist', "key": "imp_bl"},
+    {"title": '<span style="color: Orange;"><b>WiP </b></span>IMP Blacklist', "key": "imp_bl"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Frequent Corp Changes', "key": "freq_corp"},
@@ -67,6 +68,12 @@ def get_card_data(user_id, key):
             status = False
         else:
             status = True
+    elif key == "imp_bl":
+        content = f"<a href='https://gice.goonfleet.com/Blacklist?q={get_user_character_names(user_id)}'>Click here</a>"
+        #if "red" in content:
+        status = False
+        #else:
+            #status = True
     else:
         content = "WiP"
         status = True
@@ -77,13 +84,15 @@ def get_card_data(user_id, key):
 @permission_required("aa_bb.basic_access")
 def index(request: WSGIRequest) -> HttpResponse:
     dropdown_options = []
-
-    if request.user.has_perm("aa_bb.full_access"):
+    if BigBrotherConfig.get_solo() == False:
+        context = "Big Brother is currently in an inactive state, please make sure it is up to date, you have filled the settings and turned on the task"
+    elif request.user.has_perm("aa_bb.full_access"):
         dropdown_options = list(
             UserProfile.objects.exclude(main_character=None)
             .values_list("main_character__character_name", flat=True)
             .order_by("main_character__character_name")
         )
+        context = {"dropdown_options": dropdown_options}
     elif request.user.has_perm("aa_bb.recruiter_access"):
         dropdown_options = list(
             UserProfile.objects.filter(state=1)
@@ -91,8 +100,8 @@ def index(request: WSGIRequest) -> HttpResponse:
             .values_list("main_character__character_name", flat=True)
             .order_by("main_character__character_name")
         )
+        context = {"dropdown_options": dropdown_options}
 
-    context = {"dropdown_options": dropdown_options}
     return render(request, "aa_bb/index.html", context)
 
 

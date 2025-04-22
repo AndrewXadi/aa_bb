@@ -50,13 +50,14 @@ class UserStatus(models.Model):
 class BigBrotherConfig(SingletonModel):
     token = models.CharField(
         max_length=255,
+        blank=False,
         help_text="Input the token you were provided to install this app"
     )
     
     pingroleID = models.CharField(
         max_length=255,
         null=True,
-        blank=True,
+        blank=False,
         default=None,
         help_text="Input the role ID you want pinged when people need to investigate"
     )
@@ -104,7 +105,7 @@ class BigBrotherConfig(SingletonModel):
     )
 
     is_active = models.BooleanField(
-        default=True,
+        default=False,
         editable=False,
         help_text="has the plugin been activated/deactivated?"
     )

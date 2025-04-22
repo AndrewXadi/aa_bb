@@ -1,5 +1,3 @@
-# aa_bb/apps.py
-
 from django.apps import AppConfig
 from django.db.utils import OperationalError, ProgrammingError
 
@@ -20,15 +18,29 @@ class AaBbConfig(AppConfig):
                 every=1,
                 period=IntervalSchedule.HOURS,
             )
-            PeriodicTask.objects.update_or_create(
+
+            task, created = PeriodicTask.objects.get_or_create(
                 name="BB run regular updates",
                 defaults={
                     "interval": schedule,
                     "task": "aa_bb.tasks.BB_run_regular_updates",
-                    "enabled": False,
+                    "enabled": False,  # only on creation
                 },
             )
-            logger.info("✅ Registered/updated ‘BB run regular updates’ periodic task")
+
+            if not created:
+                updated = False
+                if task.interval != schedule or task.task != "aa_bb.tasks.BB_run_regular_updates":
+                    task.interval = schedule
+                    task.task = "aa_bb.tasks.BB_run_regular_updates"
+                    task.save()
+                    updated = True
+                if updated:
+                    logger.info("✅ Updated ‘BB run regular updates’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB run regular updates’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB run regular updates’ periodic task with enabled=False")
         except (OperationalError, ProgrammingError) as e:
-            # DB isn’t ready yet (e.g. during migrate), so skip
             logger.warning(f"Could not register periodic task yet: {e}")
+
