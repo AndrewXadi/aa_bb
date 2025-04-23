@@ -76,7 +76,8 @@ def resolve_alliance_name(owner_id: int) -> str:
         if cached:
             return cached[0]
         e_short = e.__class__.__name__
-        return f"Unresolvable {e_short}"
+        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
+        return f"Unresolvable eve map{e_short}{e_detail}"
 
 
 def get_system_owner(system_name: str) -> Dict[str, str]:
@@ -111,7 +112,8 @@ def get_system_owner(system_name: str) -> Dict[str, str]:
     except Exception as e:
         logger.exception(f"Failed to resolve system name '{system_name}': {e}")
         e_short = e.__class__.__name__
-        return {"owner_id": owner_id, "owner_name": f"Unresolvable {e_short}", "owner_type": owner_type}
+        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
+        return {"owner_id": owner_id, "owner_name": f"Unresolvable name, {e_short}{e_detail}", "owner_type": owner_type}
 
     # 2) Fetch sovereignty map
     try:
@@ -122,7 +124,8 @@ def get_system_owner(system_name: str) -> Dict[str, str]:
     except Exception as e:
         logger.exception(f"Failed to fetch sovereignty for system ID {system_id}: {e}")
         e_short = e.__class__.__name__
-        return {"owner_id": owner_id, "owner_name": f"Unresolvable {e_short}", "owner_type": owner_type}
+        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
+        return {"owner_id": owner_id, "owner_name": f"Unresolvable sov, {e_short}{e_detail}", "owner_type": owner_type}
 
     # 3) Determine owner ID and type
     if "alliance_id" in entry:
@@ -287,5 +290,5 @@ def get_contact_email():  # regex sso url
     return settings.ESI_USER_CONTACT_EMAIL
 
 
-def aastatistics_active():
-    return apps.is_installed("aastatistics")
+def aablacklist_active():
+    return apps.is_installed("blacklist")

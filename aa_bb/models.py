@@ -25,6 +25,7 @@ class General(models.Model):
             ("basic_access", "Can access this app"),
             ("full_access", "Can view all main characters"),
             ("recruiter_access", "Can view guest main characters only"),
+            ("can_blacklist_characters", "Can add characters to blacklist"),
             )
         
 class UserStatus(models.Model):
