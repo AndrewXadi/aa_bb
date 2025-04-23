@@ -9,36 +9,32 @@ import subprocess
 import sys
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict
-
+from typing import Optional, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
-
 
 ESI_BASE = "https://esi.evetech.net/latest"
 DATASOURCE = "tranquility"
 HEADERS = {"Accept": "application/json"}
 
-# Module‑level cache variables
-_sov_map_cache = None              # type: Optional[list]
-_sov_map_cache_time = None         # type: Optional[datetime]
-_CACHE_TTL = timedelta(hours=24)   # how long to keep the cache
+# Sovereignty map cache (24h TTL)
+_sov_map_cache: Optional[list] = None
+_sov_map_cache_time: Optional[datetime] = None
+_CACHE_TTL = timedelta(hours=24)
+
+# Owner-name cache (7d TTL)
+_owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
+_OWNER_NAME_CACHE_TTL = timedelta(days=7)
 
 
 def _get_sov_map() -> list:
     """
-    Return the full sovereignty map, fetching from ESI only if the
-    cached copy is missing or older than _CACHE_TTL.
+    Return the full sovereignty map, fetching from ESI if missing or stale.
     """
     global _sov_map_cache, _sov_map_cache_time
-
-    #_sov_map_cache_time = None
-
     now = datetime.utcnow()
-    if _sov_map_cache is None or _sov_map_cache_time is None \
-       or (now - _sov_map_cache_time) > _CACHE_TTL:
-        # Cache miss or stale → fetch anew
+    if not _sov_map_cache or not _sov_map_cache_time or (now - _sov_map_cache_time) > _CACHE_TTL:
         resp = requests.get(
             f"{ESI_BASE}/sovereignty/map/",
             params={"datasource": DATASOURCE},
@@ -47,20 +43,20 @@ def _get_sov_map() -> list:
         resp.raise_for_status()
         _sov_map_cache = resp.json()
         _sov_map_cache_time = now
+    return _sov_map_cache
 
-    return _sov_map_cache  # guaranteed to be a list
-
-
-# Module-level cache for resolved owner names
-_owner_name_cache = {}
 
 def resolve_alliance_name(owner_id: int) -> str:
     """
-    Resolve an alliance/faction ID to its name using ESI.
-    Uses a module-level cache since names never change.
+    Resolve alliance/faction ID to name via ESI, caching for 7 days.
+    On lookup failure, falls back to stale cache or returns Unresolvable <Error>.
     """
-    if owner_id in _owner_name_cache:
-        return _owner_name_cache[owner_id]
+    now = datetime.utcnow()
+    cached = _owner_name_cache.get(owner_id)
+    if cached:
+        name, ts = cached
+        if now - ts < _OWNER_NAME_CACHE_TTL:
+            return name
 
     try:
         resp = requests.post(
@@ -70,33 +66,29 @@ def resolve_alliance_name(owner_id: int) -> str:
             headers=HEADERS,
         )
         resp.raise_for_status()
-        name_data = resp.json()
-        name_entry = next((n for n in name_data if n["id"] == owner_id), None)
-        owner_name = name_entry["name"] if name_entry else "(Unknown)"
+        data = resp.json()
+        entry = next((n for n in data if n.get("id") == owner_id), None)
+        owner_name = entry.get("name") if entry else "(Unknown)"
+        _owner_name_cache[owner_id] = (owner_name, now)
+        return owner_name
     except Exception as e:
         logger.exception(f"Failed to resolve name for owner ID {owner_id}: {e}")
-        owner_name = "(Unknown)"
+        if cached:
+            return cached[0]
+        e_short = e.__class__.__name__
+        return f"Unresolvable {e_short}"
 
-    _owner_name_cache[owner_id] = owner_name
-    return owner_name
 
-
-def get_system_owner(system_name: str) -> Optional[Dict[str, str]]:
+def get_system_owner(system_name: str) -> Dict[str, str]:
     """
-    Look up the sovereignty owner of the given EVE system (by name).
-    Uses a 24‑hour cached copy of the full map for performance.
-
-    Returns a dict:
-      {
-        "owner_id": "...",
-        "owner_name": "...",
-        "owner_type": "alliance", "faction", or "unknown"
-      }
-    or None if not found.
+    Get sovereignty owner of an EVE system by name.
+    Always returns a dict with keys: owner_id, owner_name, owner_type.
     """
-    logger.debug(f"Looking up system owner for: {system_name}")
+    owner_id = "0"
+    owner_name = f"Unresolvable Init"
+    owner_type = "unknown"
 
-    # 1) Resolve name → ID
+    # 1) Resolve name to ID
     try:
         resp = requests.post(
             f"{ESI_BASE}/universe/ids/",
@@ -106,66 +98,44 @@ def get_system_owner(system_name: str) -> Optional[Dict[str, str]]:
         )
         resp.raise_for_status()
         id_data = resp.json()
-        logger.debug(f"Resolved name → ID response: {id_data}")
+        sys_entry = next(
+            (i for i in id_data.get("systems", [])
+             if i.get("name", "").lower() == system_name.lower()),
+            None
+        )
+        if not sys_entry:
+            return {"owner_id": owner_id, "owner_name": f"Unclaimed", "owner_type": "unknown"}
+        system_id = sys_entry["id"]
     except Exception as e:
         logger.exception(f"Failed to resolve system name '{system_name}': {e}")
-        return None
+        e_short = e.__class__.__name__
+        return {"owner_id": owner_id, "owner_name": f"Unresolvable {e_short}", "owner_type": owner_type}
 
-    sys_entry = next(
-        (i for i in id_data.get("systems", [])
-         if i.get("name", "").lower() == system_name.lower()),
-        None
-    )
-
-    if not sys_entry:
-        logger.warning(f"No system ID found for system name: {system_name}")
-        return None
-
-    system_id = sys_entry["id"]
-    logger.debug(f"System '{system_name}' resolved to ID {system_id}")
-
-    # 2) Get the sovereignty map and find the system
+    # 2) Fetch sovereignty map
     try:
         sov_map = _get_sov_map()
-        entry = next((s for s in sov_map if s["system_id"] == system_id), None)
-        logger.debug(f"Sovereignty entry for system {system_id}: {entry}")
+        entry = next((s for s in sov_map if s.get("system_id") == system_id), None)
+        if not entry:
+            raise LookupError("SovNotFound")
     except Exception as e:
-        logger.exception(f"Failed to fetch or parse sovereignty map: {e}")
-        return None
+        logger.exception(f"Failed to fetch sovereignty for system ID {system_id}: {e}")
+        e_short = e.__class__.__name__
+        return {"owner_id": owner_id, "owner_name": f"Unresolvable {e_short}", "owner_type": owner_type}
 
-    if not entry:
-        logger.info(f"System ID {system_id} not found in sovereignty map.")
-        return None
-
-    # 3) Determine owner
-    owner_id = None
-    owner_type = None
-
+    # 3) Determine owner ID and type
     if "alliance_id" in entry:
-        owner_id = entry["alliance_id"]
+        owner_id = str(entry["alliance_id"])
         owner_type = "alliance"
     elif "faction_id" in entry:
-        owner_id = entry["faction_id"]
+        owner_id = str(entry["faction_id"])
         owner_type = "faction"
     else:
-        logger.info(f"System {system_id} has no alliance or faction ownership.")
-        return {
-            "owner_id": "0",
-            "owner_name": "Unclaimed",
-            "owner_type": "unknown",
-        }
+        return {"owner_id": "0", "owner_name": "Unclaimed", "owner_type": "unknown"}
 
-    logger.debug(f"System {system_id} is owned by {owner_type} with ID {owner_id}")
+    # 4) Resolve owner name
+    owner_name = resolve_alliance_name(int(owner_id))
+    return {"owner_id": owner_id, "owner_name": owner_name, "owner_type": owner_type}
 
-    # 4) Resolve owner ID → name (cached)
-    owner_name = resolve_alliance_name(owner_id)
-    logger.info(f"System '{system_name}' is owned by {owner_type} '{owner_name}' (ID: {owner_id})")
-
-    return {
-        "owner_id": str(owner_id),
-        "owner_name": owner_name,
-        "owner_type": owner_type,
-    }
 
 
 

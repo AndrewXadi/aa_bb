@@ -34,7 +34,7 @@ def get_asset_locations(user_id: int) -> List[str]:
             continue
 
         # all their assets
-        for asset in CharacterAsset.objects.select_related('location_name__system').filter(character=char_audit):
+        for asset in CharacterAsset.objects.select_related('location_name__system').filter(character=char_audit).exclude(location_flag="solar_system"):
             loc = asset.location_name
             if loc and loc.system:
                 system_names.add(loc.system.name)
@@ -64,7 +64,7 @@ def get_hostile_asset_locations(user_id: int) -> Dict[str, str]:
         if owner_info:
             oid = int(owner_info["owner_id"])
             oname = owner_info["owner_name"] or f"ID {oid}"
-            if oid in hostile_ids:
+            if oid in hostile_ids or "Unresolvable" in oname:
                 hostile_map[system] = oname
                 logger.debug(f"Hostile asset system found: {system} owned by {oname} (ID {oid})")
         else:
@@ -102,7 +102,7 @@ def render_assets(user_id: int) -> Optional[str]:
 
             if oid is not None:
                 oname = owner_info["owner_name"] or f"ID {oid}"
-                hostile = oid in hostile_ids
+                hostile = oid in hostile_ids or "Unresolvable" in oname
             else:
                 oname = "—"
                 hostile = False

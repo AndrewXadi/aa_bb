@@ -76,7 +76,7 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
         if owner_info:
             oid = int(owner_info["owner_id"])
             oname = owner_info["owner_name"] or f"ID {oid}"
-            if oid in hostile_ids:
+            if oid in hostile_ids or "Unresolvable" in oname:
                 hostile_map[system] = oname
                 logger.debug(f"Hostile clone found: {system} owned by {oname} (ID {oid})")
         else:
@@ -109,7 +109,7 @@ def render_clones(user_id: int) -> Optional[str]:
         if owner_info:
             oid = int(owner_info["owner_id"])
             oname = owner_info["owner_name"] or f"ID {oid}"
-            hostile = oid in hostile_ids
+            hostile = oid in hostile_ids or "Unresolvable" in oname
             unresolvable = False
         else:
             oname = "Unresolvable"
