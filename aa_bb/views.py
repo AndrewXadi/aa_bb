@@ -35,7 +35,7 @@ CARD_DEFINITIONS = [
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Corp Blacklist',"key": "corp_bl"},
     {"title": 'Assets in hostile space',"key": "sus_asset"},
     {"title": 'Clones in hostile space',"key": "sus_clones"},
-    {"title": 'Frequent Corp Changes',"key": "freq_corp"},
+    {"title": 'Player Corp History',"key": "freq_corp"},
     {"title": 'AWOX Kills',"key": "awox"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Cyno?',"key": "cyno"},
 ]

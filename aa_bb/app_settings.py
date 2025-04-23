@@ -103,8 +103,10 @@ def get_system_owner(system_name: str) -> Dict[str, str]:
              if i.get("name", "").lower() == system_name.lower()),
             None
         )
+        if system_name.startswith("J"):
+            return {"owner_id": owner_id, "owner_name": f"A Wormhole", "owner_type": "unknown"}
         if not sys_entry:
-            return {"owner_id": owner_id, "owner_name": f"Unclaimed", "owner_type": "unknown"}
+            return {"owner_id": owner_id, "owner_name": f"Unresolvable structure due to docking rights", "owner_type": "unknown"}
         system_id = sys_entry["id"]
     except Exception as e:
         logger.exception(f"Failed to resolve system name '{system_name}': {e}")

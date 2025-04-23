@@ -158,7 +158,7 @@ def get_frequent_corp_changes(user_id):
                 'dur_color': dur_color,
             })
 
-        html += f"<h4>{char_name}</h4>"
+        html += f"<h3>{char_name}</h3>"
         html += '<table class="table table-striped">'
         html += '<thead><tr><th>Corporation</th><th>Membership</th><th>Alliance(s)</th><th>Alliance Dates</th><th>Time in Corp</th></tr></thead><tbody>'
         for r in rows:
