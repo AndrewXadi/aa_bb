@@ -66,8 +66,6 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
 
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
     hostile_ids = {int(s) for s in hostile_str.split(",") if s.strip().isdigit()}
-    logger.debug(f"Hostile alliance string: {hostile_str}")
-    logger.debug(f"Parsed hostile IDs: {hostile_ids}")
 
     hostile_map: Dict[str, str] = {}
 
@@ -78,7 +76,7 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
             oname = owner_info["owner_name"] or f"ID {oid}"
             if oid in hostile_ids or "Unresolvable" in oname:
                 hostile_map[system] = oname
-                logger.debug(f"Hostile clone found: {system} owned by {oname} (ID {oid})")
+                logger.info(f"Hostile clone found: {system} owned by {oname} (ID {oid})")
         else:
             # Always include unresolvables
             hostile_map[system] = "Unresolvable"
@@ -99,7 +97,6 @@ def render_clones(user_id: int) -> Optional[str]:
 
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
     hostile_ids = {int(s) for s in hostile_str.split(",") if s.strip().isdigit()}
-    logger.debug(f"Hostile IDs: {hostile_ids}")
 
     html = ['<table class="table table-striped">',
             '<thead><tr><th>System</th><th>Owner</th></tr></thead><tbody>']

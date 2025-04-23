@@ -182,8 +182,8 @@ def BB_run_regular_updates():
 
                 changes = []
 
-                logger.info(f"{char_name} fetched links: {awox_links}")
-                logger.info(f"{char_name} stored links: {status.awox_kill_links}")
+                #logger.info(f"{char_name} fetched links: {hostile_clones_result}")
+                #logger.info(f"{char_name} stored links: {status.hostile_clones}")
                 #status.awox_kill_links = []
                 #status.hostile_clones = []
                 #status.hostile_assets = []

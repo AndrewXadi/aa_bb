@@ -68,7 +68,7 @@ def resolve_alliance_name(owner_id: int) -> str:
         resp.raise_for_status()
         data = resp.json()
         entry = next((n for n in data if n.get("id") == owner_id), None)
-        owner_name = entry.get("name") if entry else "(Unknown)"
+        owner_name = entry.get("name") if entry else "Unresolvable"
         _owner_name_cache[owner_id] = (owner_name, now)
         return owner_name
     except Exception as e:
