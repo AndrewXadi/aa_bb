@@ -19,6 +19,7 @@ from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
 from .app_settings import get_system_owner
 from .models import BigBrotherConfig
+from django_celery_beat.models import PeriodicTask
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -85,8 +86,11 @@ def get_card_data(user_id, key):
 @permission_required("aa_bb.basic_access")
 def index(request: WSGIRequest):
     dropdown_options = []
-    if BigBrotherConfig.get_solo() is False:
+    task_name = 'BB run regular updates'
+    task = PeriodicTask.objects.filter(name=task_name).first()
+    if BigBrotherConfig.get_solo().is_active is False or task and task.enabled == False:
         context = "Big Brother is currently in an inactive state, please make sure it is up to date, you have filled the settings and turned on the task"
+        return render(request, "aa_bb/disabled.html")
     elif request.user.has_perm("aa_bb.full_access"):
         dropdown_options = (
             UserProfile.objects.exclude(main_character=None)
