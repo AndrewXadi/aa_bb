@@ -13,54 +13,63 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_clones(user_id: int) -> List[str]:
+def get_clones(user_id: int) -> Dict[int, Optional[str]]:
     """
-    Return a list of system names (or raw location IDs) where this user has clones.
+    Return a dict mapping system IDs to their names (or None if unnamed)
+    where this user has clones.
     """
     try:
         user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
-        return []
+        return {}
 
-    system_names = set()
+    system_map: Dict[int, Optional[str]] = {}
 
+    def add_location(system_obj, loc_id):
+        if system_obj:
+            # use .pk for primary key, map to its name
+            system_map[system_obj.pk] = system_obj.name
+        elif loc_id is not None:
+            # fallback for unnamed systems
+            system_map[loc_id] = None
+
+    # iterate through all characters owned by the user
     for co in CharacterOwnership.objects.filter(user=user).select_related('character'):
-        eve_char = co.character
-
         try:
-            char_audit = CharacterAudit.objects.get(character=eve_char)
-        except ObjectDoesNotExist:
+            char_audit = CharacterAudit.objects.get(character=co.character)
+        except CharacterAudit.DoesNotExist:
             continue
 
         # Home clone
         try:
-            home = Clone.objects.select_related('location_name__system') \
-                                .get(character=char_audit)
-            if home.location_name and home.location_name.system:
-                system_names.add(home.location_name.system.name)
-            elif home.location_id is not None:
-                system_names.add(f"Location ID {home.location_id}")
+            home_clone = Clone.objects.select_related('location_name__system').get(character=char_audit)
+            loc = home_clone.location_name
+            add_location(getattr(loc, 'system', None), home_clone.location_id)
         except Clone.DoesNotExist:
             pass
 
         # Jump clones
-        for jc in JumpClone.objects.select_related('location_name__system') \
-                                   .filter(character=char_audit):
-            if jc.location_name and jc.location_name.system:
-                system_names.add(jc.location_name.system.name)
-            elif jc.location_id is not None:
-                system_names.add(f"Location ID {jc.location_id}")
+        jump_clones = JumpClone.objects.select_related('location_name__system').filter(character=char_audit)
+        for jc in jump_clones:
+            loc = jc.location_name
+            add_location(getattr(loc, 'system', None), jc.location_id)
 
-    return list(system_names)
+    # Optionally sort by name (None last) and return
+    sorted_items = sorted(
+        system_map.items(),
+        key=lambda kv: (kv[1] or "").lower()
+    )
+    return dict(sorted_items)
+
 
 
 def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
     """
-    Returns a dict of system name or location ID → owning alliance name,
+    Returns a dict of system display name → owning alliance name,
     including 'Unresolvable' where owner info is unavailable.
-    Only includes locations owned by hostile alliances or that are unresolvable.
+    Only includes locations owned by hostile alliances or unresolvable.
     """
-    systems = get_clones(user_id)
+    systems = get_clones(user_id)  # Dict[int, Optional[str]]
     if not systems:
         return {}
 
@@ -69,18 +78,29 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
 
     hostile_map: Dict[str, str] = {}
 
-    for system in sorted(systems):
-        owner_info = get_system_owner(system)  # May return None
-        if owner_info:
-            oid = int(owner_info["owner_id"])
-            oname = owner_info["owner_name"] or f"ID {oid}"
-            if oid in hostile_ids or "Unresolvable" in oname:
-                hostile_map[system] = oname
-                logger.info(f"Hostile clone found: {system} owned by {oname} (ID {oid})")
-        else:
-            # Always include unresolvables
-            hostile_map[system] = "Unresolvable"
-            logger.debug(f"No ownership info for clone in: {system}, marked Unresolvable")
+    # systems: key = system_id (int), value = system_name (str or None)
+    for system_id, system_name in systems.items():
+        display_name = system_name or f"ID {system_id}"
+
+        # build the dict get_system_owner expects
+        owner_info = get_system_owner({
+            "id":   system_id,
+            "name": display_name
+        })
+
+        if not owner_info:
+            # fully unresolvable
+            hostile_map[display_name] = "Unresolvable"
+            logger.debug(f"No owner info for clone in {display_name}; marked Unresolvable")
+            continue
+
+        oid = int(owner_info["owner_id"])
+        oname = owner_info["owner_name"] or f"ID {oid}"
+
+        # include only hostile or unresolvable owners
+        if oid in hostile_ids or "Unresolvable" in oname:
+            hostile_map[display_name] = oname
+            logger.info(f"Hostile clone: {display_name} owned by {oname} ({oid})")
 
     return hostile_map
 
@@ -91,21 +111,29 @@ def render_clones(user_id: int) -> Optional[str]:
     Returns an HTML table of clones, coloring hostile ones red,
     and labeling & highlighting Unresolvable owners appropriately.
     """
-    systems = get_clones(user_id)
+    systems = get_clones(user_id)  # returns Dict[int, Optional[str]]
     if not systems:
         return None
 
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
     hostile_ids = {int(s) for s in hostile_str.split(",") if s.strip().isdigit()}
 
-    html = ['<table class="table table-striped">',
-            '<thead><tr><th>System</th><th>Owner</th></tr></thead><tbody>']
+    html = [
+        '<table class="table table-striped">',
+        '<thead><tr><th>System</th><th>Owner</th></tr></thead><tbody>'
+    ]
 
-    for system in sorted(systems):
-        owner_info = get_system_owner(system)
+    # systems: key = system_id, value = system_name (or None)
+    for system_id, system_name in systems.items():
+        # build the dict get_system_owner expects
+        owner_info = get_system_owner({
+            "id":   system_id,
+            "name": system_name
+        })
+
         if owner_info:
             oid = int(owner_info["owner_id"])
-            oname = owner_info["owner_name"] or f"ID {oid}"
+            oname = owner_info[f"owner_name"] or f"ID {oid}"
             hostile = oid in hostile_ids or "Unresolvable" in oname
             unresolvable = False
         else:
@@ -120,7 +148,13 @@ def render_clones(user_id: int) -> Optional[str]:
         else:
             row_tpl = '<tr><td>{}</td><td>{}</td></tr>'
 
-        html.append(format_html(row_tpl, system, oname))
+        html.append(
+            format_html(
+                row_tpl,
+                system_name or f"ID {system_id}",
+                oname
+            )
+        )
 
     html.append('</tbody></table>')
     return "".join(html)

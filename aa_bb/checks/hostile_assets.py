@@ -11,64 +11,93 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_asset_locations(user_id: int) -> List[str]:
+def get_asset_locations(user_id: int) -> Dict[int, Optional[str]]:
     """
-    Return a list of system names where any of the given user's characters
-    has one or more assets in space (based on CharacterAsset.location_name.system).
+    Return a dict mapping system IDs to their names (or None if unnamed)
+    where any of the given user's characters has one or more assets in space.
     """
     try:
         user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
-        return []
+        return {}
 
-    system_names = set()
+    system_map: Dict[int, Optional[str]] = {}
+
+    def add_system(system_obj):
+        if system_obj:
+            key = getattr(system_obj, 'pk', None)
+            system_map[key] = system_obj.name
 
     # for each EVE character owned by this user
     for co in CharacterOwnership.objects.filter(user=user).select_related('character'):
-        eve_char = co.character
-
-        # get their audit record
         try:
-            char_audit = CharacterAudit.objects.get(character=eve_char)
-        except ObjectDoesNotExist:
+            char_audit = CharacterAudit.objects.get(character=co.character)
+        except CharacterAudit.DoesNotExist:
             continue
 
-        # all their assets
-        for asset in CharacterAsset.objects.select_related('location_name__system').filter(character=char_audit).exclude(location_flag="solar_system"):
+        # all their assets in space (exclude station containers, etc.)
+        assets = CharacterAsset.objects.select_related('location_name__system') \
+                                       .filter(character=char_audit) \
+                                       .exclude(location_flag="solar_system")
+        for asset in assets:
             loc = asset.location_name
-            if loc and loc.system:
-                system_names.add(loc.system.name)
+            add_system(getattr(loc, 'system', None))
+    
+    # sort by system name (None treated as empty string)
+    sorted_items = sorted(
+        system_map.items(), 
+        key=lambda kv: (kv[1] or "").lower()
+    )
 
-    return list(system_names)
-
+    return dict(sorted_items)
 
 def get_hostile_asset_locations(user_id: int) -> Dict[str, str]:
     """
-    Returns a dict of system names → alliance names for systems where the user's
-    characters have assets and the owning alliance is in the hostile list.
+    Returns a dict of system display name → owning alliance name
+    for systems where the user's characters have assets in space,
+    including only those owned by hostile alliances or that are
+    unresolvable.
     """
+    # get_asset_locations now returns Dict[int, Optional[str]]
     systems = get_asset_locations(user_id)
     if not systems:
         return {}
 
-    # Parse hostile alliance IDs into a set of ints
+    # parse hostile alliance IDs
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
     hostile_ids = {int(s) for s in hostile_str.split(",") if s.strip().isdigit()}
-    logger.debug(f"Hostile alliance string: {hostile_str}")
-    logger.debug(f"Parsed hostile IDs: {hostile_ids}")
+    logger.debug(f"Hostile alliance IDs: {hostile_ids}")
 
-    hostile_map = {}
+    hostile_map: Dict[str, str] = {}
 
-    for system in sorted(systems):
-        owner_info = get_system_owner(system)  # {'owner_id','owner_name','owner_type'} or None
-        if owner_info:
+    # iterate system_id, system_name pairs
+    for system_id, system_name in systems.items():
+        display_name = system_name or f"Unknown ({system_id})"
+
+        # build the dict that get_system_owner expects
+        owner_info = get_system_owner({
+            "id":   system_id,
+            "name": display_name
+        })
+
+        if not owner_info:
+            # treat fully missing owner info as unresolvable
+            hostile_map[display_name] = "Unresolvable"
+            logger.debug(f"No ownership info for assets in {display_name}; marked Unresolvable")
+            continue
+
+        # attempt to parse owner_id
+        try:
             oid = int(owner_info["owner_id"])
-            oname = owner_info["owner_name"] or f"ID {oid}"
-            if oid in hostile_ids or "Unresolvable" in oname:
-                hostile_map[system] = oname
-                logger.debug(f"Hostile asset system found: {system} owned by {oname} (ID {oid})")
-        else:
-            logger.debug(f"No ownership info for system: {system}")
+        except (ValueError, TypeError):
+            oid = None
+
+        oname = owner_info.get("owner_name") or (f"ID {oid}" if oid is not None else "Unresolvable")
+
+        # include only hostile or unresolvable owners
+        if oid in hostile_ids or "Unresolvable" in oname:
+            hostile_map[display_name] = oname
+            logger.info(f"Hostile asset system: {display_name} owned by {oname} ({oid})")
 
     return hostile_map
 
@@ -90,9 +119,12 @@ def render_assets(user_id: int) -> Optional[str]:
     html = '<table class="table table-striped">'
     html += '<thead><tr><th>System</th><th>Owner</th></tr></thead><tbody>'
 
-    for system in sorted(systems):
-        owner_info = get_system_owner(system)
-
+    for system_id, system_name in systems.items():
+        # build the dict your get_system_owner() wants:
+        owner_info = get_system_owner({
+            "id":   system_id,
+            "name": system_name or f"Unknown ({system_id})"
+        })
         if owner_info:
             try:
                 # owner_id might be '' or None
@@ -116,7 +148,7 @@ def render_assets(user_id: int) -> Optional[str]:
             if hostile
             else '<tr><td>{}</td><td>{}</td></tr>'
         )
-        html += format_html(row_tpl, system, oname)
+        html += format_html(row_tpl, system_name, oname)
 
     html += "</tbody></table>"
     return html

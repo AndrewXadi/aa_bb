@@ -25,7 +25,6 @@ _CACHE_TTL = timedelta(hours=24)
 
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
-_OWNER_NAME_CACHE_TTL = timedelta(days=7)
 
 
 def _get_sov_map() -> list:
@@ -51,12 +50,10 @@ def resolve_alliance_name(owner_id: int) -> str:
     Resolve alliance/faction ID to name via ESI, caching for 7 days.
     On lookup failure, falls back to stale cache or returns Unresolvable <Error>.
     """
-    now = datetime.utcnow()
     cached = _owner_name_cache.get(owner_id)
     if cached:
-        name, ts = cached
-        if now - ts < _OWNER_NAME_CACHE_TTL:
-            return name
+        name = cached
+        return name
 
     try:
         resp = requests.post(
@@ -69,18 +66,16 @@ def resolve_alliance_name(owner_id: int) -> str:
         data = resp.json()
         entry = next((n for n in data if n.get("id") == owner_id), None)
         owner_name = entry.get("name") if entry else "Unresolvable"
-        _owner_name_cache[owner_id] = (owner_name, now)
+        _owner_name_cache[owner_id] = owner_name
         return owner_name
     except Exception as e:
         logger.exception(f"Failed to resolve name for owner ID {owner_id}: {e}")
-        if cached:
-            return cached[0]
         e_short = e.__class__.__name__
         e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
         return f"Unresolvable eve map{e_short}{e_detail}"
 
 
-def get_system_owner(system_name: str) -> Dict[str, str]:
+def get_system_owner(system: str) -> Dict[str, str]:
     """
     Get sovereignty owner of an EVE system by name.
     Always returns a dict with keys: owner_id, owner_name, owner_type.
@@ -89,38 +84,19 @@ def get_system_owner(system_name: str) -> Dict[str, str]:
     owner_name = f"Unresolvable Init"
     owner_type = "unknown"
 
-    # 1) Resolve name to ID
-    try:
-        resp = requests.post(
-            f"{ESI_BASE}/universe/ids/",
-            params={"datasource": DATASOURCE},
-            json=[system_name],
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        id_data = resp.json()
-        sys_entry = next(
-            (i for i in id_data.get("systems", [])
-             if i.get("name", "").lower() == system_name.lower()),
-            None
-        )
-        if system_name.startswith("J"):
-            return {"owner_id": owner_id, "owner_name": f"A Wormhole", "owner_type": "unknown"}
-        if not sys_entry:
-            return {"owner_id": owner_id, "owner_name": f"Unresolvable structure due to docking rights", "owner_type": "unknown"}
-        system_id = sys_entry["id"]
-    except Exception as e:
-        logger.exception(f"Failed to resolve system name '{system_name}': {e}")
-        e_short = e.__class__.__name__
-        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
-        return {"owner_id": owner_id, "owner_name": f"Unresolvable name, {e_short}{e_detail}", "owner_type": owner_type}
+    # 1) Pull name and ID from the passed-in dict
+    system_id = system.get("id")
+    system_nam = system.get("name")
+    system_name = str()
+    if system_nam:
+        system_name = str(system_nam)
 
     # 2) Fetch sovereignty map
     try:
         sov_map = _get_sov_map()
         entry = next((s for s in sov_map if s.get("system_id") == system_id), None)
         if not entry:
-            raise LookupError("SovNotFound")
+            return {"owner_id": owner_id, "owner_name": f"Unresolvable structure due to lack of docking rights", "owner_type": owner_type}
     except Exception as e:
         logger.exception(f"Failed to fetch sovereignty for system ID {system_id}: {e}")
         e_short = e.__class__.__name__

@@ -184,9 +184,9 @@ def BB_run_regular_updates():
 
                 #logger.info(f"{char_name} fetched links: {hostile_clones_result}")
                 #logger.info(f"{char_name} stored links: {status.hostile_clones}")
-                #status.awox_kill_links = []
-                #status.hostile_clones = []
-                #status.hostile_assets = []
+                status.awox_kill_links = []
+                status.hostile_clones = []
+                status.hostile_assets = []
 
 
                 if status.has_awox_kills != has_awox or set(awox_links) != set(status.awox_kill_links or []):

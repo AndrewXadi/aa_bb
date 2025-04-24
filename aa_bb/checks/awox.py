@@ -44,7 +44,7 @@ def fetch_awox_kills(user_id, delay=0.2):
             if kill_id in kills_by_id:
                 continue
 
-            time.sleep(delay)
+            #time.sleep(delay)
             try:
                 esi_resp = requests.get(ESI_URL.format(kill_id, hash_), headers=HEADERS)
                 if esi_resp.status_code != 200:
