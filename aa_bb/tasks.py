@@ -175,7 +175,7 @@ def BB_run_regular_updates():
                 has_awox = bool(awox_links)
                 has_hostile_clones = bool(hostile_clones_result)
                 has_hostile_assets = bool(hostile_assets_result)
-                has_sus_contacts = True if hostile_clones_result else False
+                has_sus_contacts = bool(sus_contacts_result)
 
                 # Load or create existing record
                 status, created = UserStatus.objects.get_or_create(user_id=user_id)
