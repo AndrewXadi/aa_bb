@@ -188,7 +188,8 @@ def BB_run_regular_updates():
                 #status.hostile_clones = []
                 #status.hostile_assets = []
                 #status.sus_contacts = {}
-
+                def as_dict(x):
+                    return x if isinstance(x, dict) else {}
 
                 if status.has_awox_kills != has_awox or set(awox_links) != set(status.awox_kill_links or []):
                     # Compare and find new links
@@ -276,12 +277,12 @@ def BB_run_regular_updates():
                     changes.append(f"Skill Injected: {'🚩' if has_skill_injected else '❌'}")
                     status.has_skill_injected = has_skill_injected
 
-                if status.has_sus_contacts != has_sus_contacts or set(sus_contacts_result) != set(status.sus_contacts or {}):
-                    old_contacts = status.sus_contacts or {}
+                if status.has_sus_contacts != has_sus_contacts or set(sus_contacts_result) != set(as_dict(status.sus_contacts) or {}):
+                    old_contacts = as_dict(status.sus_contacts) or {}
                     #normalized_old = { str(cid): v for cid, v in status.sus_contacts.items() }
                     #normalized_new = { str(cid): v for cid, v in sus_contacts_result.items() }
 
-                    old_ids   = set(status.sus_contacts.keys())
+                    old_ids   = set(as_dict(status.sus_contacts).keys())
                     new_ids   = set(sus_contacts_result.keys())
                     new_links = new_ids - old_ids
                     if new_links:
