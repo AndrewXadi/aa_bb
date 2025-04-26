@@ -3,66 +3,17 @@ from django.utils.html import format_html
 from django.utils.timezone import now
 from esi.clients import EsiClientProvider
 from allianceauth.authentication.models import CharacterOwnership
-from dateutil.parser import parse as parse_datetime
 from ..models import BigBrotherConfig
+from ..app_settings import ensure_datetime, is_npc_corporation, get_alliance_history_for_corp, get_alliance_name, get_corporation_info
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
-
-# Cache for alliance histories
-def_cache = {}
 
 # External site favicons, fetched each time directly from the source
 ZKILL_ICON = "https://zkillboard.com/favicon.ico"
 EVEWHO_ICON = "https://evewho.com/favicon.ico"
 DOTLAN_ICON = "https://evemaps.dotlan.net/favicon.ico"
 
-
-def ensure_datetime(value):
-    if isinstance(value, str):
-        return parse_datetime(value)
-    return value
-
-
-def is_npc_corporation(corp_id):
-    return 1_000_000 <= corp_id < 2_000_000
-
-
-def get_corporation_info(corp_id):
-    try:
-        result = esi.client.Corporation.get_corporations_corporation_id(
-            corporation_id=corp_id
-        ).results()
-        return {"name": result.get("name", f"Unknown ({corp_id})")}
-    except Exception:
-        return {"name": f"Unknown Corp ({corp_id})"}
-
-
-def get_alliance_history_for_corp(corp_id):
-    if corp_id in def_cache:
-        return def_cache[corp_id]
-    try:
-        response = esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
-            corporation_id=corp_id
-        ).results()
-        history = [{"alliance_id": h.get("alliance_id"), "start_date": ensure_datetime(h.get("start_date"))} for h in response]
-        history.sort(key=lambda x: x["start_date"])
-    except Exception:
-        history = []
-    def_cache[corp_id] = history
-    return history
-
-
-def get_alliance_name(alliance_id):
-    if not alliance_id:
-        return "-"
-    try:
-        result = esi.client.Alliance.get_alliances_alliance_id(
-            alliance_id=alliance_id
-        ).results()
-        return result.get("name", f"Unknown ({alliance_id})")
-    except Exception:
-        return f"Unknown ({alliance_id})"
 
 
 def get_frequent_corp_changes(user_id):

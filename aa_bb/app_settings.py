@@ -10,6 +10,10 @@ import sys
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple
+from django.db import transaction
+from .models import Alliance_names, Corporation_names, BigBrotherConfig
+from dateutil.parser import parse as parse_datetime
+import time
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
@@ -26,6 +30,121 @@ _CACHE_TTL = timedelta(hours=24)
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
 
+def is_npc_character(character_id: int) -> bool:
+    return 3_000_000 <= character_id < 4_000_000
+
+def get_character_employment(character_or_id) -> list[dict]:
+    """
+    Fetch and format the permanent employment history for a character.
+    Accepts either:
+      - an int: the EVE character_id
+      - an object with .character_id attribute
+    Returns a list of dicts:
+      {
+        'corporation_id': int,
+        'corporation_name': str,
+        'start_date': datetime,
+        'end_date': datetime|None,
+        'alliance_history': [ {'alliance_id': int, 'start_date': datetime}, ... ]
+      }
+    On ESI failure, logs and returns [].
+    """
+    # 1. Normalize to integer character_id
+    if isinstance(character_or_id, int):
+        char_id = character_or_id
+    else:
+        try:
+            char_id = int(character_or_id.character_id)
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError(
+                "get_character_employment() requires an int or an object with .character_id"
+            )
+
+    # 2. Fetch the corp history from ESI
+    try:
+        response = esi.client.Character.get_characters_character_id_corporationhistory(
+            character_id=char_id
+        ).results()
+    except Exception as e:
+        logger.exception(f"ESI failure for character_id {char_id}: {e}")
+        return []
+
+    # 3. Order from earliest to latest
+    history = list(reversed(response))
+    rows = []
+
+    for idx, membership in enumerate(history):
+        corp_id = membership.get('corporation_id')
+        if not corp_id or is_npc_corporation(corp_id):
+            continue
+
+        start = ensure_datetime(membership.get('start_date'))
+        # Next start_date becomes this membership's end_date
+        end = None
+        if idx + 1 < len(history):
+            end = ensure_datetime(history[idx + 1].get('start_date'))
+
+        # Enrich with corp and alliance info
+        corp_info     = get_corporation_info(corp_id)
+        alliance_hist = get_alliance_history_for_corp(corp_id)
+
+        rows.append({
+            'corporation_id':   corp_id,
+            'corporation_name': corp_info.get('name'),
+            'start_date':       start,
+            'end_date':         end,
+            'alliance_history': alliance_hist,
+        })
+
+        # Persist the corporation name for future lookups
+        with transaction.atomic():
+            Corporation_names.objects.update_or_create(
+                pk=corp_id,
+                defaults={'name': corp_info.get('name', f"Unknown ({corp_id})")}
+            )
+
+    return rows
+
+def get_user_characters(user_id: int) -> dict[int, str]:
+    qs = CharacterOwnership.objects.filter(user__id=user_id).select_related('character')
+    return {
+        co.character.character_id: co.character.character_name
+        for co in qs
+    }
+
+def is_npc_corporation(corp_id):
+    return 1_000_000 <= corp_id < 2_000_000
+
+
+def get_corporation_info(corp_id):
+    try:
+        result = esi.client.Corporation.get_corporations_corporation_id(
+            corporation_id=corp_id
+        ).results()
+        return {"name": result.get("name", f"Unknown ({corp_id})")}
+    except Exception:
+        return {"name": f"Unknown Corp ({corp_id})"}
+
+def_cache = {}
+
+def ensure_datetime(value):
+    if isinstance(value, str):
+        return parse_datetime(value)
+    return value
+
+def get_alliance_history_for_corp(corp_id):
+    if corp_id in def_cache:
+        return def_cache[corp_id]
+    try:
+        response = esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
+            corporation_id=corp_id
+        ).results()
+        history = [{"alliance_id": h.get("alliance_id"), "start_date": ensure_datetime(h.get("start_date"))} for h in response]
+        history.sort(key=lambda x: x["start_date"])
+    except Exception:
+        history = []
+    def_cache[corp_id] = history
+    return history
 
 def _get_sov_map() -> list:
     """
@@ -44,17 +163,23 @@ def _get_sov_map() -> list:
         _sov_map_cache_time = now
     return _sov_map_cache
 
+ESI_BASE    = "https://esi.evetech.net/latest"
+DATASOURCE  = "tranquility"
+HEADERS     = {"Accept": "application/json"}
 
 def resolve_alliance_name(owner_id: int) -> str:
     """
-    Resolve alliance/faction ID to name via ESI, caching for 7 days.
-    On lookup failure, falls back to stale cache or returns Unresolvable <Error>.
+    Resolve alliance/faction ID to name via ESI, storing permanently in aa_bb_alliances.
+    On lookup failure, falls back to stale DB record or returns 'Unresolvable <Error>'.
     """
-    cached = _owner_name_cache.get(owner_id)
-    if cached:
-        name = cached
-        return name
+    # 1. Try permanent table first
+    try:
+        record = Alliance_names.objects.get(pk=owner_id)
+        return record.name
+    except Alliance_names.DoesNotExist:
+        pass  # need to fetch and store
 
+    # 2. Fetch from ESI
     try:
         resp = requests.post(
             f"{ESI_BASE}/universe/names/",
@@ -66,14 +191,75 @@ def resolve_alliance_name(owner_id: int) -> str:
         data = resp.json()
         entry = next((n for n in data if n.get("id") == owner_id), None)
         owner_name = entry.get("name") if entry else "Unresolvable"
-        _owner_name_cache[owner_id] = owner_name
+
+        # 3. Save or update the DB record
+        with transaction.atomic():
+            Alliance_names.objects.update_or_create(
+                pk=owner_id,
+                defaults={"name": owner_name}
+            )
+
         return owner_name
+
     except Exception as e:
+        # 4. On error, log and fallback to stale if any
         logger.exception(f"Failed to resolve name for owner ID {owner_id}: {e}")
-        e_short = e.__class__.__name__
+        try:
+            stale = Alliance_names.objects.get(pk=owner_id)
+            return stale.name
+        except Alliance_names.DoesNotExist:
+            pass
+
+        e_short  = e.__class__.__name__
         e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
         return f"Unresolvable eve map{e_short}{e_detail}"
 
+def resolve_corporation_name(corp_id: int) -> str:
+    """
+    Resolve corporation ID to name via ESI, storing permanently in aa_bb_corporations.
+    On lookup failure, falls back to stale DB record or returns 'Unresolvable <Error>'.
+    """
+    # 1. Try permanent table first
+    try:
+        record = Corporation_names.objects.get(pk=corp_id)
+        return record.name
+    except Corporation_names.DoesNotExist:
+        pass  # need to fetch and store
+
+    # 2. Fetch from ESI
+    try:
+        resp = requests.post(
+            f"{ESI_BASE}/universe/names/",
+            params={"datasource": DATASOURCE},
+            json=[corp_id],
+            headers=HEADERS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        entry = next((n for n in data if n.get("id") == corp_id), None)
+        corp_name = entry.get("name") if entry else "Unresolvable"
+
+        # 3. Save or update the DB record
+        with transaction.atomic():
+            Corporation_names.objects.update_or_create(
+                pk=corp_id,
+                defaults={"name": corp_name}
+            )
+
+        return corp_name
+
+    except Exception as e:
+        # 4. On error, log and fallback to stale if any
+        logger.exception(f"Failed to resolve name for corporation ID {corp_id}: {e}")
+        try:
+            stale = Corporation_names.objects.get(pk=corp_id)
+            return stale.name
+        except Corporation_names.DoesNotExist:
+            pass
+
+        e_short  = e.__class__.__name__
+        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
+        return f"Unresolvable eve map{e_short}{e_detail}"
 
 def get_system_owner(system: str) -> Dict[str, str]:
     """
@@ -177,20 +363,64 @@ def validate_token_with_server(token, client_version=None, self_des=None, self_d
 
 
 
-def send_message(message):
-    from .models import BigBrotherConfig
+
+def send_message(message: str):
     webhook_url = BigBrotherConfig.get_solo().webhook
+    MAX_LEN = 2000
+    SPLIT_LEN = 1900
+    DELAY_SEC = 0.003
 
-    payload = {
-        "content": message
-    }
+    def _post(content: str):
+        payload = {"content": content}
+        try:
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+        except Exception as e:
+            err_msg = f"❌ Failed to send message due to {e!r}\nOriginal content:\n{content}"
+            print(err_msg)
+            # try sending the error notification itself, but don’t recurse infinitely
+            try:
+                requests.post(webhook_url, json={"content": err_msg})
+            except Exception as inner:
+                print(f"Also failed to send error notification: {inner!r}")
+        finally:
+            time.sleep(DELAY_SEC)
 
-    response = requests.post(webhook_url, json=payload)
+    # Quick path for short messages
+    if len(message) <= MAX_LEN:
+        _post(message)
+        return
 
-    if response.status_code == 204:
-        print("Message sent successfully!")
-    else:
-        print(f"Failed to send message. Status code: {response.status_code}, Response: {response.text}")
+    # Break on newlines first
+    raw_parts = message.split("\n")
+    parts: list[str] = []
+
+    for part in raw_parts:
+        if len(part) <= MAX_LEN:
+            parts.append(part)
+        else:
+            # no newlines in this part, split into 1900-char chunks
+            for i in range(0, len(part), SPLIT_LEN):
+                chunk = part[i : i + SPLIT_LEN]
+                if i > 0:
+                    chunk = "# Message split due to characters limit\n" + chunk
+                parts.append(chunk)
+
+    buffer = ""
+    for part in parts:
+        # build candidate with newline if buffer already has content
+        candidate = buffer + ("\n" if buffer else "") + part
+        if len(candidate) > MAX_LEN:
+            # buffer is full—send it, start new buffer
+            _post(buffer)
+            buffer = part
+        else:
+            buffer = candidate
+
+    # send any leftover
+    if buffer:
+        _post(buffer)
+
 
 
 def uninstall(reason):
@@ -243,6 +473,8 @@ def get_corp_info(corp_id):
         }
     
 def get_alliance_name(alliance_id):
+    if not alliance_id:
+        return "None"
     try:
         result = esi.client.Alliance.get_alliances_alliance_id(
             alliance_id=alliance_id

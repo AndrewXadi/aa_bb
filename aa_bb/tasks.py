@@ -11,7 +11,7 @@ from aa_bb.checks.imp_blacklist import imp_bl
 from aa_bb.checks.lawn_blacklist import lawn_bl
 from aa_bb.checks.notifications import game_time
 from aa_bb.checks.notifications import skill_injected
-from aa_bb.checks.sus_contacts import sus_conta
+from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import sus_contra
 from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
@@ -154,7 +154,6 @@ def BB_run_regular_updates():
                 lawn_blacklist_result = lawn_bl(user_id)
                 game_time_notifications_result = game_time(user_id)
                 skill_injected_result = skill_injected(user_id)
-                sus_contacts_result = sus_conta(user_id)
                 sus_contracts_result = sus_contra(user_id)
                 sus_mails_result = sus_mail(user_id)
                 sus_trans_result = sus_tra(user_id)
@@ -162,13 +161,13 @@ def BB_run_regular_updates():
                 awox_links = get_awox_kill_links(user_id)
                 hostile_clones_result = get_hostile_clone_locations(user_id)
                 hostile_assets_result = get_hostile_asset_locations(user_id)
+                sus_contacts_result = { str(cid): v for cid, v in get_user_hostile_notifications(user_id).items() }
 
                 has_cyno = cyno_result != None
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
                 has_game_time_notifications = game_time_notifications_result != None
                 has_skill_injected = skill_injected_result != None
-                has_sus_contacts = sus_contacts_result != None
                 has_sus_contracts = sus_contracts_result != None
                 has_sus_mails = sus_mails_result != None
                 has_sus_trans = sus_trans_result != None
@@ -176,6 +175,7 @@ def BB_run_regular_updates():
                 has_awox = bool(awox_links)
                 has_hostile_clones = bool(hostile_clones_result)
                 has_hostile_assets = bool(hostile_assets_result)
+                has_sus_contacts = sus_contacts_result != None
 
                 # Load or create existing record
                 status, created = UserStatus.objects.get_or_create(user_id=user_id)
@@ -184,27 +184,36 @@ def BB_run_regular_updates():
 
                 #logger.info(f"{char_name} fetched links: {hostile_clones_result}")
                 #logger.info(f"{char_name} stored links: {status.hostile_clones}")
-                status.awox_kill_links = []
-                status.hostile_clones = []
-                status.hostile_assets = []
+                #status.awox_kill_links = []
+                #status.hostile_clones = []
+                #status.hostile_assets = []
+                #status.sus_contacts = {}
 
 
                 if status.has_awox_kills != has_awox or set(awox_links) != set(status.awox_kill_links or []):
                     # Compare and find new links
                     old_links = set(status.awox_kill_links or [])
                     new_links = set(awox_links) - old_links
-                    link_list = "\n".join(f"🔗 {link}" for link in new_links)
+                    link_list = "\n".join(f"- {link}" for link in new_links)
                     logger.info(f"{char_name} new links {link_list}")
-                    link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
+                    link_list3 = "\n".join(f"- {link}" for link in awox_links)
+                    logger.info(f"{char_name} new links {link_list3}")
+                    link_list2 = "\n".join(f"- {link}" for link in old_links)
                     logger.info(f"{char_name} old links {link_list2}")
                     if status.has_awox_kills != has_awox:
-                        changes.append(f"AwoX kills: {'🚩' if has_awox else '❌'}")
+                        changes.append(f"## AwoX kills: {'🚩' if has_awox else '❌'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"@everyone New AwoX kill(s):\n{link_list}")
+                        changes.append(f"## @everyone New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
                     status.has_awox_kills = has_awox
-                    status.awox_kill_links = awox_links
+                    old = set(status.awox_kill_links or [])
+                    new = set(awox_links) - old
+                    if new:
+                        # notify
+                        status.awox_kill_links = list(old | new)
+                        status.save()
+
 
 
                 if status.has_cyno != has_cyno:
@@ -215,18 +224,18 @@ def BB_run_regular_updates():
                     # Compare and find new links
                     old_links = set(status.hostile_assets or [])
                     new_links = set(hostile_assets_result) - old_links
-                    link_list = "\n".join(
-                        f"{system} owned by {hostile_assets_result[system]}" 
+                    link_list = "\n- ".join(
+                        f"- {system} owned by {hostile_assets_result[system]}" 
                         for system in (set(hostile_assets_result) - set(status.hostile_assets or []))
                     )
                     logger.info(f"{char_name} new assets {link_list}")
-                    link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
+                    link_list2 = "\n- ".join(f"🔗 {link}" for link in old_links)
                     logger.info(f"{char_name} old assets {link_list2}")
                     if status.has_hostile_assets != has_hostile_assets:
-                        changes.append(f"Hostile Assets: {'🚩' if has_hostile_assets else '❌'}")
+                        changes.append(f"## Hostile Assets: {'🚩' if has_hostile_assets else '❌'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"<@&{pingroleID}> New Hostile Assets:\n{link_list}")
+                        changes.append(f"## <@&{pingroleID}> New Hostile Assets:\n{link_list}")
                         logger.info(f"{char_name} new assets")
                     status.has_hostile_assets = has_hostile_assets
                     status.hostile_assets = hostile_assets_result
@@ -236,17 +245,17 @@ def BB_run_regular_updates():
                     old_links = set(status.hostile_clones or [])
                     new_links = set(hostile_clones_result) - old_links
                     link_list = "\n".join(
-                        f"{system} owned by {hostile_clones_result[system]}" 
+                        f"- {system} owned by {hostile_clones_result[system]}" 
                         for system in (set(hostile_clones_result) - set(status.hostile_clones or []))
                     )
-                    logger.info(f"{char_name} new clones {link_list}")
+                    logger.info(f"{char_name} new clones: {link_list}")
                     link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
-                    logger.info(f"{char_name} old clones {link_list2}")
+                    logger.info(f"{char_name} old clones: {link_list2}")
                     if status.has_hostile_clones != has_hostile_clones:
-                        changes.append(f"Hostile Clones: {'🚩' if has_hostile_clones else '❌'}")
+                        changes.append(f"## Hostile Clones: {'🚩' if has_hostile_clones else '❌'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"<@&{pingroleID}> New Hostile Clone(s):\n{link_list}")
+                        changes.append(f"## <@&{pingroleID}> New Hostile Clone(s):\n{link_list}")
                         logger.info(f"{char_name} new clones")
                     status.has_hostile_clones = has_hostile_clones
                     status.hostile_clones = hostile_clones_result
@@ -267,9 +276,41 @@ def BB_run_regular_updates():
                     changes.append(f"Skill Injected: {'🚩' if has_skill_injected else '❌'}")
                     status.has_skill_injected = has_skill_injected
 
-                if status.has_sus_contacts != has_sus_contacts:
-                    changes.append(f"Hostile contacts: {'🚩' if has_sus_contacts else '❌'}")
+                if status.has_sus_contacts != has_sus_contacts or set(sus_contacts_result) != set(status.sus_contacts or {}):
+                    old_contacts = status.sus_contacts or {}
+                    #normalized_old = { str(cid): v for cid, v in status.sus_contacts.items() }
+                    #normalized_new = { str(cid): v for cid, v in sus_contacts_result.items() }
+
+                    old_ids   = set(status.sus_contacts.keys())
+                    new_ids   = set(sus_contacts_result.keys())
+                    new_links = new_ids - old_ids
+                    if new_links:
+                        link_list = "\n".join(
+                            f"🔗 {sus_contacts_result[cid]}" for cid in new_links
+                        )
+                        logger.info(f"{char_name} new assets:\n{link_list}")
+
+                    if old_ids:
+                        old_link_list = "\n".join(
+                            f"🔗 {old_contacts[cid]}" for cid in old_ids if cid in old_contacts
+                        )
+                        logger.info(f"{char_name} old assets:\n{old_link_list}")
+
+                    if status.has_sus_contacts != has_sus_contacts:
+                        changes.append(f"## Sus Contacts: {'🚩' if has_sus_contacts else '❌'}")
+                    logger.info(f"{char_name} status changed")
+
+                    if new_links:
+                        changes.append(f"## New Sus Contacts:")
+                        for cid in new_links:
+                            res = sus_contacts_result[cid]
+                            ping = f"<@&{pingroleID}>"
+                            if res.startswith("- A -"):
+                                ping = ""
+                            changes.append(f"{res} {ping}")
+
                     status.has_sus_contacts = has_sus_contacts
+                    status.sus_contacts = sus_contacts_result
 
                 if status.has_sus_contracts != has_sus_contracts:
                     changes.append(f"Hostile contracts: {'🚩' if has_sus_contracts else '❌'}")
@@ -280,8 +321,14 @@ def BB_run_regular_updates():
                     status.has_sus_mails = has_sus_mails
 
                 if changes:
-                    msg = f"🛑 Status change detected for **{char_name}**:\n" + "\n".join(changes)
-                    send_message(msg)
+                    for i in range(0, len(changes)):
+                        chunk = changes[i]
+                        if i == 0:
+                            msg = f"# 🛑 Status change detected for **{char_name}**:\n" + "\n" + chunk
+                        else:
+                            msg = chunk
+                        logger.info(f"Measage: {msg}")
+                        send_message(msg)
 
                 status.save()
 

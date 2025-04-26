@@ -133,7 +133,7 @@ def render_clones(user_id: int) -> Optional[str]:
 
         if owner_info:
             oid = int(owner_info["owner_id"])
-            oname = owner_info[f"owner_name"] or f"ID {oid}"
+            oname = owner_info["owner_name"] or f"ID {oid}"
             hostile = oid in hostile_ids or "Unresolvable" in oname
             unresolvable = False
         else:
