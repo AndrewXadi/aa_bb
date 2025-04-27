@@ -226,7 +226,7 @@ def render_contracts(user_id: int) -> str:
         reverse=True
     )
 
-    #rows = [row for row in rows if is_row_hostile(row)]
+    rows = [row for row in rows if is_row_hostile(row)]
 
     total = len(rows)
     limit = 50
