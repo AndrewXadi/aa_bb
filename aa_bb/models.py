@@ -183,3 +183,62 @@ class Alliance_names(models.Model):
 
     def __str__(self):
         return f"{self.id}: {self.name}"
+    
+class Character_names(models.Model):
+    """
+    Permanent store of Character names resolved via ESI.
+    """
+    id = models.BigIntegerField(
+        primary_key=True,
+        help_text="EVE Character ID"
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text="Resolved Character name"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this record was first saved"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="When this record was last refreshed"
+    )
+
+    class Meta:
+        db_table = 'aa_bb_characters'
+        verbose_name = 'Character Name'
+        verbose_name_plural = 'Character Names'
+
+    def __str__(self):
+        return f"{self.id}: {self.name}"
+    
+
+class id_types(models.Model):
+    """
+    Permanent store of Character names resolved via ESI.
+    """
+    id = models.BigIntegerField(
+        primary_key=True,
+        help_text="EVE ID"
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text="Resolved ID Type"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this record was first saved"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="When this record was last refreshed"
+    )
+
+    class Meta:
+        db_table = 'aa_bb_ids'
+        verbose_name = 'ID Type'
+        verbose_name_plural = 'ID Types'
+
+    def __str__(self):
+        return f"{self.id}: {self.name}"

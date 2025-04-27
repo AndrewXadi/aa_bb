@@ -9,11 +9,12 @@ import subprocess
 import sys
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Tuple
-from django.db import transaction
-from .models import Alliance_names, Corporation_names, BigBrotherConfig
+from typing import Optional, Dict, Tuple, Any
+from django.db import transaction, IntegrityError
+from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types
 from dateutil.parser import parse as parse_datetime
 import time
+from bravado.exception import HTTPError
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
@@ -30,8 +31,110 @@ _CACHE_TTL = timedelta(hours=24)
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
 
+def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str | None:
+    """
+    Resolve an EVE Online ID to its entity type.
+
+    Returns:
+        'character', 'corporation', 'alliance', etc., or None on error/not found.
+    """
+    try:
+        future = esi.client.Universe.post_universe_names(
+            ids=[eve_id],                # must be `ids`
+            datasource=datasource or "tranquility"
+        )
+        results = future.result()        # <-- use .result(), not .results()
+    except HTTPError as e:
+        logging.warning(f"ESI error resolving {eve_id}: {e}")
+        return None
+
+    if not results:
+        return None
+    logger.info(f"category:{results[0].get("category")}")
+    return results[0].get("category")
+
+def get_eve_entity_type(
+    eve_id: int,
+    datasource: str | None = None
+) -> Optional[str]:
+    """
+    Resolve an EVE Online ID to its entity type, caching results in the `id_types` table.
+
+    Workflow:
+      1. Try to get a cached record via id_types.objects.get(pk=eve_id).
+      2. If found, return record.name.
+      3. On DoesNotExist, call get_eve_entity_type() to fetch from ESI.
+      4. If ESI returns a non-null type, save a new id_types record.
+      5. Return the resolved type (or None if unresolved).
+    """
+    # 1. Cache lookup
+    try:
+        record = id_types.objects.get(pk=eve_id)  # raises id_types.DoesNotExist if not found :contentReference[oaicite:0]{index=0}
+        return record.name
+    except id_types.DoesNotExist:
+        pass
+
+    # 2. Cache miss — resolve via ESI
+    entity_type = get_eve_entity_type_int(eve_id, datasource=datasource)
+    if entity_type is None:
+        return None
+
+    # 3. Store in cache
+    try:
+        with transaction.atomic():
+            id_types.objects.create(
+                id=eve_id,
+                name=entity_type
+            )  # convenience create method: new instance + save :contentReference[oaicite:1]{index=1}
+    except IntegrityError:
+        # another thread/process inserted it first; safe to ignore
+        logging.debug(f"ID {eve_id} was cached by another process.")
+
+    return entity_type
+
 def is_npc_character(character_id: int) -> bool:
     return 3_000_000 <= character_id < 4_000_000
+
+def get_character_id(name: str) -> int | None:
+    """
+    Resolve a character name to ID using ESI /universe/ids/ endpoint,
+    with caching implemented through the Django model.
+    """
+    # Step 1: Check if the character's ID exists in the database
+    try:
+        record = Character_names.objects.get(name=name)
+        return record.id  # Return the stored ID from the database if found
+    except Character_names.DoesNotExist:
+        pass  # Continue to ESI if not found in the database
+
+    # Step 2: Fetch from ESI if the name is not in the database
+    url = "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility"
+    headers = {"Accept": "application/json"}
+    payload = [str(name)]  # List of names to be passed to the API
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()  # Check if the response is successful
+        data = response.json()
+        
+        characters = data.get("characters", [])
+        if characters:
+            char_id = characters[0]["id"]
+            
+            # Save the new ID to the database for future use
+            with transaction.atomic():
+                Character_names.objects.update_or_create(
+                    name=name,
+                    defaults={"id": char_id}
+                )
+
+            return char_id
+        
+        return None  # If no characters found in the response
+
+    except requests.RequestException as e:
+        logger.error(f"Character lookup failed for '{name}': {e}")
+        return None
 
 def get_character_employment(character_or_id) -> list[dict]:
     """
@@ -260,6 +363,54 @@ def resolve_corporation_name(corp_id: int) -> str:
         e_short  = e.__class__.__name__
         e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
         return f"Unresolvable eve map{e_short}{e_detail}"
+    
+def resolve_character_name(char_id: int) -> str:
+    """
+    Resolve character ID to name via ESI, storing permanently in Character_names.
+    On lookup failure, falls back to stale DB record or returns 'Unresolvable <Error>'.
+    """
+    # 1. Try permanent table first
+    try:
+        record = Character_names.objects.get(pk=char_id)
+        return record.name
+    except Character_names.DoesNotExist:
+        pass  # need to fetch and store
+
+    # 2. Fetch from ESI
+    try:
+        resp = requests.post(
+            f"{ESI_BASE}/universe/names/",
+            params={"datasource": DATASOURCE},
+            json=[char_id],
+            headers=HEADERS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        entry = next((n for n in data if n.get("id") == char_id), None)
+        char_name = entry.get("name") if entry else "Unresolvable"
+
+        # 3. Save or update the DB record
+        with transaction.atomic():
+            Character_names.objects.update_or_create(
+                pk=char_id,
+                defaults={"name": char_name}
+            )
+
+        return char_name
+
+    except Exception as e:
+        # 4. On error, log and fallback to stale if any
+        logger.exception(f"Failed to resolve name for character ID {char_id}: {e}")
+        try:
+            stale = Character_names.objects.get(pk=char_id)
+            return stale.name
+        except Character_names.DoesNotExist:
+            pass
+
+        e_short = e.__class__.__name__
+        e_detail = getattr(e, 'code', None) or getattr(e, 'status', None) or str(e)
+        return f"Unresolvable eve map{e_short}{e_detail}"
+
 
 def get_system_owner(system: str) -> Dict[str, str]:
     """

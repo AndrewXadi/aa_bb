@@ -12,7 +12,7 @@ from aa_bb.checks.lawn_blacklist import lawn_bl
 from aa_bb.checks.notifications import game_time
 from aa_bb.checks.notifications import skill_injected
 from aa_bb.checks.sus_contacts import get_user_hostile_notifications
-from aa_bb.checks.sus_contracts import sus_contra
+from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
 from datetime import datetime, timedelta
@@ -154,7 +154,6 @@ def BB_run_regular_updates():
                 lawn_blacklist_result = lawn_bl(user_id)
                 game_time_notifications_result = game_time(user_id)
                 skill_injected_result = skill_injected(user_id)
-                sus_contracts_result = sus_contra(user_id)
                 sus_mails_result = sus_mail(user_id)
                 sus_trans_result = sus_tra(user_id)
 
@@ -162,13 +161,13 @@ def BB_run_regular_updates():
                 hostile_clones_result = get_hostile_clone_locations(user_id)
                 hostile_assets_result = get_hostile_asset_locations(user_id)
                 sus_contacts_result = { str(cid): v for cid, v in get_user_hostile_notifications(user_id).items() }
+                sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_contracts(user_id).items() }
 
                 has_cyno = cyno_result != None
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
                 has_game_time_notifications = game_time_notifications_result != None
                 has_skill_injected = skill_injected_result != None
-                has_sus_contracts = sus_contracts_result != None
                 has_sus_mails = sus_mails_result != None
                 has_sus_trans = sus_trans_result != None
                 
@@ -176,6 +175,7 @@ def BB_run_regular_updates():
                 has_hostile_clones = bool(hostile_clones_result)
                 has_hostile_assets = bool(hostile_assets_result)
                 has_sus_contacts = bool(sus_contacts_result)
+                has_sus_contracts = bool(sus_contracts_result)
 
                 # Load or create existing record
                 status, created = UserStatus.objects.get_or_create(user_id=user_id)
@@ -188,6 +188,7 @@ def BB_run_regular_updates():
                 #status.hostile_clones = []
                 #status.hostile_assets = []
                 #status.sus_contacts = {}
+                status.sus_contracts = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
 
@@ -313,9 +314,41 @@ def BB_run_regular_updates():
                     status.has_sus_contacts = has_sus_contacts
                     status.sus_contacts = sus_contacts_result
 
-                if status.has_sus_contracts != has_sus_contracts:
-                    changes.append(f"Hostile contracts: {'🚩' if has_sus_contracts else '❌'}")
+                if status.has_sus_contracts != has_sus_contracts or set(sus_contracts_result) != set(as_dict(status.sus_contracts) or {}):
+                    old_contracts = as_dict(status.sus_contracts) or {}
+                    #normalized_old = { str(cid): v for cid, v in status.sus_contacts.items() }
+                    #normalized_new = { str(cid): v for cid, v in sus_contacts_result.items() }
+
+                    old_ids   = set(as_dict(status.sus_contracts).keys())
+                    new_ids   = set(sus_contracts_result.keys())
+                    new_links = new_ids - old_ids
+                    if new_links:
+                        link_list = "\n".join(
+                            f"🔗 {sus_contracts_result[issuer_id]}" for issuer_id in new_links
+                        )
+                        logger.info(f"{char_name} new assets:\n{link_list}")
+
+                    if old_ids:
+                        old_link_list = "\n".join(
+                            f"🔗 {old_contracts[issuer_id]}" for issuer_id in old_ids if issuer_id in old_contracts
+                        )
+                        logger.info(f"{char_name} old assets:\n{old_link_list}")
+
+                    if status.has_sus_contracts != has_sus_contracts:
+                        changes.append(f"## Sus Contracts: {'🚩' if has_sus_contracts else '❌'}")
+                    logger.info(f"{char_name} status changed")
+
+                    if new_links:
+                        changes.append(f"## New Sus Contracts:")
+                        for issuer_id in new_links:
+                            res = sus_contracts_result[issuer_id]
+                            ping = f"<@&{pingroleID}>"
+                            if res.startswith("- A -"):
+                                ping = ""
+                            changes.append(f"{res} {ping}")
+
                     status.has_sus_contracts = has_sus_contracts
+                    status.sus_contracts = sus_contracts_result
 
                 if status.has_sus_mails != has_sus_mails:
                     changes.append(f"Hostile mails: {'🚩' if has_sus_mails else '❌'}")

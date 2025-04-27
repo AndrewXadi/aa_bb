@@ -15,7 +15,7 @@ from aa_bb.checks.imp_blacklist import generate_blacklist_links
 from aa_bb.checks.lawn_blacklist import get_user_character_names_lawn
 from aa_bb.checks.notifications import game_time, skill_injected
 from aa_bb.checks.sus_contacts import render_contacts
-from aa_bb.checks.sus_contracts import sus_contra
+from aa_bb.checks.sus_contracts import render_contracts
 from aa_bb.checks.sus_mails import sus_mail
 from aa_bb.checks.sus_trans import sus_tra
 from aa_bb.checks.corp_blacklist import get_corp_blacklist_html, add_user_characters_to_blacklist
@@ -33,7 +33,7 @@ CARD_DEFINITIONS = [
     {"title": 'Corp Blacklist',"key": "corp_bl"},
     {"title": 'Player Corp History',"key": "freq_corp"},
     {"title": 'Suspicious Contacts',"key": "sus_conta"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Contracts',"key": "sus_contr"},
+    {"title": 'Suspicious Contracts',"key": "sus_contr"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Mails',"key": "sus_mail"},
     {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Transactions',"key": "sus_tra"},
     {"title": 'AWOX Kills',"key": "awox"},
@@ -97,6 +97,10 @@ def get_card_data(request, target_user_id: int, key: str):
 
     elif key == "sus_conta":
         content   = render_contacts(target_user_id)
+        status = not (content and "red" in content)
+
+    elif key == "sus_contr":
+        content   = render_contracts(target_user_id)
         status = not (content and "red" in content)
 
     else:
