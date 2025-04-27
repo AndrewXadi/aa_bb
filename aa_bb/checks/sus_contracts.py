@@ -69,7 +69,7 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
         issuer_corporation_id = None
         issuer_alliance = '-'
         issuer_alliance_id = None
-        if issuer_id:
+        if issuer_id and issuer_type:
             if issuer_type == 'character':
                 issuer_name = resolve_character_name(issuer_id)
                 emp = get_character_employment(issuer_id)
@@ -97,7 +97,7 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
         assignee_corporation_id = None
         assignee_alliance = '-'
         assignee_alliance_id = None
-        if assignee_id:
+        if assignee_id and assignee_type:
             if assignee_type == 'character':
                 assignee_name = resolve_character_name(assignee_id)
                 emp = get_character_employment(assignee_id)
