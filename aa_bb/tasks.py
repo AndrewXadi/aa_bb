@@ -188,7 +188,7 @@ def BB_run_regular_updates():
                 #status.hostile_clones = []
                 #status.hostile_assets = []
                 #status.sus_contacts = {}
-                status.sus_contracts = {}
+                #status.sus_contracts = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
 

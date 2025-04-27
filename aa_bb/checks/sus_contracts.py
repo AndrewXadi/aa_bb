@@ -190,6 +190,7 @@ def render_contracts(user_id: int) -> str:
     Hostile/blacklisted entries will be colored red via get_cell_style_for_row.
     """
     contracts = get_user_contracts(user_id)
+    logger.info(f"Number of contracts: {len(contracts)}")
     if not contracts:
         return '<p>No contracts found.</p>'
 
@@ -230,6 +231,7 @@ def render_contracts(user_id: int) -> str:
 
     html_parts.append('  </tbody>')
     html_parts.append('</table>')
+    logger.info(f"sent {len(html_parts)} contracts")
 
     return "\n".join(html_parts)
 
@@ -257,4 +259,5 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
             flags.append(f"Assignee alli **{c['assignee_alliance']}** is hostile")
         if flags:
             notes[issuer_id] = f"- Contract {c['contract_id']} ({c['contract_type']}) issued {c['issued_date']}, ended {c['end_date']}; flags: {'; '.join(flags)}"
+    logger.info(f"Number of contracts: {len(notes)}")
     return notes
