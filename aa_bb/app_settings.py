@@ -50,7 +50,6 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
 
     if not results:
         return None
-    logger.info(f"category:{results[0].get("category")}")
     return results[0].get("category")
 
 def get_eve_entity_type(
