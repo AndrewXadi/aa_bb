@@ -213,6 +213,7 @@ def render_contracts(user_id: int) -> str:
     """
     Renders an HTML table of user contracts with per-cell styling.
     Hostile/blacklisted entries will be colored red via get_cell_style_for_row.
+    Limits output to the first 50 hostile rows and indicates how many were skipped.
     """
     contracts = get_user_contracts(user_id)
     logger.info(f"Number of contracts: {len(contracts)}")
@@ -220,22 +221,31 @@ def render_contracts(user_id: int) -> str:
         return '<p>No contracts found.</p>'
 
     # Sort rows by issue date descending
-    rows = sorted(
+    all_rows = sorted(
         contracts.values(),
         key=lambda x: x['issued_date'],
         reverse=True
     )
 
-    rows = [row for row in rows if is_row_hostile(row)]
+    # Filter to only hostile rows
+    # Ensure is_row_hostile is defined/imported
+    hostile_rows = [row for row in all_rows if is_row_hostile(row)]
 
-    total = len(rows)
+    total = len(hostile_rows)
     limit = 50
-    display_rows = rows[:limit]
+    if total == 0:
+        return '<p>No hostile contracts found.</p>'
+
+    display_rows = hostile_rows[:limit]
     skipped = total - limit if total > limit else 0
 
-    # Determine headers, excluding hidden columns
-    first_row = rows[0]
-    HIDDEN_COLUMNS = {'assignee_alliance_id', 'assignee_corporation_id', 'issuer_alliance_id', 'issuer_corporation_id', 'assignee_id', 'issuer_id', 'contract_id'}
+    # Determine headers using the first displayed row
+    first_row = display_rows[0]
+    HIDDEN_COLUMNS = {
+        'assignee_alliance_id', 'assignee_corporation_id',
+        'issuer_alliance_id', 'issuer_corporation_id',
+        'assignee_id', 'issuer_id', 'contract_id'
+    }
     headers = [h for h in first_row.keys() if h not in HIDDEN_COLUMNS]
 
     html_parts = []
@@ -263,11 +273,17 @@ def render_contracts(user_id: int) -> str:
 
     html_parts.append('  </tbody>')
     html_parts.append('</table>')
-    if skipped > 0:
-        html_parts.append(f'<p>Showing {limit} of {total} hostile contracts; skipped {skipped} older contracts not to break things.</p>')
 
-    logger.info(f"sent {len(display_rows)} contracts, skipped {skipped}")
+    # Indicate skipped rows
+    if skipped > 0:
+        html_parts.append(
+            f'<p>Showing {limit} of {total} hostile contracts; '
+            f'skipped {skipped} older contracts.</p>'
+        )
+
+    logger.info(f"rendered {len(display_rows)} hostile contracts, skipped {skipped}")
     return "\n".join(html_parts)
+
 
 
 def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
