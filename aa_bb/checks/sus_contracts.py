@@ -229,7 +229,7 @@ def render_contracts(user_id: int) -> str:
     #rows = [row for row in rows if is_row_hostile(row)]
 
     total = len(rows)
-    limit = 100
+    limit = 50
     display_rows = rows[:limit]
     skipped = total - limit if total > limit else 0
 
