@@ -232,7 +232,8 @@ def render_contracts(user_id: int) -> str:
     hostile_rows = [row for row in all_rows if is_row_hostile(row)]
 
     total = len(hostile_rows)
-    limit = 50
+    logger.info(f"found {total} hostile contracts")
+    limit = 20
     if total == 0:
         return '<p>No hostile contracts found.</p>'
 
