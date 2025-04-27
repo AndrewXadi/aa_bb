@@ -187,6 +187,27 @@ def get_cell_style_for_row(column: str, row: dict) -> str:
 
     return ''
 
+def is_row_hostile(row: dict) -> bool:
+    """Returns True if the row matches hostile corp/char/alliance criteria."""
+    if check_char_corp_bl(row.get("issuer_id")):
+        return True
+    if check_char_corp_bl(row.get("assignee_id")):
+        return True
+
+    solo = BigBrotherConfig.get_solo()
+
+    if row.get("issuer_corporation_id") and str(row["issuer_corporation_id"]) in solo.hostile_corporations:
+        return True
+    if row.get("issuer_alliance_id") and str(row["issuer_alliance_id"]) in solo.hostile_alliances:
+        return True
+    if row.get("assignee_corporation_id") and str(row["assignee_corporation_id"]) in solo.hostile_corporations:
+        return True
+    if row.get("assignee_alliance_id") and str(row["assignee_alliance_id"]) in solo.hostile_alliances:
+        return True
+
+    return False
+
+
 
 def render_contracts(user_id: int) -> str:
     """
@@ -205,6 +226,13 @@ def render_contracts(user_id: int) -> str:
         reverse=True
     )
 
+    #rows = [row for row in rows if is_row_hostile(row)]
+
+    total = len(rows)
+    limit = 100
+    display_rows = rows[:limit]
+    skipped = total - limit if total > limit else 0
+
     # Determine headers, excluding hidden columns
     first_row = rows[0]
     HIDDEN_COLUMNS = {'assignee_alliance_id', 'assignee_corporation_id', 'issuer_alliance_id', 'issuer_corporation_id', 'assignee_id', 'issuer_id', 'contract_id'}
@@ -221,7 +249,7 @@ def render_contracts(user_id: int) -> str:
     html_parts.append('  </thead>')
     html_parts.append('  <tbody>')
 
-    for row in rows:
+    for row in display_rows:
         html_parts.append('    <tr>')
         for col in headers:
             raw = row.get(col)
@@ -235,8 +263,10 @@ def render_contracts(user_id: int) -> str:
 
     html_parts.append('  </tbody>')
     html_parts.append('</table>')
-    logger.info(f"sent {len(html_parts)} contracts")
+    if skipped > 0:
+        html_parts.append(f'<p>Showing {limit} of {total} hostile contracts; skipped {skipped} older contracts not to break things.</p>')
 
+    logger.info(f"sent {len(display_rows)} contracts, skipped {skipped}")
     return "\n".join(html_parts)
 
 
