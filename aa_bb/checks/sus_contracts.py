@@ -94,7 +94,7 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
 
         # -- assignee --
         assignee_name = '-'
-        if assignee_id != 0 or None:
+        if c.assignee_id != 0 or None:
             assignee_id = c.assignee_id
             logger.info(f"assignee id picked {c.assignee_id}/{c.acceptor_id}")
         else:
@@ -238,7 +238,7 @@ def render_contracts(user_id: int) -> str:
 
     total = len(hostile_rows)
     logger.info(f"found {total} hostile contracts")
-    limit = 20
+    limit = 50
     if total == 0:
         return '<p>No hostile contracts found.</p>'
 
