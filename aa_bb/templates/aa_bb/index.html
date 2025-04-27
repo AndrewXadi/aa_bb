@@ -35,108 +35,114 @@
 
 {% block extra_javascript %}
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const dropdown = document.getElementById("pageDropdown");
-    const container = document.getElementById("cardsContainer");
-    const spinner = document.getElementById("loadingSpinner");
-    const messageBox = document.getElementById("messageBox");
-    const errorMessages = document.getElementById("errorMessages");
+document.addEventListener("DOMContentLoaded", () => {
+  const dropdown      = document.getElementById("pageDropdown");
+  const container     = document.getElementById("cardsContainer");
+  const spinner       = document.getElementById("loadingSpinner");
+  const messageBox    = document.getElementById("messageBox");
+  const errorMessages = document.getElementById("errorMessages");
 
-    const TOTAL_CARDS = 12;  // you can keep 12 or use template count
+  const TOTAL_CARDS       = 12;
+  const SUS_CONTR_INDEX   = 5;  // zero‐based index for 'sus_contr'
+  const STREAM_URL        = `{% url 'BigBrother:stream_contracts' %}`;
 
-    function showSpinner(on) {
-        spinner.style.display = on ? "block" : "none";
+  function showSpinner(on) {
+    spinner.style.display = on ? "block" : "none";
+  }
+  function showMessage(text, type="info") {
+    messageBox.innerHTML = text;
+    messageBox.className   = "alert alert-" + type;
+    messageBox.style.display = "block";
+  }
+  function hideMessage()    { messageBox.style.display = "none"; }
+
+  async function loadCard(option, index) {
+    // 1) If Suspicious Contracts, stream HTML
+    if (index === SUS_CONTR_INDEX) {
+      const url = `${STREAM_URL}?option=${encodeURIComponent(option)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Stream failed: ${res.status}`);
+      const htmlContent = await res.text();                // read as text :contentReference[oaicite:2]{index=2}
+      // Determine status by presence of any red styling
+      const status = !htmlContent.includes('style="color: red;');
+      return {
+        title:   'Suspicious Contracts',
+        content: htmlContent,
+        status
+      };
     }
 
-    function showMessage(text, type = "info") {
-        messageBox.innerHTML = text;
-        messageBox.className = "alert alert-" + type;
-        messageBox.style.display = "block";
-    }
+    // 2) Otherwise, JSON endpoint
+    const url = `{% url 'BigBrother:load_card' %}`
+              + `?option=${encodeURIComponent(option)}&index=${index}`;
+    const res  = await fetch(url);
+    const data = await res.json();                        // parse JSON :contentReference[oaicite:3]{index=3}
+    if (!res.ok) throw new Error(data.error || `Card ${index+1} failed`);
+    return data;
+  }
 
-    function hideMessage() {
-        messageBox.style.display = "none";
-    }
+  async function loadAllCards(option) {
+    showSpinner(true);
+    container.innerHTML  = "";
+    errorMessages.innerHTML = "";
+    hideMessage();
 
-    function updateLoadingText(loaded) {
-        showMessage(`${loaded}/${TOTAL_CARDS} loaded... This may take a while, do not refresh`, "info");
-    }
+    let loaded = 0;
+    for (let i = 0; i < TOTAL_CARDS; i++) {
+      try {
+        const card = await loadCard(option, i);
+        // Build the card…
+        const collapseId = `collapse${i}`;
+        const icon = card.status
+          ? '<span class="text-success">&#128994;</span>'
+          : '<span class="text-danger">&#128681;</span>';
 
-    function appendPersistentError(msg) {
+        const cardDiv = document.createElement("div");
+        cardDiv.className = "card mb-2";
+        cardDiv.innerHTML = `
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+              <button class="btn btn-sm btn-link toggle-card mr-2"
+                      type="button" data-target="#${collapseId}">
+                <span>&#9660;</span>
+              </button>
+              <span>${card.title}</span>
+            </div>
+            ${icon}
+          </div>
+          <div id="${collapseId}" class="collapse">
+            <div class="card-body">${card.content}</div>
+          </div>
+        `;
+        container.appendChild(cardDiv);
+        cardDiv.querySelector(".toggle-card")
+               .addEventListener("click", e =>
+                 document.querySelector(e.currentTarget.dataset.target)
+                         .classList.toggle("collapse")
+               );
+
+        loaded++;
+        showMessage(`${loaded}/${TOTAL_CARDS} loaded…`, "info");
+      } catch (err) {
+        console.error(err);
         const d = document.createElement("div");
         d.className = "alert alert-danger";
-        d.innerText = msg;
+        d.innerText = `Error loading card ${i+1}: ${err.message}`;
         errorMessages.appendChild(d);
+      }
     }
 
-    // Fetch one card, throw server-side message if error
-    async function loadCard(option, index) {
-        const url = `{% url 'BigBrother:load_card' %}?option=${encodeURIComponent(option)}&index=${index}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error || `Failed to load card ${index + 1}`);
-        }
-        return data;
+    showSpinner(false);
+    if (loaded === 0) {
+      showMessage("No cards could be loaded.", "warning");
+    } else {
+      hideMessage();
     }
+  }
 
-    async function loadAllCards(option) {
-        showSpinner(true);
-        container.innerHTML = "";
-        errorMessages.innerHTML = "";
-        hideMessage();
-
-        let loaded = 0;
-        for (let i = 0; i < TOTAL_CARDS; i++) {
-            try {
-                const card = await loadCard(option, i);
-                const collapseId = `collapse${i}`;
-                const icon = card.status
-                    ? '<span class="text-success">&#128994;</span>'
-                    : '<span class="text-danger">&#128681;</span>';
-
-                const cardDiv = document.createElement("div");
-                cardDiv.className = "card mb-2";
-                cardDiv.innerHTML = `
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center">
-                        <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
-                          <span>&#9660;</span>
-                        </button>
-                        <span>${card.title}</span>
-                      </div>
-                      ${icon}
-                    </div>
-                    <div id="${collapseId}" class="collapse">
-                      <div class="card-body">${card.content}</div>
-                    </div>
-                `;
-                container.appendChild(cardDiv);
-                cardDiv.querySelector(".toggle-card")
-                       .addEventListener("click", e => {
-                           document.querySelector(e.currentTarget.dataset.target)
-                                   .classList.toggle("collapse");
-                       });
-
-                loaded++;
-                updateLoadingText(loaded);
-            } catch (err) {
-                console.error(err);
-                appendPersistentError(`Error loading card ${i + 1}: ${err.message}`);
-            }
-        }
-
-        showSpinner(false);
-        if (loaded === 0) {
-            showMessage("No cards could be loaded.", "warning");
-        } else {
-            hideMessage();
-        }
-    }
-
-    dropdown.addEventListener("change", function () {
-        loadAllCards(this.value);
-    });
+  dropdown.addEventListener("change", () => {
+    loadAllCards(dropdown.value);
+  });
 });
 </script>
 {% endblock %}
