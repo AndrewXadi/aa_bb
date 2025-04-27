@@ -61,8 +61,8 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
     for c in qs:
         cid = c.contract_id
         issue = c.date_issued
-        number + 1
-        logger.info(f"Number of contracts: {number}")
+        number += 1
+        logger.info(f"contract number: {number}")
 
         # -- issuer --
         issuer_name = '-'
@@ -139,6 +139,7 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
             'assignee_alliance_id':     assignee_alliance_id,
             'status':                   c.status,
         }
+    logger.info(f"Number of contracts returned: {len(result)}")
     return result
 
 def get_cell_style_for_row(column: str, row: dict) -> str:
