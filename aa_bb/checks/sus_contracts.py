@@ -94,13 +94,14 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
 
         # -- assignee --
         assignee_name = '-'
-        if c.assignee_id != 0 or None:
+        if c.assignee_id != 0:
             assignee_id = c.assignee_id
             logger.info(f"assignee id picked {c.assignee_id}/{c.acceptor_id}")
         else:
             assignee_id = c.acceptor_id
             logger.info(f"acceptor id picked {c.assignee_id}/{c.acceptor_id}")
-        assignee_type = get_eve_entity_type(c.assignee_id)
+        
+        assignee_type = get_eve_entity_type(assignee_id)
         assignee_corporation = '-'
         assignee_corporation_id = None
         assignee_alliance = '-'
