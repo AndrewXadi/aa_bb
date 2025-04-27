@@ -55,11 +55,14 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
     qs = Contract.objects.filter(
         character__character__character_id__in=user_ids
     ).select_related('character__character')
-
+    logger.info(f"Number of contracts: {len(qs)}")
+    number = 0
     result: Dict[int, Dict] = {}
     for c in qs:
         cid = c.contract_id
         issue = c.date_issued
+        number + 1
+        logger.info(f"Number of contracts: {len(number)}")
 
         # -- issuer --
         issuer_name = '-'
