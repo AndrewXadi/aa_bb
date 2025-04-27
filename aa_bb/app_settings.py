@@ -38,6 +38,9 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
     Returns:
         'character', 'corporation', 'alliance', etc., or None on error/not found.
     """
+    if eve_id is None:
+        logging.warning("No EVE ID provided to get_eve_entity_type_int")
+        return None
     try:
         future = esi.client.Universe.post_universe_names(
             ids=[eve_id],                # must be `ids`
