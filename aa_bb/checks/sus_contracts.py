@@ -62,7 +62,7 @@ def get_user_contracts(user_id: int) -> Dict[int, Dict]:
         cid = c.contract_id
         issue = c.date_issued
         number + 1
-        logger.info(f"Number of contracts: {len(number)}")
+        logger.info(f"Number of contracts: {number}")
 
         # -- issuer --
         issuer_name = '-'
