@@ -4,6 +4,8 @@ import logging
 from django.utils.html import format_html
 from allianceauth.authentication.models import CharacterOwnership
 from ..app_settings import get_site_url, get_contact_email, get_owner_name
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,19 @@ def fetch_awox_kills(user_id, delay=0.2):
 
     kills_by_id = {}
 
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    session.headers.update({"Connection": "close"})
+    retries = Retry(total=3, backoff_factor=0.2, status_forcelist=[500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+
     for char_id in char_ids:
         zkill_url = f"https://zkillboard.com/api/characterID/{char_id}/awox/1/"
-        response = requests.get(zkill_url, headers=HEADERS)
-
-        if response.status_code != 200:
-            logger.warning("Failed to fetch kills for char {}: {}".format(char_id, response.status_code))
+        try:
+            response = session.get(zkill_url, timeout=(3, 10))
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Error fetching awox for {char_id}: {e}")
             continue
 
         killmails = response.json()

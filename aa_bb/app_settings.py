@@ -220,15 +220,41 @@ def get_user_characters(user_id: int) -> dict[int, str]:
 def is_npc_corporation(corp_id):
     return 1_000_000 <= corp_id < 2_000_000
 
+corp_cache = {}
+CORP_TTL = timedelta(hours=24)
 
 def get_corporation_info(corp_id):
+    """
+    Fetch corporation info from the ESI API, with a manual 24 h TTL cache.
+    """
+    # 1) Cache lookup & expiration check (LBYL)
+    entry = corp_cache.get(corp_id)
+    if entry:
+        if datetime.utcnow() - entry["stored"] < CORP_TTL:
+            return entry["value"]
+        # expired → remove old entry
+        del corp_cache[corp_id]
+
+    # 2) Cache miss or expired → fetch fresh data
     try:
         result = esi.client.Corporation.get_corporations_corporation_id(
             corporation_id=corp_id
         ).results()
-        return {"name": result.get("name", f"Unknown ({corp_id})")}
-    except Exception:
-        return {"name": f"Unknown Corp ({corp_id})"}
+        info = {"name": result.get("name", f"Unknown ({corp_id})")}
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        # log & return a safe default
+        print(f"Failed to fetch corp info [{corp_id}]: {e}")
+        info = {"name": f"Unknown Corp ({corp_id})"}
+
+    # 3) Store in cache
+    corp_cache[corp_id] = {
+        "value": info,
+        "stored": datetime.utcnow()
+    }
+
+    return info
 
 def_cache = {}
 

@@ -34,6 +34,7 @@ from aa_bb.checks.sus_contracts import (
     get_user_contracts,
     is_row_hostile,
     get_cell_style_for_row,
+    gather_user_contracts,
 )
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters
 from .models import BigBrotherConfig
@@ -181,6 +182,7 @@ def check_contract_batch(request):
     Check a slice of contracts for hostility by start/limit parameters.
     Returns JSON with `checked` count and list of `hostile_found`,
     each entry including a `cell_styles` dict for inline styling.
+    Now uses gather_user_contracts + get_user_contracts(qs) on the full set.
     """
     option = request.GET.get("option")
     start  = int(request.GET.get("start", 0))
@@ -189,20 +191,18 @@ def check_contract_batch(request):
     if user_id is None:
         return JsonResponse({"error": "Unknown account"}, status=404)
 
-    cache_key = f"contract_ids_{user_id}"
-    all_ids = cache.get(cache_key)
-    if all_ids is None:
-        user_chars = get_user_characters(user_id)
-        qs = Contract.objects.filter(
-            character__character__character_id__in=user_chars
-        ).order_by('-date_issued').values_list('contract_id', 'date_issued')
-        all_ids = [
-            {'id': cid, 'date': dt.isoformat()} for cid, dt in qs
-        ]
-        cache.set(cache_key, all_ids, 300)
+    # 1) Ensure we have the full QuerySet
+    cache_key = f"contract_qs_{user_id}"
+    qs_all = cache.get(cache_key)
+    if qs_all is None:
+        qs_all = gather_user_contracts(user_id)
+        cache.set(cache_key, qs_all, 300)
 
-    batch = all_ids[start:start + limit]
-    full_map = get_user_contracts(user_id)
+    # 2) Slice out just this batch of model instances
+    batch_qs = qs_all[start:start + limit]
+
+    # 3) Hydrate only this batch
+    batch_map = get_user_contracts(batch_qs)
 
     HIDDEN = {
         'assignee_alliance_id', 'assignee_corporation_id',
@@ -211,27 +211,27 @@ def check_contract_batch(request):
     }
 
     hostile = []
-    for entry in batch:
-        row = full_map.get(entry['id'])
-        if row and is_row_hostile(row):
+    for cid, row in batch_map.items():
+        if is_row_hostile(row):
             # build style map for visible columns
-            style_map = {}
-            for col, val in row.items():
-                if col not in HIDDEN:
-                    style_map[col] = get_cell_style_for_row(col, row)
-            # now include only the visible columns + styles
-            data = {col: row[col] for col in row if col not in HIDDEN}
-            data['cell_styles'] = style_map
-            hostile.append(data)
+            style_map = {
+                col: get_cell_style_for_row(col, row)
+                for col in row
+                if col not in HIDDEN
+            }
+            # package only the visible fields + styles
+            payload = {col: row[col] for col in row if col not in HIDDEN}
+            payload['cell_styles'] = style_map
+            hostile.append(payload)
 
     return JsonResponse({
-        'checked': len(batch),
+        'checked': len(batch_qs),
         'hostile_found': hostile
     })
 
 
 
-# Streaming fallback (optional)
+
 @login_required
 @permission_required("aa_bb.basic_access")
 def stream_contracts(request: WSGIRequest):
@@ -239,48 +239,80 @@ def stream_contracts(request: WSGIRequest):
     if not option:
         return HttpResponseBadRequest("Missing account option")
 
-    target_user_id = get_user_id(option)
-    if target_user_id is None:
+    user_id = get_user_id(option)
+    if user_id is None:
         return HttpResponseBadRequest("Unknown account")
 
-    contracts  = get_user_contracts(target_user_id)
-    all_rows   = sorted(
-        contracts.values(), key=lambda x: x['issued_date'], reverse=True
-    )
-    hostile_rows = [r for r in all_rows if is_row_hostile(r)]
+    # 1) Grab the entire QuerySet (fast DB filter, no per-row work)
+    qs = gather_user_contracts(user_id)
+    total = qs.count()
 
-    if not hostile_rows:
+    if total == 0:
         return StreamingHttpResponse(
-            '<p>No hostile contracts found.</p>', content_type='text/html'
+            '<p>No contracts found.</p>', content_type='text/html'
         )
 
-    first = hostile_rows[0]
-    HIDDEN = {
-        'assignee_alliance_id', 'assignee_corporation_id',
-        'issuer_alliance_id', 'issuer_corporation_id',
-        'assignee_id', 'issuer_id', 'contract_id'
-    }
-    headers = [h for h in first.keys() if h not in HIDDEN]
-    labels  = [html.escape(h.replace('_', ' ').title()) for h in headers]
+    batch_size = 10
 
-    def row_generator():
+    def generator():
+        # We'll derive headers on first batch
+        headers = None
+
+        # Emit table start
         yield '<table class="table table-striped"><thead><tr>'
-        for lab in labels:
-            yield f'<th>{lab}</th>'
-        yield '</tr></thead><tbody>'
-        for row in hostile_rows:
-            yield '<tr>'
-            for col in headers:
-                cell  = html.escape(str(row.get(col, '')))
-                style = get_cell_style_for_row(col, row)
-                if style:
-                    yield f'<td style="{style}">{cell}</td>'
-                else:
-                    yield f'<td>{cell}</td>'
-            yield '</tr>'
+
+        processed = 0
+        for offset in range(0, total, batch_size):
+            batch_qs = qs[offset:offset + batch_size]
+
+            # 2) Build full details just for this batch
+            batch_map = get_user_contracts(batch_qs)  # your updated function
+            rows = sorted(
+                batch_map.values(),
+                key=lambda x: x['issued_date'],
+                reverse=True
+            )
+
+            # On the very first batch, figure out the visible columns:
+            if headers is None:
+                HIDDEN = {
+                    'assignee_alliance_id','assignee_corporation_id',
+                    'issuer_alliance_id','issuer_corporation_id',
+                    'assignee_id','issuer_id','contract_id'
+                }
+                headers = [h for h in rows[0].keys() if h not in HIDDEN]
+                # Emit header cells
+                for h in headers:
+                    label = html.escape(h.replace('_', ' ').title())
+                    yield f'<th>{label}</th>'
+                yield '</tr></thead><tbody>'
+
+            # 3) Stream only the hostile rows in this batch
+            batch_hostile = [r for r in rows if is_row_hostile(r)]
+            for row in batch_hostile:
+                yield '<tr>'
+                for col in headers:
+                    cell = html.escape(str(row.get(col, '')))
+                    style = get_cell_style_for_row(col, row) or ''
+                    if style:
+                        yield f'<td style="{style}">{cell}</td>'
+                    else:
+                        yield f'<td>{cell}</td>'
+                yield '</tr>'
+
+            processed += len(batch_qs)
+            # 4) Emit a little footer after each batch
+            yield (
+                f'<tr><td colspan="{len(headers)}" '
+                f'style="font-style: italic; text-align:center;">'
+                f'Processed {processed}/{total} contracts…</td></tr>'
+            )
+
+        # Close table
         yield '</tbody></table>'
 
-    return StreamingHttpResponse(row_generator(), content_type='text/html')
+    return StreamingHttpResponse(generator(), content_type='text/html')
+
 
 
 # Card data helper

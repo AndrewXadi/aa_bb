@@ -43,18 +43,20 @@ def _find_alliance_at(history: list, date: datetime) -> Optional[int]:
     return None
 
 
-def get_user_contracts(user_id: int) -> Dict[int, Dict]:
+def gather_user_contracts(user_id: int):
+    user_chars = get_user_characters(user_id)
+    user_ids = set(user_chars.keys())
+    qs = Contract.objects.filter(
+        character__character__character_id__in=user_ids
+    ).select_related('character__character')
+    return qs
+
+def get_user_contracts(qs) -> Dict[int, Dict]:
     """
     Fetch contracts for a user, extracting issuer and assignee details
     with corp/alliance names at the contract issue date, combined.
     Uses c.for_corporation to identify corporate assignees.
     """
-    user_chars = get_user_characters(user_id)
-    user_ids = set(user_chars.keys())
-
-    qs = Contract.objects.filter(
-        character__character__character_id__in=user_ids
-    ).select_related('character__character')
     logger.info(f"Number of contracts: {len(qs)}")
     number = 0
     result: Dict[int, Dict] = {}
@@ -221,7 +223,7 @@ def render_contracts(user_id: int) -> str:
     Hostile/blacklisted entries will be colored red via get_cell_style_for_row.
     Limits output to the first 50 hostile rows and indicates how many were skipped.
     """
-    contracts = get_user_contracts(user_id)
+    contracts = get_user_contracts(gather_user_contracts(user_id))
     logger.info(f"Number of contracts: {len(contracts)}")
     if not contracts:
         return '<p>No contracts found.</p>'
@@ -298,7 +300,7 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
     hostile_corps = cfg.hostile_corporations
     hostile_allis = cfg.hostile_alliances
     notes: Dict[int, str] = {}
-    for issuer_id, c in get_user_contracts(user_id).items():
+    for issuer_id, c in get_user_contracts(gather_user_contracts(user_id)).items():
         flags = []
         # issuer
         if c['issuer_name'] != '-' and check_char_corp_bl(issuer_id):
