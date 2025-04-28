@@ -10,6 +10,7 @@ from django.http import (
 )
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
+from django.core.cache import cache
 
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from django_celery_beat.models import PeriodicTask
@@ -34,25 +35,26 @@ from aa_bb.checks.sus_contracts import (
     is_row_hostile,
     get_cell_style_for_row,
 )
-from .app_settings import get_system_owner, aablacklist_active
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters
 from .models import BigBrotherConfig
+from corptools.models import Contract  # Ensure this is the correct import for Contract model
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 CARD_DEFINITIONS = [
     {"title": 'IMP Blacklist', "key": "imp_bl"},
-    {"title": '<span style="color: Orange;"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
+    {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
     {"title": 'Corp Blacklist', "key": "corp_bl"},
     {"title": 'Player Corp History', "key": "freq_corp"},
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
+    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
+    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
     {"title": 'AWOX Kills', "key": "awox"},
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
-    {"title": '<span style="color: #FF0000;"><b>WiP </b></span>Cyno?', "key": "cyno"},
+    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
 
 
@@ -84,12 +86,10 @@ def load_card(request):
     key   = card_def["key"]
     title = card_def["title"]
 
-    # Handle streaming for suspicious contracts
     if key == "sus_contr":
-        # Delegate to the streaming view, return HTML directly
-        return stream_contracts(request)
+        # handled via paginated endpoints
+        return JsonResponse({"key": key, "title": title})
 
-    # Otherwise generate content normally
     target_user_id = get_user_id(option)
     if target_user_id is None:
         return JsonResponse({"error": "Unknown account"}, status=404)
@@ -102,7 +102,7 @@ def load_card(request):
     })
 
 
-# Bulk loader (fallback, if used)
+# Bulk loader (fallback)
 @login_required
 @permission_required("aa_bb.basic_access")
 def load_cards(request: WSGIRequest) -> JsonResponse:
@@ -144,10 +144,94 @@ def index(request: WSGIRequest):
             qs.values_list("main_character__character_name", flat=True)
               .order_by("main_character__character_name")
         )
-    return render(request, "aa_bb/index.html", {"dropdown_options": dropdown_options})
+    context = {
+        "dropdown_options": dropdown_options,
+        "CARD_DEFINITIONS": CARD_DEFINITIONS,     # ← add this
+    }
+    return render(request, "aa_bb/index.html", context)
 
 
-# Streaming view for Suspicious Contracts
+# Paginated endpoints for Suspicious Contracts
+@login_required
+@permission_required("aa_bb.basic_access")
+def list_contract_ids(request):
+    """
+    Return JSON list of all contract IDs and issue dates for the selected user.
+    """
+    option = request.GET.get("option")
+    user_id = get_user_id(option)
+    if user_id is None:
+        return JsonResponse({"error": "Unknown account"}, status=404)
+
+    user_chars = get_user_characters(user_id)
+    qs = Contract.objects.filter(
+        character__character__character_id__in=user_chars
+    ).order_by('-date_issued').values_list('contract_id', 'date_issued')
+
+    contracts = [
+        {'id': cid, 'date': dt.isoformat()} for cid, dt in qs
+    ]
+    return JsonResponse({'contracts': contracts})
+
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def check_contract_batch(request):
+    """
+    Check a slice of contracts for hostility by start/limit parameters.
+    Returns JSON with `checked` count and list of `hostile_found`,
+    each entry including a `cell_styles` dict for inline styling.
+    """
+    option = request.GET.get("option")
+    start  = int(request.GET.get("start", 0))
+    limit  = int(request.GET.get("limit", 10))
+    user_id = get_user_id(option)
+    if user_id is None:
+        return JsonResponse({"error": "Unknown account"}, status=404)
+
+    cache_key = f"contract_ids_{user_id}"
+    all_ids = cache.get(cache_key)
+    if all_ids is None:
+        user_chars = get_user_characters(user_id)
+        qs = Contract.objects.filter(
+            character__character__character_id__in=user_chars
+        ).order_by('-date_issued').values_list('contract_id', 'date_issued')
+        all_ids = [
+            {'id': cid, 'date': dt.isoformat()} for cid, dt in qs
+        ]
+        cache.set(cache_key, all_ids, 300)
+
+    batch = all_ids[start:start + limit]
+    full_map = get_user_contracts(user_id)
+
+    HIDDEN = {
+        'assignee_alliance_id', 'assignee_corporation_id',
+        'issuer_alliance_id', 'issuer_corporation_id',
+        'assignee_id', 'issuer_id', 'contract_id'
+    }
+
+    hostile = []
+    for entry in batch:
+        row = full_map.get(entry['id'])
+        if row and is_row_hostile(row):
+            # build style map for visible columns
+            style_map = {}
+            for col, val in row.items():
+                if col not in HIDDEN:
+                    style_map[col] = get_cell_style_for_row(col, row)
+            # now include only the visible columns + styles
+            data = {col: row[col] for col in row if col not in HIDDEN}
+            data['cell_styles'] = style_map
+            hostile.append(data)
+
+    return JsonResponse({
+        'checked': len(batch),
+        'hostile_found': hostile
+    })
+
+
+
+# Streaming fallback (optional)
 @login_required
 @permission_required("aa_bb.basic_access")
 def stream_contracts(request: WSGIRequest):
@@ -159,7 +243,6 @@ def stream_contracts(request: WSGIRequest):
     if target_user_id is None:
         return HttpResponseBadRequest("Unknown account")
 
-    # Fetch and filter
     contracts  = get_user_contracts(target_user_id)
     all_rows   = sorted(
         contracts.values(), key=lambda x: x['issued_date'], reverse=True
@@ -171,7 +254,6 @@ def stream_contracts(request: WSGIRequest):
             '<p>No hostile contracts found.</p>', content_type='text/html'
         )
 
-    # Determine headers
     first = hostile_rows[0]
     HIDDEN = {
         'assignee_alliance_id', 'assignee_corporation_id',
@@ -181,7 +263,6 @@ def stream_contracts(request: WSGIRequest):
     headers = [h for h in first.keys() if h not in HIDDEN]
     labels  = [html.escape(h.replace('_', ' ').title()) for h in headers]
 
-    # Generator
     def row_generator():
         yield '<table class="table table-striped"><thead><tr>'
         for lab in labels:
@@ -229,7 +310,7 @@ def get_card_data(request, target_user_id: int, key: str):
     elif key == "lawn_bl":
         names   = get_user_character_names_lawn(target_user_id)
         content = (
-            "Go <a href='https://auth.lawnalliance.space/blacklist/blacklist/'>"  \
+            "Go <a href='https://auth.lawnalliance.space/blacklist/blacklist/'>"
             "here</a> and check those names:<br>" + names
         )
         status  = False
