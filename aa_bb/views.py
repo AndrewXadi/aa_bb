@@ -60,8 +60,8 @@ CARD_DEFINITIONS = [
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
-    {"title": 'Suspicious Contracts', "key": "sus_contr"},
     {"title": 'Suspicious Mails', "key": "sus_mail"},
+    {"title": 'Suspicious Contracts', "key": "sus_contr"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
