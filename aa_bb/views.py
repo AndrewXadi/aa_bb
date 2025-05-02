@@ -14,7 +14,8 @@ from django.core.cache import cache
 
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from django_celery_beat.models import PeriodicTask
-
+from django.utils.safestring import mark_safe
+import json
 from aa_bb.checks.awox import render_awox_kills_html
 from aa_bb.checks.corp_changes import get_frequent_corp_changes
 from aa_bb.checks.cyno import cyno
@@ -24,16 +25,23 @@ from aa_bb.checks.imp_blacklist import generate_blacklist_links
 from aa_bb.checks.lawn_blacklist import get_user_character_names_lawn
 from aa_bb.checks.notifications import game_time, skill_injected
 from aa_bb.checks.sus_contacts import render_contacts
-from aa_bb.checks.sus_mails import sus_mail
+from aa_bb.checks.sus_mails import (
+    get_user_mails,
+    is_mail_row_hostile,
+    get_cell_style_for_mail_cell,
+    gather_user_mails,
+    render_mails,
+)
 from aa_bb.checks.sus_trans import sus_tra
 from aa_bb.checks.corp_blacklist import (
     get_corp_blacklist_html,
     add_user_characters_to_blacklist,
+    check_char_corp_bl,
 )
 from aa_bb.checks.sus_contracts import (
     get_user_contracts,
-    is_row_hostile,
-    get_cell_style_for_row,
+    is_contract_row_hostile,
+    get_cell_style_for_contract_row,
     gather_user_contracts,
 )
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters
@@ -48,13 +56,13 @@ CARD_DEFINITIONS = [
     {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
     {"title": 'Corp Blacklist', "key": "corp_bl"},
     {"title": 'Player Corp History', "key": "freq_corp"},
-    {"title": 'Suspicious Contacts', "key": "sus_conta"},
-    {"title": 'Suspicious Contracts', "key": "sus_contr"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Mails', "key": "sus_mail"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
     {"title": 'AWOX Kills', "key": "awox"},
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
+    {"title": 'Suspicious Contacts', "key": "sus_conta"},
+    {"title": 'Suspicious Contracts', "key": "sus_contr"},
+    {"title": 'Suspicious Mails', "key": "sus_mail"},
+    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
 
@@ -67,6 +75,8 @@ def get_user_id(character_name):
     except CharacterOwnership.DoesNotExist:
         return None
 
+def get_mail_keywords():
+    return BigBrotherConfig.get_solo().mail_keywords
 
 # Single-card loader
 @login_required
@@ -87,7 +97,7 @@ def load_card(request):
     key   = card_def["key"]
     title = card_def["title"]
 
-    if key == "sus_contr":
+    if key in ("sus_contr", "sus_mail"):
         # handled via paginated endpoints
         return JsonResponse({"key": key, "title": title})
 
@@ -145,9 +155,10 @@ def index(request: WSGIRequest):
             qs.values_list("main_character__character_name", flat=True)
               .order_by("main_character__character_name")
         )
+
     context = {
         "dropdown_options": dropdown_options,
-        "CARD_DEFINITIONS": CARD_DEFINITIONS,     # ← add this
+        "CARD_DEFINITIONS": CARD_DEFINITIONS,
     }
     return render(request, "aa_bb/index.html", context)
 
@@ -212,10 +223,10 @@ def check_contract_batch(request):
 
     hostile = []
     for cid, row in batch_map.items():
-        if is_row_hostile(row):
+        if is_contract_row_hostile(row):
             # build style map for visible columns
             style_map = {
-                col: get_cell_style_for_row(col, row)
+                col: get_cell_style_for_contract_row(col, row)
                 for col in row
                 if col not in HIDDEN
             }
@@ -288,12 +299,12 @@ def stream_contracts(request: WSGIRequest):
                 yield '</tr></thead><tbody>'
 
             # 3) Stream only the hostile rows in this batch
-            batch_hostile = [r for r in rows if is_row_hostile(r)]
+            batch_hostile = [r for r in rows if is_contract_row_hostile(r)]
             for row in batch_hostile:
                 yield '<tr>'
                 for col in headers:
                     cell = html.escape(str(row.get(col, '')))
-                    style = get_cell_style_for_row(col, row) or ''
+                    style = get_cell_style_for_contract_row(col, row) or ''
                     if style:
                         yield f'<td style="{style}">{cell}</td>'
                     else:
@@ -312,6 +323,118 @@ def stream_contracts(request: WSGIRequest):
         yield '</tbody></table>'
 
     return StreamingHttpResponse(generator(), content_type='text/html')
+
+
+VISIBLE = [
+    "sent_date", "subject",
+    "sender_name", "sender_corporation", "sender_alliance",
+    "recipient_names", "recipient_corps", "recipient_alliances",
+    "content", "status",
+]
+
+def _render_mail_row_html(row: dict) -> str:
+    """
+    Render a single hostile mail row as <tr>…</tr> using only VISIBLE columns,
+    applying red styling to any name whose ID is hostile.
+    """
+    cells = []
+    cfg = BigBrotherConfig.get_solo()
+
+    for col in VISIBLE:
+        val = row.get(col, "")
+        # recipients come as lists
+        if isinstance(val, list):
+            spans = []
+            for i, item in enumerate(val):
+                style = ""
+                if col == "recipient_names":
+                    rid = row["recipient_ids"][i]
+                    if check_char_corp_bl(rid):
+                        style = "color:red;"
+                elif col == "recipient_corps":
+                    cid = row["recipient_corp_ids"][i]
+                    if cid and str(cid) in cfg.hostile_corporations:
+                        style = "color:red;"
+                elif col == "recipient_alliances":
+                    aid = row["recipient_alliance_ids"][i]
+                    if aid and str(aid) in cfg.hostile_alliances:
+                        style = "color:red;"
+                span = (
+                    f'<span style="{style}">{html.escape(str(item))}</span>'
+                    if style else
+                    f'<span>{html.escape(str(item))}</span>'
+                )
+                spans.append(span)
+            cell_html = ", ".join(spans)
+        else:
+            # single-valued columns: subject, content, sender_*
+            style = ""
+            if col.startswith("sender_"):
+                style = get_cell_style_for_mail_cell(col, row, None)
+            if style:
+                cell_html = f'<span style="{style}">{html.escape(str(val))}</span>'
+            else:
+                cell_html = html.escape(str(val))
+        cells.append(f"<td>{cell_html}</td>")
+
+    return "<tr>" + "".join(cells) + "</tr>"
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def stream_mails(request):
+    option = request.GET.get("option", "")
+    user_id = get_user_id(option)
+    if user_id is None:
+        return HttpResponseBadRequest("Unknown account")
+
+    qs = gather_user_mails(user_id)
+    total = qs.count()
+    if total == 0:
+        return StreamingHttpResponse(
+            "<p>No mails found.</p>", content_type="text/html"
+        )
+
+    batch_size = 10
+
+    def generator():
+        # 1) Emit table and header once
+        yield '<table class="table table-striped"><thead><tr>'
+        for col in VISIBLE:
+            yield f"<th>{html.escape(col.replace('_',' ').title())}</th>"
+        yield "</tr></thead><tbody>"
+
+        processed = 0
+        hostile_so_far = 0
+
+        # 2) Paginate and stream only hostile rows
+        for offset in range(0, total, batch_size):
+            batch = qs[offset: offset + batch_size]
+            rows = sorted(
+                get_user_mails(batch).values(),
+                key=lambda r: r["sent_date"], reverse=True
+            )
+
+            for row in rows:
+                if is_mail_row_hostile(row):
+                    hostile_so_far += 1
+                    yield _render_mail_row_html(row)
+
+            processed += len(rows)
+            # 3) Close table, emit progress banner, then reopen for next batch
+            yield "</tbody></table>"
+            yield (
+                f'<div class="progress-info">'
+                f"Processed {processed}/{total} mails… "
+                f"Hostile so far: {hostile_so_far}"
+                "</div>"
+            )
+            # reopen table body
+            yield '<table class="table table-striped"><tbody>'
+
+        # 4) Final close
+        yield "</tbody></table>"
+
+    return StreamingHttpResponse(generator(), content_type="text/html")
 
 
 
@@ -357,8 +480,8 @@ def get_card_data(request, target_user_id: int, key: str):
         status  = not (content and "red" in content)
 
     elif key == "sus_mail":
-        content = sus_mail(target_user_id)
-        status  = not content
+        content = render_mails(target_user_id)
+        status  = not (content and "red" in content)
 
     elif key == "sus_tra":
         content = sus_tra(target_user_id)

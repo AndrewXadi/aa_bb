@@ -242,3 +242,113 @@ class id_types(models.Model):
 
     def __str__(self):
         return f"{self.id}: {self.name}"
+    
+
+class ProcessedMail(models.Model):
+    """
+    Tracks which MailMessage IDs we've already generated notes for.
+    """
+    mail_id = models.BigIntegerField(
+        primary_key=True,
+        help_text="The MailMessage.id_key that we've processed"
+    )
+    processed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When we first processed this mail"
+    )
+
+    class Meta:
+        db_table = "aa_bb_processed_mails"
+        verbose_name = "Processed Mail"
+        verbose_name_plural = "Processed Mails"
+
+    def __str__(self):
+        return f"ProcessedMail {self.mail_id} @ {self.processed_at}"
+
+
+class SusMailNote(models.Model):
+    """
+    Stores the summary line (flags) generated for each hostile mail.
+    """
+    mail = models.OneToOneField(
+        ProcessedMail,
+        on_delete=models.CASCADE,
+        help_text="The mail this note refers to"
+    )
+    user_id = models.BigIntegerField(
+        help_text="The AllianceAuth user ID who owns these characters"
+    )
+    note = models.TextField(
+        help_text="The summary string of flags for this mail"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this note was created"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="When this note was last updated"
+    )
+
+    class Meta:
+        db_table = "aa_bb_sus_mail_notes"
+        verbose_name = "Suspicious Mail Note"
+        verbose_name_plural = "Suspicious Mail Notes"
+
+    def __str__(self):
+        return f"Mail {self.mail.mail_id} note for user {self.user_id}"
+
+
+class ProcessedContract(models.Model):
+    """
+    Tracks which Contract IDs we've already generated notes for.
+    """
+    contract_id = models.BigIntegerField(
+        primary_key=True,
+        help_text="The Contract.contract_id that we've processed"
+    )
+    processed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When we first processed this contract"
+    )
+
+    class Meta:
+        db_table = "aa_bb_processed_contracts"
+        verbose_name = "Processed Contract"
+        verbose_name_plural = "Processed Contracts"
+
+    def __str__(self):
+        return f"ProcessedContract {self.contract_id} @ {self.processed_at}"
+
+
+class SusContractNote(models.Model):
+    """
+    Stores the summary line (flags) generated for each hostile contract.
+    """
+    contract = models.OneToOneField(
+        ProcessedContract,
+        on_delete=models.CASCADE,
+        help_text="The contract this note refers to"
+    )
+    user_id = models.BigIntegerField(
+        help_text="The AllianceAuth user ID who owns these characters"
+    )
+    note = models.TextField(
+        help_text="The summary string of flags for this contract"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this note was created"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="When this note was last updated"
+    )
+
+    class Meta:
+        db_table = "aa_bb_sus_contract_notes"
+        verbose_name = "Suspicious Contract Note"
+        verbose_name_plural = "Suspicious Contract Notes"
+
+    def __str__(self):
+        return f"Contract {self.contract.contract_id} note for user {self.user_id}"

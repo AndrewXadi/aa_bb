@@ -1,7 +1,7 @@
 import html
 import logging
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
 
 from ..app_settings import (
@@ -19,7 +19,7 @@ from ..app_settings import (
 )
 from .corp_blacklist import check_char_corp_bl
 from corptools.models import Contract
-from ..models import BigBrotherConfig
+from ..models import BigBrotherConfig, ProcessedContract, SusContractNote
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -150,7 +150,7 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
     logger.info(f"Number of contracts returned: {len(result)}")
     return result
 
-def get_cell_style_for_row(column: str, row: dict) -> str:
+def get_cell_style_for_contract_row(column: str, row: dict) -> str:
     if column == 'issuer_name':
         cid = row.get("issuer_id")
         if check_char_corp_bl(cid):
@@ -195,7 +195,7 @@ def get_cell_style_for_row(column: str, row: dict) -> str:
 
     return ''
 
-def is_row_hostile(row: dict) -> bool:
+def is_contract_row_hostile(row: dict) -> bool:
     """Returns True if the row matches hostile corp/char/alliance criteria."""
     if check_char_corp_bl(row.get("issuer_id")):
         return True
@@ -237,7 +237,7 @@ def render_contracts(user_id: int) -> str:
 
     # Filter to only hostile rows
     # Ensure is_row_hostile is defined/imported
-    hostile_rows = [row for row in all_rows if is_row_hostile(row)]
+    hostile_rows = [row for row in all_rows if is_contract_row_hostile(row)]
 
     total = len(hostile_rows)
     logger.info(f"found {total} hostile contracts")
@@ -273,7 +273,7 @@ def render_contracts(user_id: int) -> str:
         for col in headers:
             raw = row.get(col)
             text = html.escape(str(raw))
-            style = get_cell_style_for_row(col, row)
+            style = get_cell_style_for_contract_row(col, row)
             if style:
                 html_parts.append(f'      <td style="{style}">{text}</td>')
             else:
@@ -299,24 +299,55 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
     cfg = BigBrotherConfig.get_solo()
     hostile_corps = cfg.hostile_corporations
     hostile_allis = cfg.hostile_alliances
+
+    # 1) Gather all raw contracts
+    all_qs = gather_user_contracts(user_id)
+    all_ids = list(all_qs.values_list('contract_id', flat=True))
+
+    # 2) Which are already processed?
+    seen_ids = set(ProcessedContract.objects.filter(contract_id__in=all_ids)
+                                      .values_list('contract_id', flat=True))
+
     notes: Dict[int, str] = {}
-    for issuer_id, c in get_user_contracts(gather_user_contracts(user_id)).items():
-        flags = []
-        # issuer
-        if c['issuer_name'] != '-' and check_char_corp_bl(issuer_id):
-            flags.append(f"Issuer **{c['issuer_name']}** is on blacklist")
-        if str(c['issuer_corporation_id']) in hostile_corps:
-            flags.append(f"Issuer corp **{c['issuer_corporation']}** is hostile")
-        if str(c['issuer_alliance_id']) in hostile_allis:
-            flags.append(f"Issuer alli **{c['issuer_alliance']}** is hostile")
-        # assignee
-        if c['assignee_name'] != '-' and check_char_corp_bl(c['assignee_id']):
-            flags.append(f"Assignee **{c['assignee_name']}** is on blacklist")
-        if str(c['assignee_corporation_id']) in hostile_corps:
-            flags.append(f"Assignee corp **{c['assignee_corporation']}** is hostile")
-        if str(c['assignee_alliance_id']) in hostile_allis:
-            flags.append(f"Assignee alli **{c['assignee_alliance']}** is hostile")
-        if flags:
-            notes[issuer_id] = f"- Contract {c['contract_id']} ({c['contract_type']}) issued {c['issued_date']}, ended {c['end_date']}; flags: {'; '.join(flags)}"
-    logger.info(f"Number of contracts: {len(notes)}")
+    new_ids = [cid for cid in all_ids if cid not in seen_ids]
+
+    if new_ids:
+        # 3) Hydrate only new contracts
+        new_qs = all_qs.filter(contract_id__in=new_ids)
+        new_rows = get_user_contracts(new_qs)
+
+        for cid, c in new_rows.items():
+            pc = ProcessedContract.objects.create(contract_id=cid)
+
+            if not is_contract_row_hostile(c):
+                continue
+
+            flags: List[str] = []
+            # issuer
+            if c['issuer_name'] != '-' and check_char_corp_bl(c['issuer_id']):
+                flags.append(f"Issuer **{c['issuer_name']}** is on blacklist")
+            if str(c['issuer_corporation_id']) in hostile_corps:
+                flags.append(f"Issuer corp **{c['issuer_corporation']}** is hostile")
+            if str(c['issuer_alliance_id']) in hostile_allis:
+                flags.append(f"Issuer alliance **{c['issuer_alliance']}** is hostile")
+            # assignee
+            if c['assignee_name'] != '-' and check_char_corp_bl(c['assignee_id']):
+                flags.append(f"Assignee **{c['assignee_name']}** is on blacklist")
+            if str(c['assignee_corporation_id']) in hostile_corps:
+                flags.append(f"Assignee corp **{c['assignee_corporation']}** is hostile")
+            if str(c['assignee_alliance_id']) in hostile_allis:
+                flags.append(f"Assignee alliance **{c['assignee_alliance']}** is hostile")
+
+            note_text = (
+                f"- Contract {cid} ({c['contract_type']}) "
+                f"issued {c['issued_date']}, ended {c['end_date']}; "
+                f"flags: {'; '.join(flags)}"
+            )
+            SusContractNote.objects.create(contract=pc, user_id=user_id, note=note_text)
+            notes[cid] = note_text
+
+    # 4) Pull in old notes
+    for scn in SusContractNote.objects.filter(user_id=user_id):
+        notes[scn.contract.contract_id] = scn.note
+
     return notes

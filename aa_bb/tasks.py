@@ -13,9 +13,10 @@ from aa_bb.checks.notifications import game_time
 from aa_bb.checks.notifications import skill_injected
 from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import get_user_hostile_contracts
-from aa_bb.checks.sus_mails import sus_mail
+from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import sus_tra
 from datetime import datetime, timedelta
+import time
 
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
@@ -154,7 +155,6 @@ def BB_run_regular_updates():
                 lawn_blacklist_result = lawn_bl(user_id)
                 game_time_notifications_result = game_time(user_id)
                 skill_injected_result = skill_injected(user_id)
-                sus_mails_result = sus_mail(user_id)
                 sus_trans_result = sus_tra(user_id)
 
                 awox_links = get_awox_kill_links(user_id)
@@ -162,13 +162,13 @@ def BB_run_regular_updates():
                 hostile_assets_result = get_hostile_asset_locations(user_id)
                 sus_contacts_result = { str(cid): v for cid, v in get_user_hostile_notifications(user_id).items() }
                 sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_contracts(user_id).items() }
+                sus_mails_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_mails(user_id).items() }
 
                 has_cyno = cyno_result != None
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
                 has_game_time_notifications = game_time_notifications_result != None
                 has_skill_injected = skill_injected_result != None
-                has_sus_mails = sus_mails_result != None
                 has_sus_trans = sus_trans_result != None
                 
                 has_awox = bool(awox_links)
@@ -176,6 +176,7 @@ def BB_run_regular_updates():
                 has_hostile_assets = bool(hostile_assets_result)
                 has_sus_contacts = bool(sus_contacts_result)
                 has_sus_contracts = bool(sus_contracts_result)
+                has_sus_mails = bool(sus_mails_result)
 
                 # Load or create existing record
                 status, created = UserStatus.objects.get_or_create(user_id=user_id)
@@ -188,7 +189,8 @@ def BB_run_regular_updates():
                 #status.hostile_clones = []
                 #status.hostile_assets = []
                 #status.sus_contacts = {}
-                #status.sus_contracts = {}
+                status.sus_contracts = {}
+                status.sus_mails = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
 
@@ -350,9 +352,41 @@ def BB_run_regular_updates():
                     status.has_sus_contracts = has_sus_contracts
                     status.sus_contracts = sus_contracts_result
 
-                if status.has_sus_mails != has_sus_mails:
-                    changes.append(f"Hostile mails: {'🚩' if has_sus_mails else '❌'}")
+                if status.has_sus_mails != has_sus_mails or set(sus_mails_result) != set(as_dict(status.sus_mails) or {}):
+                    old_mails = as_dict(status.sus_mails) or {}
+                    #normalized_old = { str(cid): v for cid, v in status.sus_contacts.items() }
+                    #normalized_new = { str(cid): v for cid, v in sus_contacts_result.items() }
+
+                    old_ids   = set(as_dict(status.sus_mails).keys())
+                    new_ids   = set(sus_mails_result.keys())
+                    new_links = new_ids - old_ids
+                    if new_links:
+                        link_list = "\n".join(
+                            f"🔗 {sus_mails_result[issuer_id]}" for issuer_id in new_links
+                        )
+                        logger.info(f"{char_name} new assets:\n{link_list}")
+
+                    if old_ids:
+                        old_link_list = "\n".join(
+                            f"🔗 {old_mails[issuer_id]}" for issuer_id in old_ids if issuer_id in old_mails
+                        )
+                        logger.info(f"{char_name} old assets:\n{old_link_list}")
+
+                    if status.has_sus_mails != has_sus_mails:
+                        changes.append(f"## Sus Mails: {'🚩' if has_sus_mails else '❌'}")
+                    logger.info(f"{char_name} status changed")
+
+                    if new_links:
+                        changes.append(f"## New Sus Mails:")
+                        for issuer_id in new_links:
+                            res = sus_mails_result[issuer_id]
+                            ping = f"<@&{pingroleID}>"
+                            if res.startswith("- A -"):
+                                ping = ""
+                            changes.append(f"{res} {ping}")
+
                     status.has_sus_mails = has_sus_mails
+                    status.sus_mails = sus_mails_result
 
                 if changes:
                     for i in range(0, len(changes)):
@@ -363,6 +397,7 @@ def BB_run_regular_updates():
                             msg = chunk
                         logger.info(f"Measage: {msg}")
                         send_message(msg)
+                        time.sleep(0.03)
 
                 status.save()
 

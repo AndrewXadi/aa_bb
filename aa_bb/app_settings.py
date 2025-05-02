@@ -15,6 +15,7 @@ from .models import Alliance_names, Corporation_names, Character_names, BigBroth
 from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
+from collections import deque
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
@@ -545,64 +546,105 @@ def validate_token_with_server(token, client_version=None, self_des=None, self_d
         return e
 
 
-
+_webhook_history = deque()  # stores timestamp floats of last webhook sends
+_channel_history = deque()  # stores timestamp floats of last channel sends
 
 def send_message(message: str):
+    """
+    Sends `message` via Discord webhook, splitting long messages,
+    honoring Retry-After on 429, AND proactively rate-limiting:
+      - ≤5 req per 2s
+      - ≤30 msgs per 60s
+    """
     webhook_url = BigBrotherConfig.get_solo().webhook
-    MAX_LEN = 2000
-    SPLIT_LEN = 1900
-    DELAY_SEC = 0.003
+    MAX_LEN     = 2000
+    SPLIT_LEN   = 1900
 
-    def _post(content: str):
+    def _throttle():
+        now = time.monotonic()
+
+        # -- webhook limit: max 5 per 2s --
+        while len(_webhook_history) >= 5:
+            earliest = _webhook_history[0]
+            elapsed = now - earliest
+            if elapsed >= 2.0:
+                _webhook_history.popleft()
+            else:
+                time_to_wait = 2.0 - elapsed
+                time.sleep(time_to_wait)
+                now = time.monotonic()
+
+        # -- channel limit: max 30 per 60s --
+        while len(_channel_history) >= 30:
+            earliest = _channel_history[0]
+            elapsed = now - earliest
+            if elapsed >= 60.0:
+                _channel_history.popleft()
+            else:
+                time_to_wait = 60.0 - elapsed
+                time.sleep(time_to_wait)
+                now = time.monotonic()
+
+        # record this send
+        _webhook_history.append(now)
+        _channel_history.append(now)
+
+    def _post_with_retries(content: str):
         payload = {"content": content}
-        try:
-            response = requests.post(webhook_url, json=payload)
-            response.raise_for_status()
-        except Exception as e:
-            err_msg = f"❌ Failed to send message due to {e!r}\nOriginal content:\n{content}"
-            print(err_msg)
-            # try sending the error notification itself, but don’t recurse infinitely
+        while True:
+            _throttle()  # ensure we stay under our proactive limits
             try:
-                requests.post(webhook_url, json={"content": err_msg})
-            except Exception as inner:
-                print(f"Also failed to send error notification: {inner!r}")
-        finally:
-            time.sleep(DELAY_SEC)
+                response = requests.post(webhook_url, json=payload)
+                response.raise_for_status()
+                return  # success
+            except HTTPError:
+                if response.status_code == 429:
+                    # obey Discord's Retry-After header
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        backoff = float(retry_after)
+                    except (TypeError, ValueError):
+                        backoff = 1.0
+                    time.sleep(backoff)
+                    continue  # retry
+                else:
+                    # other HTTP errors: log once and give up
+                    logger.error(f"HTTP error sending: {response.status_code} {response.text}")
+                    return
+            except Exception as e:
+                # network hiccup: wait briefly and retry
+                logger.error(f"Error sending message: {e!r}, retrying in 2s")
+                time.sleep(2.0)
+                continue
 
-    # Quick path for short messages
+    # if short enough, send directly
     if len(message) <= MAX_LEN:
-        _post(message)
+        _post_with_retries(message)
         return
 
-    # Break on newlines first
-    raw_parts = message.split("\n")
-    parts: list[str] = []
-
-    for part in raw_parts:
-        if len(part) <= MAX_LEN:
-            parts.append(part)
+    # else split on newlines and chunk
+    raw_lines = message.split("\n")
+    parts = []
+    for line in raw_lines:
+        if len(line) <= MAX_LEN:
+            parts.append(line)
         else:
-            # no newlines in this part, split into 1900-char chunks
-            for i in range(0, len(part), SPLIT_LEN):
-                chunk = part[i : i + SPLIT_LEN]
-                if i > 0:
-                    chunk = "# Message split due to characters limit\n" + chunk
-                parts.append(chunk)
+            for i in range(0, len(line), SPLIT_LEN):
+                chunk = line[i : i + SPLIT_LEN]
+                prefix = "# split due to length\n" if i > 0 else ""
+                parts.append(prefix + chunk)
 
     buffer = ""
     for part in parts:
-        # build candidate with newline if buffer already has content
         candidate = buffer + ("\n" if buffer else "") + part
         if len(candidate) > MAX_LEN:
-            # buffer is full—send it, start new buffer
-            _post(buffer)
+            _post_with_retries(buffer)
             buffer = part
         else:
             buffer = candidate
 
-    # send any leftover
     if buffer:
-        _post(buffer)
+        _post_with_retries(buffer)
 
 
 

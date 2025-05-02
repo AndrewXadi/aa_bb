@@ -46,7 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const generalMessage   = document.getElementById('messageBox');
   const contractMessage  = document.getElementById('contractMessage');  // second box
   const errorMessages    = document.getElementById('errorMessages');
-
+  const MAIL_KEYWORDS = {{ MAIL_KEYWORDS|default:"[]" }};
+  const MAIL_VISIBLE = [
+    "sent_date", "subject",
+    "sender_name", "sender_corporation", "sender_alliance",
+    "recipient_names", "recipient_corps", "recipient_alliances",
+    "content", "status"
+  ];
   const TOTAL_CARDS      = CARD_DEFINITIONS.length;
   const SUS_CONTR_KEY    = 'sus_contr';
   let loadedNonSus       = 0;
@@ -124,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const { checked: cnt, hostile_found } = await batchRes.json();
       hostile.push(...hostile_found);
       checked += cnt;
-      showContract(`Checked ${checked}/${total}; hostile so far: ${hostile.length}`, 'info');
+      showContract(`Checked ${checked}/${total} contracts, hostile so far: ${hostile.length}`, 'info');
     }
 
     hideContract();
@@ -157,6 +163,75 @@ document.addEventListener('DOMContentLoaded', () => {
     return { content: table, status: hostile.length === 0 };
   }
 
+    // New: load & render hostile mails via streaming endpoint
+async function loadSuspiciousMails(option) {
+  showContract('Loading mails…', 'info');
+
+  // build the fetch URL
+  const streamUrl = `{% url 'BigBrother:stream_mails' %}?option=${encodeURIComponent(option)}`;
+
+  let hostileCount = 0, processed = 0, total = 0;
+  const cardBody = container.querySelector('.card-body');
+
+  // render empty table skeleton
+  cardBody.innerHTML = `
+    <table class="table table-striped">
+      <thead>
+        <tr>${MAIL_VISIBLE.map(h => `<th>${h.replace(/_/g,' ')}</th>`).join('')}</tr>
+      </thead>
+      <tbody></tbody>
+    </table>`;
+
+  const reader  = (await fetch(streamUrl)).body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  // regex to pull just this chunk’s progress info
+  const progressRe = /Processed\s+(\d+)\/(\d+)/;
+  let seenProgress = false;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value, { stream: true });
+    buf += chunk;
+
+    // 1) extract progress only from this chunk
+    const m = progressRe.exec(chunk);
+    if (m) {
+      processed = +m[1];
+      total     = +m[2];
+      seenProgress = true;
+    }
+
+    // 2) find and consume any <tr> rows
+    const rows = buf.match(/<tr>[\s\S]*?<\/tr>/g) || [];
+    rows.forEach(htmlRow => {
+      buf = buf.replace(htmlRow, '');  // remove this row from buffer
+      // only insert rows that contain a red style
+      if (/style="color:\s*red/.test(htmlRow)) {
+        hostileCount++;
+        cardBody.querySelector('tbody')
+                .insertAdjacentHTML('beforeend', htmlRow);
+      }
+    });
+
+    // 3) update banner once we’ve seen a progress update
+    if (seenProgress) {
+      showContract(
+        `Processed ${processed}/${total} mails… Hostile so far: ${hostileCount}`,
+        'info'
+      );
+    }
+  }
+
+  hideContract();
+  return { content: cardBody.innerHTML, status: hostileCount === 0 };
+}
+
+
+
   async function loadAll(option) {
     container.innerHTML   = '';
     errorMessages.innerHTML = '';
@@ -171,13 +246,17 @@ document.addEventListener('DOMContentLoaded', () => {
         let content, status;
         if (key === SUS_CONTR_KEY) {
           ({ content, status } = await loadSuspicious(option));
-        } else {
+        }
+        else if (key === 'sus_mail') {
+          ({ content, status } = await loadSuspiciousMails(option));
+        }
+        else {
           const card = await fetchCard(option, i);
           content = card.content;
           status  = card.status;
           loadedNonSus++;
           showGeneral(
-            `${loadedNonSus}/${TOTAL_CARDS-1} loaded… This may take a while, do not refresh`,
+            `${loadedNonSus}/${TOTAL_CARDS-2} loaded… This may take a while, do not refresh`,
             'info'
           );
         }
