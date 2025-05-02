@@ -318,8 +318,10 @@ def get_user_hostile_mails(user_id: int) -> Dict[int, str]:
         new_rows = get_user_mails(new_qs)
 
         for mid, m in new_rows.items():
-            # mark processed
-            pm = ProcessedMail.objects.create(mail_id=mid)
+            # mark processed, skip if already exists
+            pm, created = ProcessedMail.objects.get_or_create(mail_id=mid)
+            if not created:
+                continue
 
             # only create a note if it's hostile
             if not is_mail_row_hostile(m):
@@ -349,7 +351,10 @@ def get_user_hostile_mails(user_id: int) -> Dict[int, str]:
                 f"- Mail {mid} ('{m['subject']}') sent {m['sent_date']}; "
                 f"flags: {'; '.join(flags)}"
             )
-            SusMailNote.objects.create(mail=pm, user_id=user_id, note=note_text)
+            SusMailNote.objects.update_or_create(
+                mail=pm,
+                defaults={"user_id": user_id, "note": note_text}
+            )
             notes[mid] = note_text
 
     # 5) Fetch *all* notes for this user (new + old)

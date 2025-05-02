@@ -317,7 +317,11 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
         new_rows = get_user_contracts(new_qs)
 
         for cid, c in new_rows.items():
-            pc = ProcessedContract.objects.create(contract_id=cid)
+            # only create ProcessedContract if it doesn't already exist
+            pc, created = ProcessedContract.objects.get_or_create(contract_id=cid)
+            # if we've processed it before, skip the rest
+            if not created:
+                continue
 
             if not is_contract_row_hostile(c):
                 continue
@@ -343,7 +347,10 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
                 f"issued {c['issued_date']}, ended {c['end_date']}; "
                 f"flags: {'; '.join(flags)}"
             )
-            SusContractNote.objects.create(contract=pc, user_id=user_id, note=note_text)
+            SusContractNote.objects.update_or_create(
+                contract=pc,
+                defaults={'user_id': user_id, 'note': note_text}
+            )
             notes[cid] = note_text
 
     # 4) Pull in old notes
