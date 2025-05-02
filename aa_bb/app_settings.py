@@ -16,6 +16,7 @@ from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 
 logger = logging.getLogger(__name__)
@@ -265,24 +266,35 @@ def ensure_datetime(value):
         return parse_datetime(value)
     return value
 
+def _fetch_alliance_history(corp_id):
+    # this may still block forever, but it’s confined to the worker thread
+    return esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
+        corporation_id=corp_id
+    ).results()
+
 def get_alliance_history_for_corp(corp_id):
     if corp_id in def_cache:
         return def_cache[corp_id]
-    try:
-        response = esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
-            corporation_id=corp_id
-        ).results(timeout=10)
-        history = [{"alliance_id": h.get("alliance_id"), "start_date": ensure_datetime(h.get("start_date"))} for h in response]
-        history.sort(key=lambda x: x["start_date"])
-    except (SystemExit, KeyboardInterrupt):
-        raise  # Let these ones still bubble up and crash normally
-    except requests.exceptions.Timeout as e:
-        logger.info(f"Timeout when fetching alliance history for corp {corp_id}: {e}")
-        history = []
-    except Exception as e:
-        # log the exception here, don't just hide it
-        logger.info(f"Failed to fetch alliance history for corp {corp_id}: {e}")
-        history = []
+
+    history = []
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_fetch_alliance_history, corp_id)
+        try:
+            response = future.result(timeout=5)   # give it 5s max
+            history = [
+                {
+                    "alliance_id": h.get("alliance_id"),
+                    "start_date": ensure_datetime(h.get("start_date")),
+                }
+                for h in response
+            ]
+            history.sort(key=lambda x: x["start_date"])
+        except FuturesTimeout:
+            logger.info(f"Timeout fetching alliance history for corp {corp_id}")
+            # thread is still running in the background, but we’ll ignore it
+        except Exception as e:
+            logger.info(f"Error fetching alliance history for corp {corp_id}: {e}")
+
     def_cache[corp_id] = history
     return history
 
