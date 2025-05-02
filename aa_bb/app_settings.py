@@ -276,10 +276,15 @@ def ensure_datetime(value):
     return value
 
 def _fetch_alliance_history(corp_id):
-    # this may still block forever, but it’s confined to the worker thread
-    return esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
-        corporation_id=corp_id
-    ).results()
+    try:
+        return esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
+            corporation_id=corp_id
+        ).results()
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        logger.warning(f"Failed to fetch alliance history for corp {corp_id}: {e}")
+        return []
 
 def get_alliance_history_for_corp(corp_id):
     logger.info(f"got corp:{corp_id}")
