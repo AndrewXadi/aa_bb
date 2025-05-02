@@ -291,7 +291,7 @@ def get_alliance_history_for_corp(corp_id):
             history.sort(key=lambda x: x["start_date"])
         except FuturesTimeout:
             logger.info(f"Timeout fetching alliance history for corp {corp_id}")
-            # thread is still running in the background, but we’ll ignore it
+            return []
         except Exception as e:
             logger.info(f"Error fetching alliance history for corp {corp_id}: {e}")
 

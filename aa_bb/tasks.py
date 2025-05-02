@@ -380,7 +380,8 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Mails:")
                         for issuer_id in new_links:
                             res = sus_mails_result[issuer_id]
-                            ping = f"<@&{pingroleID}>"
+                            #ping = f"<@&{pingroleID}>"
+                            ping = ""
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
