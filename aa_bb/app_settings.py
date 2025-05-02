@@ -195,7 +195,11 @@ def get_character_employment(character_or_id) -> list[dict]:
         # Enrich with corp and alliance info
         logger.info(f"corp_id:{corp_id}")
         corp_info     = get_corporation_info(corp_id)
-        alliance_hist = get_alliance_history_for_corp(corp_id)
+        # if this corp has no members (i.e. is closed), skip the slow alliance‐history call
+        if corp_info.get("member_count", 0) == 0:
+            alliance_hist = []
+        else:
+            alliance_hist = get_alliance_history_for_corp(corp_id)
 
         rows.append({
             'corporation_id':   corp_id,
@@ -244,7 +248,11 @@ def get_corporation_info(corp_id):
         result = esi.client.Corporation.get_corporations_corporation_id(
             corporation_id=corp_id
         ).results()
-        info = {"name": result.get("name", f"Unknown ({corp_id})")}
+        # carry through name & member_count
+        info = {
+            "name":         result.get("name", f"Unknown ({corp_id})"),
+            "member_count": result.get("member_count", 0),
+        }
     except (SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:
