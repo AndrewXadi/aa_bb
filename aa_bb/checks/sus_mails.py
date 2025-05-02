@@ -263,7 +263,12 @@ def render_mails(user_id: int) -> str:
                         if aid and str(aid) in BigBrotherConfig.get_solo().hostile_alliances:
                             style = 'color:red;'
 
-                    parts.append(f'<span{" style='"+style+"'" if style else ""}>{html.escape(str(item))}</span>')
+                    if style:
+                        prefix = f"<span style='{style}'>"
+                    else:
+                        prefix = "<span>"
+
+                    parts.append(f"{prefix}{html.escape(str(item))}</span>")
                 cell = '<td>' + ', '.join(parts) + '</td>'
             else:
                 # single-value columns
