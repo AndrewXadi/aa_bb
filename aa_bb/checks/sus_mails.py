@@ -281,7 +281,11 @@ def render_mails(user_id: int) -> str:
                     elif col == 'sender_alliance' and str(row['sender_alliance_id']) in BigBrotherConfig.get_solo().hostile_alliances:
                         style = 'color:red;'
                 # subject/content keyword highlighting can be done client-side
-                cell = f'<td{" style=\'"+style+"\'" if style else ""}>{html.escape(str(val))}</td>'
+                if style:
+                    style_attr = f" style='{style}'"
+                else:
+                    style_attr = ""
+                cell = f"<td{style_attr}>{html.escape(str(val))}</td>"
 
             html_parts.append(cell)
         html_parts.append('</tr>')
