@@ -17,6 +17,7 @@ import time
 from bravado.exception import HTTPError
 from collections import deque
 
+
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
 
@@ -270,14 +271,17 @@ def get_alliance_history_for_corp(corp_id):
     try:
         response = esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
             corporation_id=corp_id
-        ).results()
+        ).results(timeout=10)
         history = [{"alliance_id": h.get("alliance_id"), "start_date": ensure_datetime(h.get("start_date"))} for h in response]
         history.sort(key=lambda x: x["start_date"])
     except (SystemExit, KeyboardInterrupt):
         raise  # Let these ones still bubble up and crash normally
+    except requests.exceptions.Timeout as e:
+        logger.info(f"Timeout when fetching alliance history for corp {corp_id}: {e}")
+        history = []
     except Exception as e:
         # log the exception here, don't just hide it
-        print(f"Failed to fetch alliance history for corp {corp_id}: {e}")
+        logger.info(f"Failed to fetch alliance history for corp {corp_id}: {e}")
         history = []
     def_cache[corp_id] = history
     return history
