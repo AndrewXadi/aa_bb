@@ -50,8 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAIL_VISIBLE = [
     "sent_date", "subject",
     "sender_name", "sender_corporation", "sender_alliance",
-    "recipient_names", "recipient_corps", "recipient_alliances",
-    "content", "status"
+    "recipient_names", "recipient_corps", "recipient_alliances", "status"
   ];
   const TOTAL_CARDS      = CARD_DEFINITIONS.length;
   const SUS_CONTR_KEY    = 'sus_contr';
@@ -220,7 +219,7 @@ async function loadSuspiciousMails(option) {
     // 3) update banner once we’ve seen a progress update
     if (seenProgress) {
       showContract(
-        `Processed ${processed}/${total} mails… Hostile so far: ${hostileCount}`,
+        `Checked ${processed}/${total} mails, hostile so far: ${hostileCount}`,
         'info'
       );
     }

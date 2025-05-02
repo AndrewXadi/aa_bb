@@ -226,8 +226,7 @@ def render_mails(user_id: int) -> str:
     VISIBLE = [
         'sent_date', 'subject',
         'sender_name', 'sender_corporation', 'sender_alliance',
-        'recipient_names', 'recipient_corps', 'recipient_alliances',
-        'content', 'status',
+        'recipient_names', 'recipient_corps', 'recipient_alliances', 'status',
     ]
 
     # Build HTML table
