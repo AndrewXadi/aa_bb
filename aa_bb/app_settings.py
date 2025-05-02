@@ -282,6 +282,7 @@ def _fetch_alliance_history(corp_id):
     ).results()
 
 def get_alliance_history_for_corp(corp_id):
+    logger.info(f"got corp:{corp_id}")
     if corp_id in def_cache:
         return def_cache[corp_id]
 
