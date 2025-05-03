@@ -263,7 +263,7 @@ def stream_contracts(request: WSGIRequest):
             '<p>No contracts found.</p>', content_type='text/html'
         )
 
-    batch_size = 10
+    batch_size = 1
 
     def generator():
         # We'll derive headers on first batch
@@ -387,6 +387,7 @@ def stream_mails(request):
     if user_id is None:
         return HttpResponseBadRequest("Unknown account")
 
+    # Gather only – cheap database filter
     qs = gather_user_mails(user_id)
     total = qs.count()
     if total == 0:
@@ -394,47 +395,44 @@ def stream_mails(request):
             "<p>No mails found.</p>", content_type="text/html"
         )
 
-    batch_size = 1
-
     def generator():
-        # 1) Emit table and header once
+        # Emit table header
         yield '<table class="table table-striped"><thead><tr>'
         for col in VISIBLE:
-            yield f"<th>{html.escape(col.replace('_',' ').title())}</th>"
-        yield "</tr></thead><tbody>"
+            yield f'<th>{html.escape(col.replace("_"," ").title())}</th>'
+        yield '</tr></thead><tbody>'
 
         processed = 0
         hostile_so_far = 0
 
-        # 2) Paginate and stream only hostile rows
-        for offset in range(0, total, batch_size):
-            batch = qs[offset: offset + batch_size]
-            rows = sorted(
-                get_user_mails(batch).values(),
-                key=lambda r: r["sent_date"], reverse=True
-            )
+        # Stream one mail at a time
+        for m in qs:
+            # Heartbeat to keep the worker alive before heavy work
+            yield f'<!-- checking mail {m.id_key} -->'
 
-            for row in rows:
-                if is_mail_row_hostile(row):
-                    hostile_so_far += 1
-                    yield _render_mail_row_html(row)
+            # Fetch and process only this one mail
+            mail_map = get_user_mails([m])  # pass single-item iterable
+            row = mail_map.get(m.id_key)
+            processed += 1
 
-            processed += len(rows)
-            # 3) Close table, emit progress banner, then reopen for next batch
-            yield "</tbody></table>"
+            if row and is_mail_row_hostile(row):
+                hostile_so_far += 1
+                yield _render_mail_row_html(row)
+
+            # Progress update row
             yield (
-                f'<div class="progress-info">'
-                f"Processed {processed}/{total} mails… "
-                f"Hostile so far: {hostile_so_far}"
-                "</div>"
+                f'<tr><td colspan="{len(VISIBLE)}" '
+                f'style="font-style: italic; text-align:center;">'
+                f'Processed {processed}/{total} mails… '
+                f'Hostile so far: {hostile_so_far}'
+                '</td></tr>'
             )
-            # reopen table body
-            yield '<table class="table table-striped"><tbody>'
 
-        # 4) Final close
-        yield "</tbody></table>"
+        # Close table
+        yield '</tbody></table>'
 
     return StreamingHttpResponse(generator(), content_type="text/html")
+
 
 
 
