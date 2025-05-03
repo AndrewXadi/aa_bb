@@ -193,7 +193,6 @@ def get_character_employment(character_or_id) -> list[dict]:
             end = ensure_datetime(history[idx + 1].get('start_date'))
 
         # Enrich with corp and alliance info
-        logger.info(f"corp_id:{corp_id}")
         corp_info     = get_corporation_info(corp_id)
         alliance_hist = get_alliance_history_for_corp(corp_id)
 
@@ -283,7 +282,6 @@ def _fetch_alliance_history(corp_id):
         return []
 
 def get_alliance_history_for_corp(corp_id):
-    logger.info(f"got corp:{corp_id}")
     if corp_id in def_cache:
         return def_cache[corp_id]
 

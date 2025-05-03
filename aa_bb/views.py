@@ -381,58 +381,48 @@ def _render_mail_row_html(row: dict) -> str:
 
 @login_required
 @permission_required("aa_bb.basic_access")
-def stream_mails(request):
+def stream_mails_sse(request):
     option = request.GET.get("option", "")
     user_id = get_user_id(option)
-    if user_id is None:
+    if not user_id:
         return HttpResponseBadRequest("Unknown account")
 
     qs = gather_user_mails(user_id)
     total = qs.count()
     if total == 0:
-        return StreamingHttpResponse(
-            "<p>No mails found.</p>", content_type="text/html"
-        )
+        # Simple HTML fallback
+        return StreamingHttpResponse("<p>No mails found.</p>", content_type="text/html")
 
     def generator():
-        # 1) Emit table skeleton header
-        yield '<table class="table table-striped"><thead><tr>'
-        for col in VISIBLE:
-            yield f'<th>{html.escape(col.replace("_", " ").title())}</th>'
-        yield '</tr></thead><tbody>'
-
-        processed = 0
-        hostile_so_far = 0
+        # SSE headers require initial comment or data
+        yield ": ok\n\n"                # heartbeat to open the stream
+        processed = hostile_count = 0
 
         for m in qs:
-            # 2) Heartbeat BEFORE heavy I/O
-            yield '<!-- heartbeat -->\n'
+            processed += 1
+            # heartbeat before heavy work
+            yield ": ping\n\n"
 
-            # 3) Fetch & process this single mail (heavy)
             mail_map = get_user_mails([m])
             row = mail_map.get(m.id_key)
-            processed += 1
-
-            # 4) Render row if hostile
             if row and is_mail_row_hostile(row):
-                hostile_so_far += 1
-                yield _render_mail_row_html(row)
+                hostile_count += 1
+                # wrap the rendered <tr> in an SSE event
+                tr = _render_mail_row_html(row)
+                yield f"event: mail\ndata: {json.dumps(tr)}\n\n"
 
-            # 5) CLOSE the table, emit the progress div, then REOPEN it
-            yield '</tbody></table>\n'
+            # always send a progress event
             yield (
-                '<div class="progress-info">'
-                f'Processed {processed}/{total} mails… '
-                f'Hostile so far: {hostile_so_far}'
-                '</div>\n'
+                "event: progress\n"
+                f"data: {processed},{total},{hostile_count}\n\n"
             )
-            yield '<table class="table table-striped"><tbody>\n'
 
-        # 6) Final close
-        yield '</tbody></table>'
+        yield "event: done\ndata: bye\n\n"
 
-    return StreamingHttpResponse(generator(), content_type="text/html")
-
+    resp = StreamingHttpResponse(generator(), content_type="text/event-stream")
+    resp['Cache-Control'] = 'no-cache'
+    resp['X-Accel-Buffering'] = 'no'   # hint for Nginx to disable buffering
+    return resp
 
 # Card data helper
 

@@ -76,32 +76,34 @@ document.addEventListener('DOMContentLoaded', () => {
     contractMessage.style.display = 'none';
   }
 
-  function renderCard(idx, title, content, status) {
-    const collapseId = `collapse${idx}`;
-    const icon = status
-      ? '<span class="text-success">&#128994;</span>'
-      : '<span class="text-danger">&#128681;</span>';
-    const cardDiv = document.createElement('div');
-    cardDiv.className = 'card mb-2';
-    cardDiv.innerHTML = `
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center">
-          <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
-            <span>&#9660;</span>
-          </button>
-          <span>${title}</span>
-        </div>
-        ${icon}
+function renderCard(idx, title, content, status) {
+  const collapseId = `collapse${idx}`;
+  const cardId     = `card${idx}`;           // NEW
+  const icon = status
+    ? '<span class="text-success">&#128994;</span>'
+    : '<span class="text-danger">&#128681;</span>';
+  const cardDiv = document.createElement('div');
+  cardDiv.id        = cardId;                // NEW
+  cardDiv.className = 'card mb-2';
+  cardDiv.innerHTML = `
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center">
+        <button class="btn btn-sm btn-link toggle-card mr-2" type="button" data-target="#${collapseId}">
+          <span>&#9660;</span>
+        </button>
+        <span>${title}</span>
       </div>
-      <div id="${collapseId}" class="collapse">
-        <div class="card-body">${content}</div>
-      </div>
-    `;
-    container.appendChild(cardDiv);
-    cardDiv.querySelector('.toggle-card').addEventListener('click', e => {
-      document.querySelector(e.currentTarget.dataset.target).classList.toggle('collapse');
-    });
-  }
+      ${icon}
+    </div>
+    <div id="${collapseId}" class="collapse">
+      <div class="card-body">${content}</div>
+    </div>
+  `;
+  container.appendChild(cardDiv);
+  cardDiv.querySelector('.toggle-card').addEventListener('click', e => {
+    document.querySelector(e.currentTarget.dataset.target).classList.toggle('collapse');
+  });
+}
 
   async function fetchCard(option, idx) {
     const url = `{% url 'BigBrother:load_card' %}?option=${encodeURIComponent(option)}&index=${idx}`;
@@ -111,64 +113,71 @@ document.addEventListener('DOMContentLoaded', () => {
     return data;
   }
 
-  async function loadSuspicious(option) {
-    showContract('Loading suspicious contracts… this may take a while', 'info');
+async function loadSuspicious(option) {
+  showContract('Loading suspicious contracts… this may take a while', 'info');
 
-    const listUrl  = `{% url 'BigBrother:list_contract_ids' %}?option=${encodeURIComponent(option)}`;
-    const batchUrl = `{% url 'BigBrother:check_contract_batch' %}`;
+  const listUrl  = `{% url 'BigBrother:list_contract_ids' %}?option=${encodeURIComponent(option)}`;
+  const batchUrl = `{% url 'BigBrother:check_contract_batch' %}`;
 
-    const listRes = await fetch(listUrl);
-    if (!listRes.ok) throw new Error('Failed to list contracts');
-    const { contracts } = await listRes.json();
+  const listRes = await fetch(listUrl);
+  if (!listRes.ok) throw new Error('Failed to list contracts');
+  const { contracts } = await listRes.json();
 
-    let checked = 0, hostile = [], total = contracts.length;
-    const BATCH = 10;
-    while (checked < total) {
-      const url = `${batchUrl}?option=${encodeURIComponent(option)}&start=${checked}&limit=${BATCH}`;
-      const batchRes = await fetch(url);
-      const { checked: cnt, hostile_found } = await batchRes.json();
-      hostile.push(...hostile_found);
-      checked += cnt;
-      showContract(`Checked ${checked}/${total} contracts, hostile so far: ${hostile.length}`, 'info');
-    }
-
-    hideContract();
-
-    const hidden = new Set([
-      'contract_id','assignee_id','issuer_id',
-      'assignee_alliance_id','assignee_corporation_id',
-      'issuer_alliance_id','issuer_corporation_id'
-    ]);
-     const headers = Object.keys(hostile[0] || {})
-     .filter(k => k !== 'cell_styles');
-   let table = '<table class="table table-striped"><thead><tr>';
-   headers.forEach(h => {
-     table += `<th>${h.replace(/_/g, ' ')}</th>`;
-   });
-   table += '</tr></thead><tbody>';
-   hostile.forEach(r => {
-     table += '<tr>';
-     headers.forEach(col => {
-       const style = r.cell_styles[col] || '';
-       const val   = r[col] != null ? r[col] : '';
-       table += style
-         ? `<td style="${style}">${val}</td>`
-         : `<td>${val}</td>`;
-     });
-     table += '</tr>';
-   });
-   table += '</tbody></table>';
-
-    return { content: table, status: hostile.length === 0 };
+  let checked = 0, hostile = [], total = contracts.length;
+  const BATCH = 10;
+  while (checked < total) {
+    const url = `${batchUrl}?option=${encodeURIComponent(option)}&start=${checked}&limit=${BATCH}`;
+    const batchRes = await fetch(url);
+    if (!batchRes.ok) throw new Error('Batch check failed');
+    const { checked: cnt, hostile_found } = await batchRes.json();
+    hostile.push(...hostile_found);
+    checked += cnt;
+    showContract(`Checked ${checked}/${total} contracts, hostile so far: ${hostile.length}`, 'info');
   }
+
+  hideContract();
+
+  // If none were hostile, return a clear message instead of an empty table
+  if (hostile.length === 0) {
+    const msg = '<p>No hostile contracts found.</p>';
+    return { content: msg, status: true };
+  }
+
+  // Otherwise build your table as before
+  const hidden = new Set([
+    'contract_id','assignee_id','issuer_id',
+    'assignee_alliance_id','assignee_corporation_id',
+    'issuer_alliance_id','issuer_corporation_id'
+  ]);
+  const headers = Object.keys(hostile[0])
+    .filter(k => k !== 'cell_styles');
+
+  let table = '<table class="table table-striped"><thead><tr>';
+  headers.forEach(h => {
+    table += `<th>${h.replace(/_/g, ' ')}</th>`;
+  });
+  table += '</tr></thead><tbody>';
+  hostile.forEach(r => {
+    table += '<tr>';
+    headers.forEach(col => {
+      const style = r.cell_styles[col] || '';
+      const val   = r[col] != null ? r[col] : '';
+      table += style
+        ? `<td style="${style}">${val}</td>`
+        : `<td>${val}</td>`;
+    });
+    table += '</tr>';
+  });
+  table += '</tbody></table>';
+
+  return { content: table, status: false };
+}
+
 
     // New: load & render hostile mails via streaming endpoint
 async function loadSuspiciousMails(option, idx) {
   showContract('Loading mails…', 'info');
-  const streamUrl = `{% url 'BigBrother:stream_mails' %}?option=${encodeURIComponent(option)}`;
-  let hostileCount = 0, processed = 0, total = 0;
 
-  // grab the card-body
   const cardBody = document.querySelector(`#collapse${idx} .card-body`);
   cardBody.innerHTML = `
     <table class="table table-striped">
@@ -178,91 +187,118 @@ async function loadSuspiciousMails(option, idx) {
       <tbody></tbody>
     </table>`;
 
-  const reader = (await fetch(streamUrl)).body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  const progressRe = /Processed\s+(\d+)\/(\d+)/;
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(
+      `{% url 'BigBrother:stream_mails_sse' %}?option=${encodeURIComponent(option)}`
+    );
+    const tbody = cardBody.querySelector('tbody');
+    let hostileCount = 0;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+    source.addEventListener('mail', e => {
+      // Insert the hostile row
+      tbody.insertAdjacentHTML('beforeend', JSON.parse(e.data));
 
-    buf += decoder.decode(value, { stream: true });
-
-    // 1) Immediately extract any complete <tr>…</tr> fragments
-    let match;
-    const rowRe = /(<tr>[\s\S]*?<\/tr>)/;
-    while ((match = buf.match(rowRe))) {
-      const rowHtml = match[1];
-      buf = buf.slice(match.index + rowHtml.length);
-
-      // Only insert rows that contain a hostile style marker
-      if (/style="color:\s*red/.test(rowHtml)) {
-        hostileCount++;
-        cardBody.querySelector('tbody')
-                .insertAdjacentHTML('beforeend', rowHtml);
+      hostileCount++;
+      // On first hostile mail, immediately flip the icon red
+      if (hostileCount === 1) {
+        updateCardStatus(idx, false);
       }
-    }
+    });
 
-    // 2) Check for a progress update in the same chunk
-    const progMatch = progressRe.exec(buf);
-    if (progMatch) {
-      processed = +progMatch[1];
-      total     = +progMatch[2];
+    source.addEventListener('progress', e => {
+      const [processed, total] = e.data.split(',').map(Number);
       showContract(
         `Checked ${processed}/${total} mails, hostile so far: ${hostileCount}`,
         'info'
       );
-      // clear out anything before the progress so we don't re-read it
-      buf = buf.slice(buf.indexOf(progMatch[0]) + progMatch[0].length);
-    }
-  }
+    });
 
-  hideContract();
+    source.addEventListener('done', () => {
+      source.close();
+      hideContract();
+      // If we never saw any hostile, ensure the icon is green
+      if (hostileCount === 0) {
+        updateCardStatus(idx, true);
+      }
+      resolve();
+    });
+
+    source.onerror = err => {
+      source.close();
+      showContract('Mail stream failed.', 'danger');
+      reject(err);
+    };
+  });
 }
 
 
-  async function loadAll(option) {
-    container.innerHTML   = '';
-    errorMessages.innerHTML = '';
-    loadedNonSus          = 0;
-    hideGeneral();
-    hideContract();
-    showSpinner(true);
+function updateCardStatus(idx, isClean) {
+  const cardEl    = document.getElementById(`card${idx}`);
+  const header    = cardEl.querySelector('.card-header');
+  header.querySelectorAll('span.text-success, span.text-danger')
+        .forEach(el => el.remove());
+  header.insertAdjacentHTML('beforeend',
+    isClean
+      ? '<span class="text-success">&#128994;</span>'
+      : '<span class="text-danger">&#128681;</span>'
+  );
+}
 
-    for (let i = 0; i < CARD_DEFINITIONS.length; i++) {
-      const { key, title } = CARD_DEFINITIONS[i];
-      try {
-        let content, status;
-        if (key === SUS_CONTR_KEY) {
-          ({ content, status } = await loadSuspicious(option));
-        }
-        else if (key === 'sus_mail') {
-          // 1) Render an empty card shell so #collapse{i} exists:
-          renderCard(i, title, '<div class="mail-stream-placeholder"></div>', true);
-          // 2) Now start streaming into that card in-place:
-          await loadSuspiciousMails(option, i);
-        }
-        else {
-          const card = await fetchCard(option, i);
-          content = card.content;
-          status  = card.status;
-          loadedNonSus++;
-          showGeneral(
-            `${loadedNonSus}/${TOTAL_CARDS-2} loaded… This may take a while, do not refresh`,
-            'info'
-          );
-        }
+
+
+async function loadAll(option) {
+  container.innerHTML     = '';
+  errorMessages.innerHTML = '';
+  loadedNonSus            = 0;
+  hideGeneral();
+  hideContract();
+  showSpinner(true);
+
+  for (let i = 0; i < CARD_DEFINITIONS.length; i++) {
+    const { key, title } = CARD_DEFINITIONS[i];
+
+    try {
+      if (key === SUS_CONTR_KEY) {
+        // Suspicious Contracts (bulk loader)
+        const { content, status } = await loadSuspicious(option);
         renderCard(i, title, content, status);
-      } catch (err) {
-        renderCard(i, title, `<p>Error: ${err.message}</p>`, false);
-        console.error(err);
       }
-    }
+      else if (key === 'sus_mail') {
+        // Suspicious Mails
+        renderCard(i, title,
+          `<table class="table table-striped">
+             <thead><tr>${MAIL_VISIBLE.map(h=>`<th>${h.replace(/_/g,' ')}</th>`).join('')}</tr></thead>
+             <tbody></tbody>
+           </table>`,
+          true
+        );
 
-    showSpinner(false);
-    hideGeneral();
+        // stream; allClean = true if no hostile found
+        const allClean = await loadSuspiciousMails(option, i);
+
+        // update the dot color
+        updateCardStatus(i, allClean);
+      }
+      else {
+        // everything else
+        const { content, status } = await fetchCard(option, i);
+        loadedNonSus++;
+        showGeneral(
+          `${loadedNonSus}/${TOTAL_CARDS-2} loaded… This may take a while, do not refresh`,
+          'info'
+        );
+        renderCard(i, title, content, status);
+      }
+    } catch (err) {
+      renderCard(i, title, `<p>Error: ${err.message}</p>`, false);
+      console.error(err);
+    }
   }
+
+  showSpinner(false);
+  hideGeneral();
+}
+
 
   dropdown.addEventListener('change', () => loadAll(dropdown.value));
 });
