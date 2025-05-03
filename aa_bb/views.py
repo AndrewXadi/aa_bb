@@ -394,7 +394,7 @@ def stream_mails(request):
             "<p>No mails found.</p>", content_type="text/html"
         )
 
-    batch_size = 10
+    batch_size = 1
 
     def generator():
         # 1) Emit table and header once

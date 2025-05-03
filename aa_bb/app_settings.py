@@ -241,7 +241,6 @@ def get_corporation_info(corp_id):
 
     # 2) Cache miss or expired → fetch fresh data
     try:
-        time.sleep(1)
         result = esi.client.Corporation.get_corporations_corporation_id(
             corporation_id=corp_id
         ).results()
@@ -273,7 +272,6 @@ def ensure_datetime(value):
     return value
 
 def _fetch_alliance_history(corp_id):
-    time.sleep(1)
     try:
         return esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
             corporation_id=corp_id
