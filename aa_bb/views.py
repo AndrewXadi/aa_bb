@@ -44,9 +44,10 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
-from .app_settings import get_system_owner, aablacklist_active, get_user_characters
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info
 from .models import BigBrotherConfig
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -382,47 +383,95 @@ def _render_mail_row_html(row: dict) -> str:
 @login_required
 @permission_required("aa_bb.basic_access")
 def stream_mails_sse(request):
-    option = request.GET.get("option", "")
+    """Stream hostile mails one row at a time via SSE, hydrating sender+recipients."""
+    option  = request.GET.get("option", "")
     user_id = get_user_id(option)
     if not user_id:
         return HttpResponseBadRequest("Unknown account")
 
-    qs = gather_user_mails(user_id)
+    qs    = gather_user_mails(user_id)
     total = qs.count()
     if total == 0:
-        # Simple HTML fallback
-        return StreamingHttpResponse("<p>No mails found.</p>", content_type="text/html")
+        return StreamingHttpResponse("<p>No mails found.</p>",
+                                     content_type="text/html")
 
     def generator():
-        # SSE headers require initial comment or data
-        yield ": ok\n\n"                # heartbeat to open the stream
+        # initial SSE heartbeat
+        yield ": ok\n\n"
         processed = hostile_count = 0
 
         for m in qs:
             processed += 1
-            # heartbeat before heavy work
+            # per-mail ping
             yield ": ping\n\n"
 
-            mail_map = get_user_mails([m])
-            row = mail_map.get(m.id_key)
-            if row and is_mail_row_hostile(row):
-                hostile_count += 1
-                # wrap the rendered <tr> in an SSE event
-                tr = _render_mail_row_html(row)
-                yield f"event: mail\ndata: {json.dumps(tr)}\n\n"
+            sent = getattr(m, "timestamp", datetime.utcnow())
 
-            # always send a progress event
+            # 1) hydrate sender
+            sender_id = m.from_id
+            sinfo     = get_entity_info(sender_id, sent)
+            yield ": ping\n\n"  # immediately after expensive call
+
+            # 2) hydrate each recipient
+            recipient_ids           = []
+            recipient_names         = []
+            recipient_corps         = []
+            recipient_corp_ids      = []
+            recipient_alliances     = []
+            recipient_alliance_ids  = []
+            for mr in m.recipients.all():
+                rid   = mr.recipient_id
+                rinfo = get_entity_info(rid, sent)
+                yield ": ping\n\n"  # after each recipient lookup
+
+                recipient_ids.append(rid)
+                recipient_names.append(rinfo["name"])
+                recipient_corps.append(rinfo["corp_name"])
+                recipient_corp_ids.append(rinfo["corp_id"])
+                recipient_alliances.append(rinfo["alli_name"])
+                recipient_alliance_ids.append(rinfo["alli_id"])
+
+            # build our single-mail row dict
+            row = {
+                "message_id":              m.id_key,
+                "sent_date":               sent,
+                "subject":                 m.subject or "",
+                "sender_name":             sinfo["name"],
+                "sender_id":               sender_id,
+                "sender_corporation":      sinfo["corp_name"],
+                "sender_corporation_id":   sinfo["corp_id"],
+                "sender_alliance":         sinfo["alli_name"],
+                "sender_alliance_id":      sinfo["alli_id"],
+                "recipient_names":         recipient_names,
+                "recipient_ids":           recipient_ids,
+                "recipient_corps":         recipient_corps,
+                "recipient_corp_ids":      recipient_corp_ids,
+                "recipient_alliances":     recipient_alliances,
+                "recipient_alliance_ids":  recipient_alliance_ids,
+                "status":                  "Read" if m.is_read else "Unread",
+            }
+
+            # 3) check hostility and, if hostile, stream the <tr>
+            if is_mail_row_hostile(row):
+                hostile_count += 1
+                tr = _render_mail_row_html(row)
+                yield f"event: mail\ndata:{json.dumps(tr)}\n\n"
+
+            # 4) final per-mail progress
             yield (
                 "event: progress\n"
-                f"data: {processed},{total},{hostile_count}\n\n"
+                f"data:{processed},{total},{hostile_count}\n\n"
             )
 
-        yield "event: done\ndata: bye\n\n"
+        # done
+        yield "event: done\ndata:bye\n\n"
 
-    resp = StreamingHttpResponse(generator(), content_type="text/event-stream")
-    resp['Cache-Control'] = 'no-cache'
-    resp['X-Accel-Buffering'] = 'no'   # hint for Nginx to disable buffering
+    resp = StreamingHttpResponse(generator(),
+                                 content_type="text/event-stream")
+    resp["Cache-Control"]     = "no-cache"
+    resp["X-Accel-Buffering"] = "no"
     return resp
+
 
 # Card data helper
 

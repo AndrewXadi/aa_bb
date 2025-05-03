@@ -9,7 +9,7 @@ import subprocess
 import sys
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Tuple, Any
+from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError
 from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types
 from dateutil.parser import parse as parse_datetime
@@ -33,6 +33,23 @@ _CACHE_TTL = timedelta(hours=24)
 
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
+
+def _find_employment_at(employment: List[dict], date: datetime) -> Optional[dict]:
+    for rec in employment:
+        start = rec.get('start_date')
+        end = rec.get('end_date')
+        if start and start <= date and (end is None or date < end):
+            return rec
+    return None
+
+
+def _find_alliance_at(history: List[dict], date: datetime) -> Optional[int]:
+    for i, rec in enumerate(history):
+        start = rec.get('start_date')
+        next_start = history[i+1]['start_date'] if i+1 < len(history) else None
+        if start and start <= date and (next_start is None or date < next_start):
+            return rec.get('alliance_id')
+    return None
 
 def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str | None:
     """
@@ -140,6 +157,66 @@ def get_character_id(name: str) -> int | None:
     except requests.RequestException as e:
         logger.error(f"Character lookup failed for '{name}': {e}")
         return None
+
+# A simple time-based LRU
+_CACHE: Dict[int, Dict] = {}
+_EXPIRY = timedelta(hours=24)
+
+def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
+    """
+    Returns a dict:
+      {
+        'name': str,
+        'type': 'character'|'corporation'|'alliance'|None,
+        'corp_id': Optional[int],
+        'corp_name': str,
+        'alli_id': Optional[int],
+        'alli_name': str,
+        'timestamp': datetime  # for eviction
+      }
+    Caches the result for 24h.
+    """
+    now = datetime.utcnow()
+    entry = _CACHE.get(entity_id)
+    if entry and now - entry['timestamp'] < _EXPIRY:
+        return entry
+
+    # Otherwise compute fresh:
+    etype = get_eve_entity_type(entity_id)
+    name, corp_id, corp_name, alli_id, alli_name = '-', None, '-', None, '-'
+
+    if etype == 'character':
+        name = resolve_character_name(entity_id)
+        emp  = get_character_employment(entity_id)
+        rec  = _find_employment_at(emp, as_of)
+        if rec:
+            corp_id   = rec['corporation_id']
+            corp_name = rec['corporation_name']
+            alli_id   = _find_alliance_at(rec['alliance_history'], as_of)
+            if alli_id:
+                alli_name = resolve_alliance_name(alli_id)
+    elif etype == 'corporation':
+        corp_id   = entity_id
+        corp_name = resolve_corporation_name(entity_id)
+        hist      = get_alliance_history_for_corp(entity_id)
+        alli_id   = _find_alliance_at(hist, as_of)
+        if alli_id:
+            alli_name = resolve_alliance_name(alli_id)
+    elif etype == 'alliance':
+        alli_id   = entity_id
+        alli_name = resolve_alliance_name(entity_id)
+
+    info = {
+        'name': name,
+        'type': etype,
+        'corp_id': corp_id,
+        'corp_name': corp_name,
+        'alli_id': alli_id,
+        'alli_name': alli_name,
+        'timestamp': now,
+    }
+    _CACHE[entity_id] = info
+    return info
 
 def get_character_employment(character_or_id) -> list[dict]:
     """
