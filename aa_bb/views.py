@@ -387,7 +387,7 @@ def stream_mails(request):
     if user_id is None:
         return HttpResponseBadRequest("Unknown account")
 
-    # Gather only – cheap database filter
+    # 1) Gather only – cheap database filter
     qs = gather_user_mails(user_id)
     total = qs.count()
     if total == 0:
@@ -396,7 +396,7 @@ def stream_mails(request):
         )
 
     def generator():
-        # Emit table header
+        # Emit table header immediately
         yield '<table class="table table-striped"><thead><tr>'
         for col in VISIBLE:
             yield f'<th>{html.escape(col.replace("_"," ").title())}</th>'
@@ -405,33 +405,35 @@ def stream_mails(request):
         processed = 0
         hostile_so_far = 0
 
-        # Stream one mail at a time
+        # 2) Stream one mail at a time
         for m in qs:
-            # Heartbeat to keep the worker alive before heavy work
+            # Heartbeat: send a tiny chunk so Gunicorn sees activity :contentReference[oaicite:1]{index=1}
             yield f'<!-- checking mail {m.id_key} -->'
 
-            # Fetch and process only this one mail
-            mail_map = get_user_mails([m])  # pass single-item iterable
+            # Heavy work: fetch & process this single mail
+            mail_map = get_user_mails([m])  # triggers ESI + DB lookups
             row = mail_map.get(m.id_key)
             processed += 1
 
+            # If hostile, render the <tr>
             if row and is_mail_row_hostile(row):
                 hostile_so_far += 1
                 yield _render_mail_row_html(row)
 
-            # Progress update row
+            # 3) Progress chunk exactly in the <div> your JS expects :contentReference[oaicite:2]{index=2}
             yield (
-                f'<tr><td colspan="{len(VISIBLE)}" '
-                f'style="font-style: italic; text-align:center;">'
+                '<div class="progress-info">'
                 f'Processed {processed}/{total} mails… '
                 f'Hostile so far: {hostile_so_far}'
-                '</td></tr>'
+                '</div>'
             )
 
         # Close table
         yield '</tbody></table>'
 
+    # 4) Return a StreamingHttpResponse to stream chunks as they arrive :contentReference[oaicite:3]{index=3}
     return StreamingHttpResponse(generator(), content_type="text/html")
+
 
 
 
