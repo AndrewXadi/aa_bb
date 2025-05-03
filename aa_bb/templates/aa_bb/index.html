@@ -163,72 +163,63 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
     // New: load & render hostile mails via streaming endpoint
-async function loadSuspiciousMails(option) {
+async function loadSuspiciousMails(option, idx) {
   showContract('Loading mails…', 'info');
-
-  // build the fetch URL
   const streamUrl = `{% url 'BigBrother:stream_mails' %}?option=${encodeURIComponent(option)}`;
-
   let hostileCount = 0, processed = 0, total = 0;
-  const cardBody = container.querySelector('.card-body');
 
-  // render empty table skeleton
+  // grab the card-body
+  const cardBody = document.querySelector(`#collapse${idx} .card-body`);
   cardBody.innerHTML = `
     <table class="table table-striped">
       <thead>
-        <tr>${MAIL_VISIBLE.map(h => `<th>${h.replace(/_/g,' ')}</th>`).join('')}</tr>
+        <tr>${MAIL_VISIBLE.map(h=>`<th>${h.replace(/_/g,' ')}</th>`).join('')}</tr>
       </thead>
       <tbody></tbody>
     </table>`;
 
-  const reader  = (await fetch(streamUrl)).body.getReader();
+  const reader = (await fetch(streamUrl)).body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
-
-  // regex to pull just this chunk’s progress info
   const progressRe = /Processed\s+(\d+)\/(\d+)/;
-  let seenProgress = false;
 
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
 
-    const chunk = decoder.decode(value, { stream: true });
-    buf += chunk;
+    buf += decoder.decode(value, { stream: true });
 
-    // 1) extract progress only from this chunk
-    const m = progressRe.exec(chunk);
-    if (m) {
-      processed = +m[1];
-      total     = +m[2];
-      seenProgress = true;
-    }
+    // 1) Immediately extract any complete <tr>…</tr> fragments
+    let match;
+    const rowRe = /(<tr>[\s\S]*?<\/tr>)/;
+    while ((match = buf.match(rowRe))) {
+      const rowHtml = match[1];
+      buf = buf.slice(match.index + rowHtml.length);
 
-    // 2) find and consume any <tr> rows
-    const rows = buf.match(/<tr>[\s\S]*?<\/tr>/g) || [];
-    rows.forEach(htmlRow => {
-      buf = buf.replace(htmlRow, '');  // remove this row from buffer
-      // only insert rows that contain a red style
-      if (/style="color:\s*red/.test(htmlRow)) {
+      // Only insert rows that contain a hostile style marker
+      if (/style="color:\s*red/.test(rowHtml)) {
         hostileCount++;
         cardBody.querySelector('tbody')
-                .insertAdjacentHTML('beforeend', htmlRow);
+                .insertAdjacentHTML('beforeend', rowHtml);
       }
-    });
+    }
 
-    // 3) update banner once we’ve seen a progress update
-    if (seenProgress) {
+    // 2) Check for a progress update in the same chunk
+    const progMatch = progressRe.exec(buf);
+    if (progMatch) {
+      processed = +progMatch[1];
+      total     = +progMatch[2];
       showContract(
         `Checked ${processed}/${total} mails, hostile so far: ${hostileCount}`,
         'info'
       );
+      // clear out anything before the progress so we don't re-read it
+      buf = buf.slice(buf.indexOf(progMatch[0]) + progMatch[0].length);
     }
   }
 
   hideContract();
-  return { content: cardBody.innerHTML, status: hostileCount === 0 };
 }
-
 
 
   async function loadAll(option) {
@@ -247,7 +238,10 @@ async function loadSuspiciousMails(option) {
           ({ content, status } = await loadSuspicious(option));
         }
         else if (key === 'sus_mail') {
-          ({ content, status } = await loadSuspiciousMails(option));
+          // 1) Render an empty card shell so #collapse{i} exists:
+          renderCard(i, title, '<div class="mail-stream-placeholder"></div>', true);
+          // 2) Now start streaming into that card in-place:
+          await loadSuspiciousMails(option, i);
         }
         else {
           const card = await fetchCard(option, i);
