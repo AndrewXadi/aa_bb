@@ -77,10 +77,8 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
         # -- assignee --
         if c.assignee_id != 0:
             assignee_id = c.assignee_id
-            logger.info(f"assignee id picked {c.assignee_id}/{c.acceptor_id}")
         else:
             assignee_id = c.acceptor_id
-            logger.info(f"acceptor id picked {c.assignee_id}/{c.acceptor_id}")
         
         assignee_type = get_eve_entity_type(assignee_id)
         ainfo = get_entity_info(assignee_id, timeee)

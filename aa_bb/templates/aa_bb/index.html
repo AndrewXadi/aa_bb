@@ -168,7 +168,8 @@ async function loadSuspiciousContracts(option, idx) {
 
     source.onerror = err => {
       source.close();
-      showContract('Contract stream failed.', 'danger');
+      const errorMessages = document.getElementById('errorMessages');
+      errorMessages.innerHTML = '<div class="alert alert-warning">Contract stream failed, wait a minute and load the page again.</div>';
       reject(err);
     };
   });
@@ -227,7 +228,8 @@ async function loadSuspiciousMails(option, idx) {
 
     source.onerror = err => {
       source.close();
-      showContract('Mail stream failed.', 'danger');
+      const errorMessages = document.getElementById('errorMessages');
+      errorMessages.innerHTML = '<div class="alert alert-warning">Mail stream failed, wait a minute and load the page again.</div>';
       reject(err);
     };
   });

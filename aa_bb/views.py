@@ -146,9 +146,18 @@ def warm_cache(request):
 @shared_task
 def warm_entity_cache_task(user_id):
     qs    = gather_user_mails(user_id)
+    qss    = gather_user_contracts(user_id)
     unique_ids = set()
     # map mail_id -> its timestamp for as_of
     mail_timestamps = {}
+    for c in qss:
+        unique_ids.add(c.issuer_id)
+        mail_timestamps[c.contract_id] = getattr(c, "date_issued", timezone.now())
+        if c.assignee_id != 0:
+            assignee_id = c.assignee_id
+        else:
+            assignee_id = c.acceptor_id
+        unique_ids.add(assignee_id)
     for m in qs:
         unique_ids.add(m.from_id)
         mail_timestamps[m.id_key] = getattr(m, "timestamp", timezone.now())
