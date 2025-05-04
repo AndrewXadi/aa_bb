@@ -17,7 +17,7 @@ urlpatterns = [
     path("warm_cache/", views.warm_cache, name="warm_cache"),
 
     # Suspicious Contracts streaming fallback (if desired)
-    path('stream_contracts/',  views.stream_contracts,        name='stream_contracts'),
+    path('stream_contracts_sse/', views.stream_contracts_sse, name='stream_contracts_sse'),
     path("stream_mails_sse/", views.stream_mails_sse, name="stream_mails_sse"),
 
     # Paginated Suspicious Contracts endpoints

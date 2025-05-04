@@ -113,65 +113,67 @@ function renderCard(idx, title, content, status) {
     return data;
   }
 
-async function loadSuspicious(option) {
-  showContract('Loading suspicious contracts… this may take a while', 'info');
+async function loadSuspiciousContracts(option, idx) {
+  showContract('Loading suspicious contracts…', 'info');
 
-  const listUrl  = `{% url 'BigBrother:list_contract_ids' %}?option=${encodeURIComponent(option)}`;
-  const batchUrl = `{% url 'BigBrother:check_contract_batch' %}`;
+  // Prepare the card body with an empty table
+  const cardBody = document.querySelector(`#collapse${idx} .card-body`);
+  cardBody.innerHTML = `
+    <table class="table table-striped">
+      <thead><tr id="contracts-header"></tr></thead>
+      <tbody id="contracts-body"></tbody>
+    </table>
+  `;
 
-  const listRes = await fetch(listUrl);
-  if (!listRes.ok) throw new Error('Failed to list contracts');
-  const { contracts } = await listRes.json();
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(
+      `{% url 'BigBrother:stream_contracts_sse' %}?option=${encodeURIComponent(option)}`
+    );
+    const thead = cardBody.querySelector('#contracts-header');
+    const tbody = cardBody.querySelector('#contracts-body');
+    let hostileCount = 0;
 
-  let checked = 0, hostile = [], total = contracts.length;
-  const BATCH = 10;
-  while (checked < total) {
-    const url = `${batchUrl}?option=${encodeURIComponent(option)}&start=${checked}&limit=${BATCH}`;
-    const batchRes = await fetch(url);
-    if (!batchRes.ok) throw new Error('Batch check failed');
-    const { checked: cnt, hostile_found } = await batchRes.json();
-    hostile.push(...hostile_found);
-    checked += cnt;
-    showContract(`Checked ${checked}/${total} contracts, hostile so far: ${hostile.length}`, 'info');
-  }
-
-  hideContract();
-
-  // If none were hostile, return a clear message instead of an empty table
-  if (hostile.length === 0) {
-    const msg = '<p>No hostile contracts found.</p>';
-    return { content: msg, status: true };
-  }
-
-  // Otherwise build your table as before
-  const hidden = new Set([
-    'contract_id','assignee_id','issuer_id',
-    'assignee_alliance_id','assignee_corporation_id',
-    'issuer_alliance_id','issuer_corporation_id'
-  ]);
-  const headers = Object.keys(hostile[0])
-    .filter(k => k !== 'cell_styles');
-
-  let table = '<table class="table table-striped"><thead><tr>';
-  headers.forEach(h => {
-    table += `<th>${h.replace(/_/g, ' ')}</th>`;
-  });
-  table += '</tr></thead><tbody>';
-  hostile.forEach(r => {
-    table += '<tr>';
-    headers.forEach(col => {
-      const style = r.cell_styles[col] || '';
-      const val   = r[col] != null ? r[col] : '';
-      table += style
-        ? `<td style="${style}">${val}</td>`
-        : `<td>${val}</td>`;
+    source.addEventListener('header', e => {
+      // Set up column headers
+      thead.innerHTML = JSON.parse(e.data);
     });
-    table += '</tr>';
-  });
-  table += '</tbody></table>';
 
-  return { content: table, status: false };
+    source.addEventListener('contract', e => {
+      // Add each hostile contract row
+      tbody.insertAdjacentHTML('beforeend', JSON.parse(e.data));
+      hostileCount++;
+      // Flip icon red on first hostile
+      if (hostileCount === 1) {
+        updateCardStatus(idx, false);
+      }
+    });
+
+    source.addEventListener('progress', e => {
+      const [processed, total] = e.data.split(',').map(Number);
+      showContract(
+        `Checked ${processed}/${total} contracts, hostile so far: ${hostileCount}`,
+        'info'
+      );
+    });
+
+    source.addEventListener('done', () => {
+      source.close();
+      hideContract();
+      // If none hostile, ensure green
+      if (hostileCount === 0) {
+        updateCardStatus(idx, true);
+      }
+      resolve();
+    });
+
+    source.onerror = err => {
+      source.close();
+      showContract('Contract stream failed.', 'danger');
+      reject(err);
+    };
+  });
 }
+
 
 
     // New: load & render hostile mails via streaming endpoint
@@ -260,9 +262,25 @@ async function loadAll(option) {
 
     try {
       if (key === SUS_CONTR_KEY) {
-        // Suspicious Contracts (bulk loader)
-        const { content, status } = await loadSuspicious(option);
-        renderCard(i, title, content, status);
+        // 1) Render the card with an empty contracts table:
+        renderCard(i, title,
+          `<table class="table table-striped">
+             <thead><tr id="contracts-header"></tr></thead>
+             <tbody id="contracts-body"></tbody>
+           </table>`,
+          true // assume clean until we see a hostile contract
+        );
+
+        // 2) Stream the contracts; returns allClean flag
+        const allClean = await loadSuspiciousContracts(option, i);
+
+        // 3) Update dot color based on whether any hostile were found
+        updateCardStatus(i, allClean);
+        loadedNonSus++;
+        showGeneral(
+          `${loadedNonSus}/${TOTAL_CARDS} loaded… This may take a while, do not refresh`,
+          'info'
+        );
       }
       else if (key === 'sus_mail') {
         // Suspicious Mails
@@ -279,13 +297,18 @@ async function loadAll(option) {
 
         // update the dot color
         updateCardStatus(i, allClean);
+        loadedNonSus++;
+        showGeneral(
+          `${loadedNonSus}/${TOTAL_CARDS} loaded… This may take a while, do not refresh`,
+          'info'
+        );
       }
       else {
         // everything else
         const { content, status } = await fetchCard(option, i);
         loadedNonSus++;
         showGeneral(
-          `${loadedNonSus}/${TOTAL_CARDS-2} loaded… This may take a while, do not refresh`,
+          `${loadedNonSus}/${TOTAL_CARDS} loaded… This may take a while, do not refresh`,
           'info'
         );
         renderCard(i, title, content, status);

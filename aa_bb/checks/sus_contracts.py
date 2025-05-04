@@ -15,11 +15,13 @@ from ..app_settings import (
     get_user_characters,
     get_character_id,
     get_eve_entity_type,
+    get_entity_info,
 
 )
 from .corp_blacklist import check_char_corp_bl
 from corptools.models import Contract
 from ..models import BigBrotherConfig, ProcessedContract, SusContractNote
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -67,35 +69,12 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
         logger.info(f"contract number: {number}")
 
         # -- issuer --
-        issuer_name = '-'
         issuer_id = get_character_id(c.issuer_name)
         issuer_type = get_eve_entity_type(issuer_id)
-        issuer_corporation = '-'
-        issuer_corporation_id = None
-        issuer_alliance = '-'
-        issuer_alliance_id = None
-        if issuer_id and issuer_type:
-            if issuer_type == 'character':
-                issuer_name = resolve_character_name(issuer_id)
-                emp = get_character_employment(issuer_id)
-                rec = _find_employment_at(emp, issue)
-                if rec:
-                    issuer_corporation_id = rec.get('corporation_id')
-                    issuer_corporation = rec.get('corporation_name')
-                    issuer_alliance_id = _find_alliance_at(rec.get('alliance_history', []), issue)
-                    issuer_alliance = resolve_alliance_name(issuer_alliance_id) if issuer_alliance_id else '-'
-            elif issuer_type == 'corporation':
-                issuer_corporation = resolve_corporation_name(issuer_id)
-                issuer_corporation_id = issuer_id
-                hist = get_alliance_history_for_corp(issuer_id)
-                issuer_alliance_id = _find_alliance_at(hist, issue)
-                issuer_alliance = resolve_alliance_name(issuer_alliance_id) if issuer_alliance_id else '-'
-            elif issuer_type == 'alliance':
-                issuer_alliance = resolve_alliance_name(issuer_id)
-                issuer_alliance_id = issuer_id
+        timeee = getattr(c, "timestamp", timezone.now())
+        iinfo = get_entity_info(issuer_id, timeee)
 
         # -- assignee --
-        assignee_name = '-'
         if c.assignee_id != 0:
             assignee_id = c.assignee_id
             logger.info(f"assignee id picked {c.assignee_id}/{c.acceptor_id}")
@@ -104,47 +83,26 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
             logger.info(f"acceptor id picked {c.assignee_id}/{c.acceptor_id}")
         
         assignee_type = get_eve_entity_type(assignee_id)
-        assignee_corporation = '-'
-        assignee_corporation_id = None
-        assignee_alliance = '-'
-        assignee_alliance_id = None
-        if assignee_id and assignee_type:
-            if assignee_type == 'character':
-                assignee_name = resolve_character_name(assignee_id)
-                emp = get_character_employment(assignee_id)
-                rec = _find_employment_at(emp, issue)
-                if rec:
-                    assignee_corporation_id = rec.get('corporation_id')
-                    assignee_corporation = rec.get('corporation_name')
-                    assignee_alliance_id = _find_alliance_at(rec.get('alliance_history', []), issue)
-                    assignee_alliance = resolve_alliance_name(assignee_alliance_id) if assignee_alliance_id else '-'
-            elif assignee_type == 'corporation':
-                assignee_corporation = resolve_corporation_name(assignee_id)
-                assignee_corporation_id = issuer_id
-                hist = get_alliance_history_for_corp(assignee_id)
-                assignee_alliance_id = _find_alliance_at(hist, issue)
-                assignee_alliance = resolve_alliance_name(assignee_alliance_id) if assignee_alliance_id else '-'
-            elif assignee_type == 'alliance':
-                assignee_alliance = resolve_alliance_name(assignee_id)
-                assignee_alliance_id = assignee_id
+        ainfo = get_entity_info(assignee_id, timeee)
+
 
         result[cid] = {
             'contract_id':              cid,
             'issued_date':              issue,
             'end_date':                 c.date_completed or c.date_expired,
             'contract_type':            c.contract_type,
-            'issuer_name':              issuer_name,
+            'issuer_name':              iinfo["name"],
             'issuer_id':                issuer_id,
-            'issuer_corporation':       issuer_corporation,
-            'issuer_corporation_id':    issuer_corporation_id,
-            'issuer_alliance':          issuer_alliance,
-            'issuer_alliance_id':       issuer_alliance_id,
-            'assignee_name':            assignee_name,
+            'issuer_corporation':       iinfo["corp_name"],
+            'issuer_corporation_id':    iinfo["corp_id"],
+            'issuer_alliance':          iinfo["alli_name"],
+            'issuer_alliance_id':       ainfo["alli_id"],
+            'assignee_name':            ainfo["name"],
             'assignee_id':              assignee_id,
-            'assignee_corporation':     assignee_corporation,
-            'assignee_corporation_id':  assignee_corporation_id,
-            'assignee_alliance':        assignee_alliance,
-            'assignee_alliance_id':     assignee_alliance_id,
+            'assignee_corporation':     ainfo["corp_name"],
+            'assignee_corporation_id':  ainfo["corp_id"],
+            'assignee_alliance':        ainfo["alli_name"],
+            'assignee_alliance_id':     ainfo["alli_id"],
             'status':                   c.status,
         }
     logger.info(f"Number of contracts returned: {len(result)}")

@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
 from functools import lru_cache
+from django.utils import timezone
 
 from ..app_settings import (
     is_npc_corporation,
@@ -16,6 +17,7 @@ from ..app_settings import (
     get_user_characters,
     get_character_id,
     get_eve_entity_type,
+    get_entity_info,
 )
 from .corp_blacklist import check_char_corp_bl
 from corptools.models import MailMessage, MailRecipient
@@ -68,33 +70,9 @@ def get_user_mails(qs) -> Dict[int, Dict]:
 
 
         # -- sender details --
-        sender_name = '-' 
         sender_id = m.from_id
-        sender_type = get_eve_entity_type(sender_id) if sender_id else None
-        sender_corp = '-'
-        sender_corp_id = None
-        sender_alliance = '-'
-        sender_alliance_id = None
-
-        if sender_id and sender_type:
-            if sender_type == 'character':
-                sender_name = resolve_character_name(sender_id)
-                emp = get_character_employment(sender_id)
-                rec = _find_employment_at(emp, sent)
-                if rec:
-                    sender_corp_id = rec.get('corporation_id')
-                    sender_corp = rec.get('corporation_name')
-                    sender_alliance_id = _find_alliance_at(rec.get('alliance_history', []), sent)
-                    sender_alliance = resolve_alliance_name(sender_alliance_id) if sender_alliance_id else '-'
-            elif sender_type == 'corporation':
-                sender_corp = resolve_corporation_name(sender_id)
-                sender_corp_id = sender_id
-                hist = get_alliance_history_for_corp(sender_id)
-                sender_alliance_id = _find_alliance_at(hist, sent)
-                sender_alliance = resolve_alliance_name(sender_alliance_id) if sender_alliance_id else '-'
-            elif sender_type == 'alliance':
-                sender_alliance = resolve_alliance_name(sender_id)
-                sender_alliance_id = sender_id
+        timeee = getattr(m, "timestamp", timezone.now())
+        sinfo = get_entity_info(sender_id, timeee)
 
         # -- recipients list --
         recipient_names = []
@@ -104,50 +82,26 @@ def get_user_mails(qs) -> Dict[int, Dict]:
         recipient_alliances = []
         recipient_alliance_ids = []
         for mr in m.recipients.all():
-            recipient_name = '-' 
-            recipient_id = mr.recipient_id
-            recipient_type = get_eve_entity_type(recipient_id) if recipient_id else None
-            recipient_corp = '-'
-            recipient_corp_id = None
-            recipient_alliance = '-'
-            recipient_alliance_id = None
-
-            if recipient_id and recipient_type:
-                if recipient_type == 'character':
-                    recipient_name = resolve_character_name(recipient_id)
-                    emp = get_character_employment(recipient_id)
-                    rec = _find_employment_at(emp, sent)
-                    if rec:
-                        recipient_corp_id = rec.get('corporation_id')
-                        recipient_corp = rec.get('corporation_name')
-                        recipient_alliance_id = _find_alliance_at(rec.get('alliance_history', []), sent)
-                        recipient_alliance = resolve_alliance_name(recipient_alliance_id) if recipient_alliance_id else '-'
-                elif recipient_type == 'corporation':
-                    recipient_corp = resolve_corporation_name(recipient_id)
-                    recipient_corp_id = recipient_id
-                    hist = get_alliance_history_for_corp(recipient_id)
-                    recipient_alliance_id = _find_alliance_at(hist, sent)
-                    recipient_alliance = resolve_alliance_name(recipient_alliance_id) if recipient_alliance_id else '-'
-                elif recipient_type == 'alliance':
-                    recipient_alliance = resolve_alliance_name(recipient_id)
-                    recipient_alliance_id = recipient_id
-                recipient_names.append(recipient_name)
-                recipient_ids.append(recipient_id)
-                recipient_corps.append(recipient_corp)
-                recipient_corp_ids.append(recipient_corp_id)
-                recipient_alliances.append(recipient_alliance)
-                recipient_alliance_ids.append(recipient_alliance_id)
+            rid   = mr.recipient_id
+            logger.info(f"getting info for {rid}")
+            rinfo = get_entity_info(rid, timeee)
+            recipient_ids.append(rid)
+            recipient_names.append(rinfo["name"])
+            recipient_corps.append(rinfo["corp_name"])
+            recipient_corp_ids.append(rinfo["corp_id"])
+            recipient_alliances.append(rinfo["alli_name"])
+            recipient_alliance_ids.append(rinfo["alli_id"])
 
         result[mid] = {
             'message_id':               mid,
             'sent_date':                sent,
             'subject':                  m.subject or '',
-            'sender_name':              sender_name,
+            'sender_name':              sinfo["name"],
             'sender_id':                sender_id,
-            'sender_corporation':       sender_corp,
-            'sender_corporation_id':    sender_corp_id,
-            'sender_alliance':          sender_alliance,
-            'sender_alliance_id':       sender_alliance_id,
+            'sender_corporation':       sinfo["corp_name"],
+            'sender_corporation_id':    sinfo["corp_id"],
+            'sender_alliance':          sinfo["alli_name"],
+            'sender_alliance_id':       sinfo["alli_id"],
             'recipient_names':          recipient_names,
             'recipient_ids':            recipient_ids,
             'recipient_corps':          recipient_corps,
