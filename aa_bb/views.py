@@ -47,7 +47,9 @@ from aa_bb.checks.sus_contracts import (
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info
 from .models import BigBrotherConfig
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
-from datetime import datetime
+#from datetime import datetime
+from django.utils import timezone
+from celery import shared_task
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -61,8 +63,8 @@ CARD_DEFINITIONS = [
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
-    {"title": 'Suspicious Mails', "key": "sus_mail"},
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
+    {"title": 'Suspicious Mails', "key": "sus_mail"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
 ]
@@ -120,6 +122,7 @@ def load_card(request):
 def load_cards(request: WSGIRequest) -> JsonResponse:
     selected_option = request.GET.get("option")
     user_id = get_user_id(selected_option)
+    warm_entity_cache_task.delay(user_id)
     cards = []
     for card in CARD_DEFINITIONS:
         content, status = get_card_data(request, user_id, card["key"])
@@ -129,6 +132,31 @@ def load_cards(request: WSGIRequest) -> JsonResponse:
             "status":  status,
         })
     return JsonResponse({"cards": cards})
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def warm_cache(request):
+    option  = request.GET.get("option", "")
+    user_id = get_user_id(option)
+    if user_id:
+        warm_entity_cache_task.delay(user_id)
+        return JsonResponse({"started": True})
+    return JsonResponse({"error": "Unknown account"}, status=400)
+
+@shared_task
+def warm_entity_cache_task(user_id):
+    qs    = gather_user_mails(user_id)
+    unique_ids = set()
+    # map mail_id -> its timestamp for as_of
+    mail_timestamps = {}
+    for m in qs:
+        unique_ids.add(m.from_id)
+        mail_timestamps[m.id_key] = getattr(m, "timestamp", timezone.now())
+        for mr in m.recipients.all():
+            unique_ids.add(mr.recipient_id)
+    for eid in unique_ids:
+        ts = mail_timestamps.get(eid, timezone.now())
+        get_entity_info(eid, ts)
 
 
 # Index view
@@ -405,7 +433,7 @@ def stream_mails_sse(request):
             # per-mail ping
             yield ": ping\n\n"
 
-            sent = getattr(m, "timestamp", datetime.utcnow())
+            sent = getattr(m, "timestamp", timezone.now())
 
             # 1) hydrate sender
             sender_id = m.from_id

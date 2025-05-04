@@ -9,6 +9,7 @@ import subprocess
 import sys
 import requests
 from datetime import datetime, timedelta
+from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError
 from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types
@@ -162,7 +163,7 @@ def get_character_id(name: str) -> int | None:
 _CACHE: Dict[int, Dict] = {}
 _EXPIRY = timedelta(hours=24)
 
-def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
+def get_entity_info(entity_id: int, as_of: timezone) -> Dict:
     """
     Returns a dict:
       {
@@ -176,7 +177,7 @@ def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
       }
     Caches the result for 24h.
     """
-    now = datetime.utcnow()
+    now = timezone.now()
     entry = _CACHE.get(entity_id)
     if entry and now - entry['timestamp'] < _EXPIRY:
         return entry

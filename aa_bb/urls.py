@@ -14,6 +14,7 @@ urlpatterns = [
 
     # Single card AJAX fetch (all cards except paging for SUS_CONTR)
     path("load_card/",       views.load_card,              name="load_card"),
+    path("warm_cache/", views.warm_cache, name="warm_cache"),
 
     # Suspicious Contracts streaming fallback (if desired)
     path('stream_contracts/',  views.stream_contracts,        name='stream_contracts'),
