@@ -238,8 +238,16 @@ def get_user_hostile_transactions(user_id: int) -> Dict[int, str]:
                 flags.append(f"second_party corp **{tx['second_party_corporation']}** is hostile")
             if str(tx['second_party_alliance_id']) in BigBrotherConfig.get_solo().hostile_alliances:
                 flags.append(f"second_party alliance **{tx['second_party_alliance']}** is hostile")
+            flags_text = "\n".join(flags)
+
             note = (
-                f"- Transaction on {tx['date']}; amount {tx['amount']}, from {tx['first_party_name']}({tx['first_party_corporation']}/{tx['first_party_alliance']}), to {tx['second_party_name']}({tx['second_party_corporation']},{tx['second_party_alliance']}); flags: {'\n'.join(flags)}"
+                f"- Transaction on {tx['date']}; "
+                f"amount {tx['amount']}, "
+                f"from {tx['first_party_name']}({tx['first_party_corporation']}/"
+                  f"{tx['first_party_alliance']}), "
+                f"to {tx['second_party_name']}({tx['second_party_corporation']},"
+                  f"{tx['second_party_alliance']}); "
+                f"flags:\n{flags_text}"
             )
             SusTransactionNote.objects.update_or_create(
                 transaction=pt,
