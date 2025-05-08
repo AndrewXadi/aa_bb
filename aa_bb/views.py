@@ -641,7 +641,10 @@ def stream_transactions_sse(request):
                         aid = row[f"{col}_id"]
                         if aid and str(aid) in cfg.hostile_alliances:
                             style = 'color:red;'
-                    cells.append(f'<td{" style='"+style+"'" if style else ""}>{text}</td>')
+                    def make_td(text, style=""):
+                        style_attr = f' style="{style}"' if style else ""
+                        return f"<td{style_attr}>{text}</td>"
+                    cells.append(make_td(text, style))
                 tr_html = "<tr>" + "".join(cells) + "</tr>"
                 yield f"event: transaction\ndata:{json.dumps(tr_html)}\n\n"
 
