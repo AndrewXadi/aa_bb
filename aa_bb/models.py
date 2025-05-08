@@ -352,3 +352,60 @@ class SusContractNote(models.Model):
 
     def __str__(self):
         return f"Contract {self.contract.contract_id} note for user {self.user_id}"
+    
+
+    from django.db import models
+
+class ProcessedTransaction(models.Model):
+    """
+    Tracks which WalletJournalEntry IDs we've already generated notes for.
+    """
+    entry_id = models.BigIntegerField(
+        primary_key=True,
+        help_text="The WalletJournalEntry.entry_id that we've processed"
+    )
+    processed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When we first processed this transaction"
+    )
+
+    class Meta:
+        db_table = "aa_bb_processed_transactions"
+        verbose_name = "Processed Transaction"
+        verbose_name_plural = "Processed Transactions"
+
+    def __str__(self):
+        return f"ProcessedTransaction {self.entry_id} @ {self.processed_at}"
+
+
+class SusTransactionNote(models.Model):
+    """
+    Stores the summary line (flags) generated for each hostile transaction.
+    """
+    transaction = models.OneToOneField(
+        ProcessedTransaction,
+        on_delete=models.CASCADE,
+        help_text="The transaction this note refers to"
+    )
+    user_id = models.BigIntegerField(
+        help_text="The AllianceAuth user ID who owns these characters"
+    )
+    note = models.TextField(
+        help_text="The summary string of flags for this transaction"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this note was created"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="When this note was last updated"
+    )
+
+    class Meta:
+        db_table = "aa_bb_sus_transaction_notes"
+        verbose_name = "Suspicious Transaction Note"
+        verbose_name_plural = "Suspicious Transaction Notes"
+
+    def __str__(self):
+        return f"Transaction {self.transaction.entry_id} note for user {self.user_id}"

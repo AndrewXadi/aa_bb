@@ -19,6 +19,7 @@ urlpatterns = [
     # Suspicious Contracts streaming fallback (if desired)
     path('stream_contracts_sse/', views.stream_contracts_sse, name='stream_contracts_sse'),
     path("stream_mails_sse/", views.stream_mails_sse, name="stream_mails_sse"),
+    path('stream_transactions_sse/', views.stream_transactions_sse, name='stream_transactions_sse'),
 
     # Paginated Suspicious Contracts endpoints
     path('list_contract_ids/', views.list_contract_ids,       name='list_contract_ids'),

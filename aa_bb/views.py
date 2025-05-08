@@ -32,7 +32,13 @@ from aa_bb.checks.sus_mails import (
     gather_user_mails,
     render_mails,
 )
-from aa_bb.checks.sus_trans import sus_tra
+from aa_bb.checks.sus_trans import (
+    get_user_transactions,
+    is_transaction_hostile,
+    gather_user_transactions,
+    render_transactions,
+    SUS_TYPES,
+)
 from aa_bb.checks.corp_blacklist import (
     get_corp_blacklist_html,
     add_user_characters_to_blacklist,
@@ -65,8 +71,9 @@ CARD_DEFINITIONS = [
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
     {"title": 'Suspicious Mails', "key": "sus_mail"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Suspicious Transactions', "key": "sus_tra"},
+    {"title": 'Suspicious Transactions', "key": "sus_tra"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
+    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Skills', "key": "skills"},
 ]
 
 
@@ -99,8 +106,8 @@ def load_card(request):
 
     key   = card_def["key"]
     title = card_def["title"]
-
-    if key in ("sus_contr", "sus_mail"):
+    logger.info(key)
+    if key in ("sus_contr", "sus_mail","sus_tra"):
         # handled via paginated endpoints
         return JsonResponse({"key": key, "title": title})
 
@@ -147,6 +154,7 @@ def warm_cache(request):
 def warm_entity_cache_task(user_id):
     qs    = gather_user_mails(user_id)
     qss    = gather_user_contracts(user_id)
+    qsss = gather_user_transactions(user_id)
     unique_ids = set()
     # map mail_id -> its timestamp for as_of
     mail_timestamps = {}
@@ -163,6 +171,10 @@ def warm_entity_cache_task(user_id):
         mail_timestamps[m.id_key] = getattr(m, "timestamp", timezone.now())
         for mr in m.recipients.all():
             unique_ids.add(mr.recipient_id)
+    for c in qsss:
+        unique_ids.add(c.first_party_id)
+        mail_timestamps[c.entry_id] = getattr(c, "date", timezone.now())
+        unique_ids.add(c.second_party_id)
     for eid in unique_ids:
         ts = mail_timestamps.get(eid, timezone.now())
         get_entity_info(eid, ts)
@@ -441,6 +453,10 @@ def _render_mail_row_html(row: dict) -> str:
         else:
             # single-valued columns: subject, content, sender_*
             style = ""
+            if col == "sender_name":
+                for key in ["GM ","CCP "]:
+                    if key in str(row["sender_name"]):
+                        style = "color:red;"
             if col.startswith("sender_"):
                 style = get_cell_style_for_mail_cell(col, row, None)
             if style:
@@ -546,6 +562,104 @@ def stream_mails_sse(request):
     return resp
 
 
+@login_required
+@permission_required("aa_bb.basic_access")
+def stream_transactions_sse(request):
+    """
+    Stream hostile wallet‐transactions one <tr> at a time via SSE,
+    hydrating first‐ and second‐party info on the fly.
+    """
+    option  = request.GET.get("option", "")
+    user_id = get_user_id(option)
+    if not user_id:
+        return HttpResponseBadRequest("Unknown account")
+
+    qs    = gather_user_transactions(user_id)
+    total = qs.count()
+    if total == 0:
+        return StreamingHttpResponse(
+            "<p>No transactions found.</p>",
+            content_type="text/html"
+        )
+
+    # Determine headers from a single hydrated row
+    sample = qs[:1]
+    sample_map    = get_user_transactions(sample)
+    sample_row    = next(iter(sample_map.values()))
+    HIDDEN        = {
+        'first_party_id','second_party_id',
+        'first_party_corporation_id','second_party_corporation_id',
+        'first_party_alliance_id','second_party_alliance_id',
+        'entry_id'
+    }
+    headers = [h for h in sample_row.keys() if h not in HIDDEN]
+
+    def generator():
+        yield ": ok\n\n"                # initial heartbeat
+        processed = hostile_count = 0
+
+        # Emit table header row once
+        header_html = (
+            "<tr>" +
+            "".join(f"<th>{html.escape(h.replace('_',' ').title())}</th>" for h in headers) +
+            "</tr>"
+        )
+        yield f"event: header\ndata:{json.dumps(header_html)}\n\n"
+
+        for entry in qs:
+            processed += 1
+            yield ": ping\n\n"         # keep‐alive
+
+            # hydrate this one entry
+            row = get_user_transactions([entry])[entry.entry_id]
+
+            if is_transaction_hostile(row):
+                hostile_count += 1
+
+                # build the <tr> using same style logic as render_transactions()
+                cells = []
+                cfg = BigBrotherConfig.get_solo()
+                for col in headers:
+                    val = row.get(col, "")
+                    text = html.escape(str(val))
+                    style = ""
+                    # type‐based red
+                    if col == 'type' and any(st in row['type'] for st in SUS_TYPES):
+                        style = 'color:red;'
+                    # first/second party name
+                    if col in ('first_party_name','second_party_name'):
+                        id_col = col.replace("_name", "_id")
+                        pid = row[id_col]
+                        if check_char_corp_bl(pid):
+                            style = 'color:red;'
+                    # corps & alliances
+                    if col.endswith('corporation'):
+                        cid = row[f"{col}_id"]
+                        if cid and str(cid) in cfg.hostile_corporations:
+                            style = 'color:red;'
+                    if col.endswith('alliance'):
+                        aid = row[f"{col}_id"]
+                        if aid and str(aid) in cfg.hostile_alliances:
+                            style = 'color:red;'
+                    cells.append(f'<td{" style='"+style+"'" if style else ""}>{text}</td>')
+                tr_html = "<tr>" + "".join(cells) + "</tr>"
+                yield f"event: transaction\ndata:{json.dumps(tr_html)}\n\n"
+
+            # progress update
+            yield (
+                "event: progress\n"
+                f"data:{processed},{total},{hostile_count}\n\n"
+            )
+
+        # Done
+        yield "event: done\ndata:bye\n\n"
+
+    resp = StreamingHttpResponse(generator(), content_type='text/event-stream')
+    resp["Cache-Control"]     = "no-cache"
+    resp["X-Accel-Buffering"] = "no"
+    return resp
+
+
 # Card data helper
 
 def get_card_data(request, target_user_id: int, key: str):
@@ -592,7 +706,7 @@ def get_card_data(request, target_user_id: int, key: str):
         status  = not (content and "red" in content)
 
     elif key == "sus_tra":
-        content = sus_tra(target_user_id)
+        content = render_transactions(target_user_id)
         status  = not content
 
     elif key == "cyno":

@@ -144,6 +144,10 @@ def get_cell_style_for_mail_cell(column: str, row: dict, index: Optional[int] = 
 def is_mail_row_hostile(row: dict) -> bool:
     solo = BigBrotherConfig.get_solo()
     # sender hostility
+    if row.get('sender_name'):
+        for key in ["GM ","CCP "]:
+            if key in str(row["sender_name"]):
+                return True
     if check_char_corp_bl(row.get('sender_id')):
         return True
     if str(row.get('sender_corporation_id')) in solo.hostile_corporations:

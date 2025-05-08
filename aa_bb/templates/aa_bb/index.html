@@ -162,6 +162,15 @@ async function loadSuspiciousContracts(option, idx) {
       // If none hostile, ensure green
       if (hostileCount === 0) {
         updateCardStatus(idx, true);
+
+        // **NEW**: inject a “no hostile” row
+        const tbody = cardBody.querySelector('#contracts-body');
+        const colspan = thead.querySelectorAll('th').length;
+        tbody.insertAdjacentHTML('beforeend',
+          `<tr><td colspan="${colspan}" class="text-center text-muted">
+             No hostile contracts found
+           </td></tr>`
+        );
       }
       resolve();
     });
@@ -223,6 +232,15 @@ async function loadSuspiciousMails(option, idx) {
       // If we never saw any hostile, ensure the icon is green
       if (hostileCount === 0) {
         updateCardStatus(idx, true);
+
+        // **NEW**: inject a “no hostile” mail row
+        const tbody = cardBody.querySelector('tbody');
+        const colspan = MAIL_VISIBLE.length;
+        tbody.insertAdjacentHTML('beforeend',
+          `<tr><td colspan="${colspan}" class="text-center text-muted">
+             No hostile mails found
+           </td></tr>`
+        );
       }
       resolve();
     });
@@ -236,6 +254,76 @@ async function loadSuspiciousMails(option, idx) {
     };
   });
 }
+
+
+async function loadSuspiciousTransactions(option, idx) {
+  showContract('Loading transactions…', 'info');
+
+  // Prepare empty table in the card-body
+  const cardBody = document.querySelector(`#collapse${idx} .card-body`);
+  //const headersCols = /* same list as server: you can hardcode or fetch via API */;
+  cardBody.innerHTML = `
+    <table class="table table-striped">
+      <thead><tr id="tx-header"></tr></thead>
+      <tbody id="tx-body"></tbody>
+    </table>
+  `;
+
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(
+      `{% url 'BigBrother:stream_transactions_sse' %}?option=${encodeURIComponent(option)}`
+    );
+    const thead = cardBody.querySelector('#tx-header');
+    const tbody = cardBody.querySelector('#tx-body');
+    let hostileCount = 0;
+
+    source.addEventListener('header', e => {
+      // render the <th>… row
+      thead.innerHTML = JSON.parse(e.data);
+    });
+
+    source.addEventListener('transaction', e => {
+      // append each hostile <tr>
+      tbody.insertAdjacentHTML('beforeend', JSON.parse(e.data));
+      hostileCount++;
+      if (hostileCount === 1) {
+        updateCardStatus(idx, false);
+      }
+    });
+
+    source.addEventListener('progress', e => {
+      const [done, total] = e.data.split(',').map(Number);
+      showContract(
+        `Checked ${done}/${total}, hostile so far: ${hostileCount}`, 'info'
+      );
+    });
+
+    source.addEventListener('done', () => {
+      source.close();
+      hideContract();
+      if (hostileCount === 0) {
+        updateCardStatus(idx, true);
+        // inject “no hostile” row
+        const colspan = thead.querySelectorAll('th').length;
+        tbody.insertAdjacentHTML('beforeend',
+          `<tr><td colspan="${colspan}" class="text-center text-muted">
+             No hostile transactions found
+           </td></tr>`
+        );
+      }
+      resolve();
+    });
+
+    source.onerror = err => {
+      source.close();
+      document.getElementById('errorMessages').innerHTML =
+        '<div class="alert alert-warning">Transaction stream failed; try again later.</div>';
+      updateCardStatus(idx, true);
+      reject(err);
+    };
+  });
+}
+
 
 
 function updateCardStatus(idx, isClean) {
@@ -305,6 +393,20 @@ async function loadAll(option) {
         showGeneral(
           `${loadedNonSus}/${TOTAL_CARDS} loaded… This may take a while, do not refresh`,
           'info'
+        );
+      }else if (key === 'sus_tra') {
+        renderCard(i, title,
+          `<table class="table table-striped">
+            <thead><tr id="tx-header"></tr></thead>
+            <tbody id="tx-body"></tbody>
+          </table>`,
+          true
+        );
+        const allClean = await loadSuspiciousTransactions(option, i);
+        updateCardStatus(i, allClean);
+        loadedNonSus++;
+        showGeneral(
+          `${loadedNonSus}/${TOTAL_CARDS} loaded…`, 'info'
         );
       }
       else {

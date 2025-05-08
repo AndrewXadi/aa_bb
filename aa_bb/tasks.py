@@ -14,10 +14,10 @@ from aa_bb.checks.notifications import skill_injected
 from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
-from aa_bb.checks.sus_trans import sus_tra
+from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from datetime import datetime, timedelta
 import time
-
+from . import __version__
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
 timer_duration = timedelta(days=7)
@@ -54,7 +54,7 @@ def BB_run_regular_updates():
 
             # 🔐 Validation
             token = instance.token
-            client_version = "1.0.0"
+            client_version = __version__
             self_des = None
             self_des_reas = None
 
@@ -155,7 +155,6 @@ def BB_run_regular_updates():
                 lawn_blacklist_result = lawn_bl(user_id)
                 game_time_notifications_result = game_time(user_id)
                 skill_injected_result = skill_injected(user_id)
-                sus_trans_result = sus_tra(user_id)
 
                 awox_links = get_awox_kill_links(user_id)
                 hostile_clones_result = get_hostile_clone_locations(user_id)
@@ -163,13 +162,13 @@ def BB_run_regular_updates():
                 sus_contacts_result = { str(cid): v for cid, v in get_user_hostile_notifications(user_id).items() }
                 sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_contracts(user_id).items() }
                 sus_mails_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_mails(user_id).items() }
+                sus_trans_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_transactions(user_id).items() }
 
                 has_cyno = cyno_result != None
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
                 has_game_time_notifications = game_time_notifications_result != None
                 has_skill_injected = skill_injected_result != None
-                has_sus_trans = sus_trans_result != None
                 
                 has_awox = bool(awox_links)
                 has_hostile_clones = bool(hostile_clones_result)
@@ -177,6 +176,7 @@ def BB_run_regular_updates():
                 has_sus_contacts = bool(sus_contacts_result)
                 has_sus_contracts = bool(sus_contracts_result)
                 has_sus_mails = bool(sus_mails_result)
+                has_sus_trans = bool(sus_trans_result)
 
                 # Load or create existing record
                 status, created = UserStatus.objects.get_or_create(user_id=user_id)
@@ -204,7 +204,7 @@ def BB_run_regular_updates():
                     logger.info(f"{char_name} new links {link_list3}")
                     link_list2 = "\n".join(f"- {link}" for link in old_links)
                     logger.info(f"{char_name} old links {link_list2}")
-                    if status.has_awox_kills != has_awox:
+                    if status.has_awox_kills != has_awox and has_awox:
                         changes.append(f"## AwoX kills: {'🚩' if has_awox else '❌'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
@@ -380,14 +380,49 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Mails:")
                         for issuer_id in new_links:
                             res = sus_mails_result[issuer_id]
-                            #ping = f"<@&{pingroleID}>"
-                            ping = ""
+                            ping = f"<@&{pingroleID}>"
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
 
                     status.has_sus_mails = has_sus_mails
                     status.sus_mails = sus_mails_result
+
+                if status.has_sus_trans != has_sus_trans or set(sus_trans_result) != set(as_dict(status.sus_trans) or {}):
+                    old_trans = as_dict(status.sus_trans) or {}
+                    #normalized_old = { str(cid): v for cid, v in status.sus_contacts.items() }
+                    #normalized_new = { str(cid): v for cid, v in sus_contacts_result.items() }
+
+                    old_ids   = set(as_dict(status.sus_trans).keys())
+                    new_ids   = set(sus_trans_result.keys())
+                    new_links = new_ids - old_ids
+                    if new_links:
+                        link_list = "\n".join(
+                            f"🔗 {sus_trans_result[issuer_id]}" for issuer_id in new_links
+                        )
+                        logger.info(f"{char_name} new trans:\n{link_list}")
+
+                    if old_ids:
+                        old_link_list = "\n".join(
+                            f"🔗 {old_trans[issuer_id]}" for issuer_id in old_ids if issuer_id in old_trans
+                        )
+                        logger.info(f"{char_name} old trans:\n{old_link_list}")
+
+                    if status.has_sus_trans != has_sus_trans:
+                        changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '❌'}")
+                    logger.info(f"{char_name} status changed")
+
+                    if new_links:
+                        changes.append(f"## New Sus Transactions @here:")
+                        for issuer_id in new_links:
+                            res = sus_trans_result[issuer_id]
+                            ping = f""
+                            if res.startswith("- A -"):
+                                ping = ""
+                            changes.append(f"{res} {ping}")
+
+                    status.has_sus_trans = has_sus_trans
+                    status.sus_trans = sus_trans_result
 
                 if changes:
                     for i in range(0, len(changes)):

@@ -13,7 +13,9 @@ esi = EsiClientProvider()
 ZKILL_ICON = "https://zkillboard.com/favicon.ico"
 EVEWHO_ICON = "https://evewho.com/favicon.ico"
 DOTLAN_ICON = "https://evemaps.dotlan.net/favicon.ico"
-
+EVE411_ICON     = "https://www.eve411.com/favicon.ico"
+FORUMS_ICON     = "https://eve-offline.net/favicon.ico"
+EVESEARCH_ICON  = "https://eve-search.com/favicon.ico"
 
 
 def get_frequent_corp_changes(user_id):
@@ -27,12 +29,35 @@ def get_frequent_corp_changes(user_id):
 
     for char in characters:
         char_name = str(char.character)
+        char_id   = char.character.character_id
         try:
             response = esi.client.Character.get_characters_character_id_corporationhistory(
                 character_id=char.character.character_id
             ).results()
         except Exception:
             continue
+
+        char_links = (
+            f'<a href="https://zkillboard.com/character/{char_id}/" target="_blank">'
+            f'<img src="{ZKILL_ICON}" width="16" height="16" '
+            f'style="margin-left:4px;vertical-align:middle;"/></a>'
+            f'<a href="https://evewho.com/character/{char_id}" target="_blank">'
+            f'<img src="{EVEWHO_ICON}" width="16" height="16" '
+            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            f'<a href="https://www.eve411.com/character/{char_id}" target="_blank">'
+            f'<img src="{EVE411_ICON}" width="16" height="16" '
+            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            # Eve-Online forums user pages use the character name slug:
+            f'<a href="https://forums.eveonline.com/u/{char_name.replace(" ", "_")}/summary" '
+            f'target="_blank">'
+            f'<img src="{FORUMS_ICON}" width="16" height="16" '
+            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            # and eve-search needs URL‐encoded name:
+            f'<a href="https://eve-search.com/search/author/{char_name.replace(" ", "%20")}" '
+            f'target="_blank">'
+            f'<img src="{EVESEARCH_ICON}" width="16" height="16" '
+            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+        )
 
         history = list(reversed(response))
         rows = []
@@ -109,7 +134,7 @@ def get_frequent_corp_changes(user_id):
                 'dur_color': dur_color,
             })
 
-        html += f"<h3>{char_name}</h3>"
+        html += format_html("<h3>{} {}</h3>", char_name, format_html(char_links))
         html += '<table class="table table-striped">'
         html += '<thead><tr><th>Corporation</th><th>Membership</th><th>Alliance(s)</th><th>Alliance Dates</th><th>Time in Corp</th></tr></thead><tbody>'
         for r in rows:
