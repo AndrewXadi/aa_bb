@@ -411,15 +411,15 @@ def BB_run_regular_updates():
                     if status.has_sus_trans != has_sus_trans:
                         changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '❌'}")
                     logger.info(f"{char_name} status changed")
-
-                    if new_links:
-                        changes.append(f"## New Sus Transactions @here:")
-                        for issuer_id in new_links:
-                            res = sus_trans_result[issuer_id]
-                            ping = f""
-                            if res.startswith("- A -"):
-                                ping = ""
-                            changes.append(f"{res} {ping}")
+                    changes.append(f"## New Sus Transactions @here:\n{link_list}")
+                    #if new_links:
+                    #    changes.append(f"## New Sus Transactions @here:")
+                    #    for issuer_id in new_links:
+                    #        res = sus_trans_result[issuer_id]
+                    #        ping = f""
+                    #        if res.startswith("- A -"):
+                    #            ping = ""
+                    #        changes.append(f"{res} {ping}")
 
                     status.has_sus_trans = has_sus_trans
                     status.sus_trans = sus_trans_result
