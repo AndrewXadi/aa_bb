@@ -241,12 +241,12 @@ def get_user_hostile_notifications(user_id: int) -> dict[int, str]:
             alerts.append(f"**{cname}** is on blacklist")
 
         # 2) Hostile corporation check (characters & corporations)
-        if ctype in ('character', 'corporation') and coid is not 0:
+        if ctype in ('character', 'corporation') and coid != 0:
             if str(coid) in hostile_corps:
                 alerts.append(f"corporation **{corp_name}** is on hostile list")
 
         # 3) Hostile alliance check (characters, corporations & alliances)
-        if aid is not 0 and str(aid) in hostile_allis:
+        if aid != 0 and str(aid) in hostile_allis:
             alerts.append(f"alliance **{alli_name}** is on hostile list")
 
         if alerts:

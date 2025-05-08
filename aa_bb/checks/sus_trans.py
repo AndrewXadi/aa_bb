@@ -189,7 +189,10 @@ def render_transactions(user_id: int) -> str:
                 style = 'color: red;'
             if col.endswith('alliance') and t.get(col + '_id') and str(t[col + '_id']) in BigBrotherConfig.get_solo().hostile_alliances:
                 style = 'color: red;'
-            parts.append(f'<td{f" style=\"{style}\"" if style else ""}>{val}</td>')
+            def make_td(val, style=""):
+                style_attr = f' style="{style}"' if style else ""
+                return f"<td{style_attr}>{val}</td>"
+            parts.append(make_td(val, style))
         parts.append('</tr>')
 
     parts.extend(['</tbody>','</table>'])
