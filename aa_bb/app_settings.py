@@ -167,11 +167,11 @@ def get_character_id(name: str) -> int | None:
         logger.error(f"Character lookup failed for '{name}': {e}")
         return None
 
-# A simple time-based LRU
-_CACHE: Dict[int, Dict] = {}
+# A simple time-based LRU cache
+_CACHE: Dict[Tuple[int, datetime], Dict] = {}
 _EXPIRY = timedelta(hours=24)
 
-def get_entity_info(entity_id: int, as_of: timezone) -> Dict:
+def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
     """
     Returns a dict:
       {
@@ -183,36 +183,47 @@ def get_entity_info(entity_id: int, as_of: timezone) -> Dict:
         'alli_name': str,
         'timestamp': datetime  # for eviction
       }
-    Caches the result for 24h.
+    Caches the result for 24 hours.
     """
     now = timezone.now()
-    entry = _CACHE.get(entity_id)
-    if entry and now - entry['timestamp'] < _EXPIRY:
-        return entry
+    cache_key = (entity_id, as_of)
+    entry = _CACHE.get(cache_key)
 
-    # Otherwise compute fresh:
+    if entry:
+        if now - entry['timestamp'] < _EXPIRY:
+            logger.info(f"Cache hit for entity_id={entity_id} at as_of={as_of}")
+            return entry
+        else:
+            logger.info(f"Cache expired for entity_id={entity_id} at as_of={as_of}")
+            del _CACHE[cache_key]
+
+    # Compute fresh data
     etype = get_eve_entity_type(entity_id)
-    name, corp_id, corp_name, alli_id, alli_name = '-', None, '-', None, '-'
+    name = '-'
+    corp_id: Optional[int] = None
+    corp_name = '-'
+    alli_id: Optional[int] = None
+    alli_name = '-'
 
     if etype == 'character':
         name = resolve_character_name(entity_id)
-        emp  = get_character_employment(entity_id)
-        rec  = _find_employment_at(emp, as_of)
+        emp = get_character_employment(entity_id)
+        rec = _find_employment_at(emp, as_of)
         if rec:
-            corp_id   = rec['corporation_id']
+            corp_id = rec['corporation_id']
             corp_name = rec['corporation_name']
-            alli_id   = _find_alliance_at(rec['alliance_history'], as_of)
+            alli_id = _find_alliance_at(rec.get('alliance_history', []), as_of)
             if alli_id:
                 alli_name = resolve_alliance_name(alli_id)
     elif etype == 'corporation':
-        corp_id   = entity_id
+        corp_id = entity_id
         corp_name = resolve_corporation_name(entity_id)
-        hist      = get_alliance_history_for_corp(entity_id)
-        alli_id   = _find_alliance_at(hist, as_of)
+        hist = get_alliance_history_for_corp(entity_id)
+        alli_id = _find_alliance_at(hist, as_of)
         if alli_id:
             alli_name = resolve_alliance_name(alli_id)
     elif etype == 'alliance':
-        alli_id   = entity_id
+        alli_id = entity_id
         alli_name = resolve_alliance_name(entity_id)
 
     info = {
@@ -224,7 +235,8 @@ def get_entity_info(entity_id: int, as_of: timezone) -> Dict:
         'alli_name': alli_name,
         'timestamp': now,
     }
-    _CACHE[entity_id] = info
+
+    _CACHE[cache_key] = info
     return info
 
 def get_character_employment(character_or_id) -> list[dict]:

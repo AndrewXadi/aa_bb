@@ -167,16 +167,16 @@ def warm_entity_cache_task(self, user_id):
     # Build list of (entity_id, timestamp)
     entries = []
     for c in gather_user_contracts(user_id):
-        entries.append((c.issuer_id, getattr(c, "date_issued", timezone.now())))
+        entries.append((c.issuer_id, getattr(c, "date_issued")))
         assignee = c.assignee_id or c.acceptor_id
-        entries.append((assignee, getattr(c, "date_issued", timezone.now())))
+        entries.append((assignee, getattr(c, "date_issued")))
     for m in gather_user_mails(user_id):
-        entries.append((m.from_id, getattr(m, "timestamp", timezone.now())))
+        entries.append((m.from_id, getattr(m, "timestamp")))
         for mr in m.recipients.all():
-            entries.append((mr.recipient_id, getattr(m, "timestamp", timezone.now())))
+            entries.append((mr.recipient_id, getattr(m, "timestamp")))
     for t in gather_user_transactions(user_id):
-        entries.append((t.first_party_id, getattr(t, "date", timezone.now())))
-        entries.append((t.second_party_id, getattr(t, "date", timezone.now())))
+        entries.append((t.first_party_id, getattr(t, "date")))
+        entries.append((t.second_party_id, getattr(t, "date")))
 
     total = len(entries)
     logger.info(f"Starting warm cache for {user_main} ({total} entries)")

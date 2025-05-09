@@ -179,7 +179,7 @@ async function loadSuspiciousContracts(option, idx) {
     source.onerror = err => {
       source.close();
       const errorMessages = document.getElementById('errorMessages');
-      errorMessages.innerHTML = '<div class="alert alert-warning">Contract stream failed, wait a minute for pre fetch to finish and load the page again.</div>';
+      errorMessages.innerHTML = '<div class="alert alert-warning">Contract stream failed, please wait for the cache to warm up and try again.</div>';
       updateCardStatus(idx, true);
       reject(err);
     };
@@ -249,7 +249,7 @@ async function loadSuspiciousMails(option, idx) {
     source.onerror = err => {
       source.close();
       const errorMessages = document.getElementById('errorMessages');
-      errorMessages.innerHTML = '<div class="alert alert-warning">Mail stream failed, wait a minute for pre fetch to finish and load the page again.</div>';
+      errorMessages.innerHTML = '<div class="alert alert-warning">Mail stream failed, please wait for the cache to warm up and try again.</div>';
       updateCardStatus(idx, true);
       reject(err);
     };
@@ -318,7 +318,7 @@ async function loadSuspiciousTransactions(option, idx) {
     source.onerror = err => {
       source.close();
       document.getElementById('errorMessages').innerHTML =
-        '<div class="alert alert-warning">Transaction stream failed; try again later.</div>';
+        '<div class="alert alert-warning">Transaction stream failed, please wait for the cache to warm up and try again.</div>';
       updateCardStatus(idx, true);
       reject(err);
     };
@@ -463,7 +463,7 @@ async function fetchProgress() {
 
 // Kick off immediately and then every 5s
 fetchProgress();
-setInterval(fetchProgress, 5000);
+setInterval(fetchProgress, 500);
 });
 </script>
 {% endblock %}
