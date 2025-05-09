@@ -398,13 +398,13 @@ def BB_run_regular_updates():
                     new_links = new_ids - old_ids
                     if new_links:
                         link_list = "\n".join(
-                            f"🔗 {sus_trans_result[issuer_id]}" for issuer_id in new_links
+                            f"{sus_trans_result[issuer_id]}" for issuer_id in new_links
                         )
                         logger.info(f"{char_name} new trans:\n{link_list}")
 
                     if old_ids:
                         old_link_list = "\n".join(
-                            f"🔗 {old_trans[issuer_id]}" for issuer_id in old_ids if issuer_id in old_trans
+                            f"{old_trans[issuer_id]}" for issuer_id in old_ids if issuer_id in old_trans
                         )
                         logger.info(f"{char_name} old trans:\n{old_link_list}")
 

@@ -243,6 +243,7 @@ def get_user_hostile_transactions(user_id: int) -> Dict[int, str]:
             note = (
                 f"- Transaction on {tx['date']}; "
                 f"amount {tx['amount']}, "
+                f"type {tx['type']}, "
                 f"from {tx['first_party_name']}({tx['first_party_corporation']}/"
                   f"{tx['first_party_alliance']}), "
                 f"to {tx['second_party_name']}({tx['second_party_corporation']},"
