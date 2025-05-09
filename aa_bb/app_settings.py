@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError
-from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types
+from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache
 from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
@@ -167,11 +167,9 @@ def get_character_id(name: str) -> int | None:
         logger.error(f"Character lookup failed for '{name}': {e}")
         return None
 
-# A simple time-based LRU cache
-_CACHE: Dict[Tuple[int, datetime], Dict] = {}
-_EXPIRY = timedelta(hours=24)
+_EXPIRY = timedelta(hours=2)
 
-def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
+def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
     """
     Returns a dict:
       {
@@ -181,62 +179,69 @@ def get_entity_info(entity_id: int, as_of: datetime) -> Dict:
         'corp_name': str,
         'alli_id': Optional[int],
         'alli_name': str,
-        'timestamp': datetime  # for eviction
       }
-    Caches the result for 24 hours.
+    Caches the result in the DB for 2 hours.
     """
     now = timezone.now()
-    cache_key = (entity_id, as_of)
-    entry = _CACHE.get(cache_key)
 
-    if entry:
-        if now - entry['timestamp'] < _EXPIRY:
-            logger.info(f"Cache hit for entity_id={entity_id} at as_of={as_of}")
-            return entry
+    # 1) Attempt to fetch fresh-enough cache entry
+    try:
+        cache = EntityInfoCache.objects.get(entity_id=entity_id, as_of=as_of)
+        if now - cache.updated < _EXPIRY:
+            logger.debug(f"cache hit: entity={entity_id} @ {as_of}")
+            return cache.data
         else:
-            logger.info(f"Cache expired for entity_id={entity_id} at as_of={as_of}")
-            del _CACHE[cache_key]
+            logger.debug(f"cache stale: entity={entity_id} @ {as_of}, expired {cache.updated}")
+            cache.delete()
+    except EntityInfoCache.DoesNotExist:
+        pass
 
-    # Compute fresh data
+    # 2) Compute fresh info
     etype = get_eve_entity_type(entity_id)
-    name = '-'
-    corp_id: Optional[int] = None
-    corp_name = '-'
-    alli_id: Optional[int] = None
-    alli_name = '-'
+    name = corp_name = alli_name = "-"
+    corp_id = alli_id = None
 
-    if etype == 'character':
+    if etype == "character":
         name = resolve_character_name(entity_id)
         emp = get_character_employment(entity_id)
         rec = _find_employment_at(emp, as_of)
         if rec:
-            corp_id = rec['corporation_id']
-            corp_name = rec['corporation_name']
-            alli_id = _find_alliance_at(rec.get('alliance_history', []), as_of)
+            corp_id   = rec["corporation_id"]
+            corp_name = rec["corporation_name"]
+            alli_id   = _find_alliance_at(rec.get("alliance_history", []), as_of)
             if alli_id:
                 alli_name = resolve_alliance_name(alli_id)
-    elif etype == 'corporation':
-        corp_id = entity_id
+
+    elif etype == "corporation":
+        corp_id   = entity_id
         corp_name = resolve_corporation_name(entity_id)
-        hist = get_alliance_history_for_corp(entity_id)
-        alli_id = _find_alliance_at(hist, as_of)
+        hist      = get_alliance_history_for_corp(entity_id)
+        alli_id   = _find_alliance_at(hist, as_of)
         if alli_id:
             alli_name = resolve_alliance_name(alli_id)
-    elif etype == 'alliance':
-        alli_id = entity_id
+
+    elif etype == "alliance":
+        alli_id   = entity_id
         alli_name = resolve_alliance_name(entity_id)
 
     info = {
-        'name': name,
-        'type': etype,
-        'corp_id': corp_id,
-        'corp_name': corp_name,
-        'alli_id': alli_id,
-        'alli_name': alli_name,
-        'timestamp': now,
+        "name":      name,
+        "type":      etype,
+        "corp_id":   corp_id,
+        "corp_name": corp_name,
+        "alli_id":   alli_id,
+        "alli_name": alli_name,
     }
 
-    _CACHE[cache_key] = info
+    # 3) Store in cache table (create or update)
+    #    wrap in transaction to avoid race conditions
+    with transaction.atomic():
+        EntityInfoCache.objects.update_or_create(
+            entity_id=entity_id,
+            as_of=as_of,
+            defaults={"data": info}
+        )
+
     return info
 
 def get_character_employment(character_or_id) -> list[dict]:

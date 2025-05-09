@@ -419,3 +419,17 @@ class WarmProgress(models.Model):
 
     def __str__(self):
         return f"{self.user_main}: {self.current}/{self.total}"
+    
+
+class EntityInfoCache(models.Model):
+    entity_id  = models.IntegerField()
+    as_of      = models.DateTimeField()
+    data       = JSONField()
+    updated    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("entity_id", "as_of")
+        indexes = [
+            models.Index(fields=["entity_id", "as_of"]),
+            models.Index(fields=["updated"]),
+        ]

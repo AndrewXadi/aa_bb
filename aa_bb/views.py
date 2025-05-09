@@ -11,7 +11,7 @@ from django.http import (
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
-
+import time
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from django_celery_beat.models import PeriodicTask
 from django.utils.safestring import mark_safe
@@ -158,11 +158,39 @@ def warm_entity_cache_task(self, user_id):
     Track progress in the DB via WarmProgress.
     """
     user_main = get_main_character_name(user_id) or str(user_id)
+    qs = WarmProgress.objects.all()
+    users = [
+        {"user": wp.user_main, "current": wp.current, "total": wp.total}
+        for wp in qs
+    ]
+    # Check for existing progress entry
+    try:
+        progress = WarmProgress.objects.get(user_main=user_main)
+    except WarmProgress.DoesNotExist:
+        progress = None
 
-    # Abort if already warming
-    if WarmProgress.objects.filter(user_main=user_main).exists() and WarmProgress.objects.get(user_main=user_main).total > 0:
-        logger.info(f"Aborting: {user_main} already warming.")
-        raise Ignore(f"Task for {user_main} is already running.")
+    if progress and progress.total > 0:
+        first_current = progress.current
+        logger.info(f"[{user_main}] detected in-progress run (current={first_current}); probing…")
+        time.sleep(20)
+
+        # re-fetch to see if it's moved
+        try:
+            progress = WarmProgress.objects.get(user_main=user_main)
+            second_current = progress.current
+        except WarmProgress.DoesNotExist:
+            second_current = None
+
+        # Now *abort* if there *was* progress; otherwise continue
+        if second_current != first_current:
+            logger.info(
+                f"[{user_main}] progress advanced from {first_current} to {second_current}; aborting new task."
+            )
+            raise Ignore(f"Task for {user_main} is already running.")
+        else:
+            logger.info(
+                f"[{user_main}] no progress in 20 s (still {first_current}); continuing with new task."
+            )
 
     # Build list of (entity_id, timestamp)
     entries = []

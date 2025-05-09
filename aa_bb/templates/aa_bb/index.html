@@ -295,7 +295,7 @@ async function loadSuspiciousTransactions(option, idx) {
     source.addEventListener('progress', e => {
       const [done, total] = e.data.split(',').map(Number);
       showContract(
-        `Checked ${done}/${total}, hostile so far: ${hostileCount}`, 'info'
+        `Checked ${done}/${total} transactions, hostile so far: ${hostileCount}`, 'info'
       );
     });
 
