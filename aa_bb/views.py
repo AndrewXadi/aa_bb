@@ -50,12 +50,13 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
-from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info
-from .models import BigBrotherConfig
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name
+from .models import BigBrotherConfig, WarmProgress
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
 #from datetime import datetime
 from django.utils import timezone
 from celery import shared_task
+from celery.exceptions import Ignore
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -150,35 +151,104 @@ def warm_cache(request):
         return JsonResponse({"started": True})
     return JsonResponse({"error": "Unknown account"}, status=400)
 
-@shared_task
-def warm_entity_cache_task(user_id):
-    qs    = gather_user_mails(user_id)
-    qss    = gather_user_contracts(user_id)
-    qsss = gather_user_transactions(user_id)
-    unique_ids = set()
-    # map mail_id -> its timestamp for as_of
-    mail_timestamps = {}
-    for c in qss:
-        unique_ids.add(c.issuer_id)
-        mail_timestamps[c.contract_id] = getattr(c, "date_issued", timezone.now())
-        if c.assignee_id != 0:
-            assignee_id = c.assignee_id
-        else:
-            assignee_id = c.acceptor_id
-        unique_ids.add(assignee_id)
-    for m in qs:
-        unique_ids.add(m.from_id)
-        mail_timestamps[m.id_key] = getattr(m, "timestamp", timezone.now())
+@shared_task(bind=True)
+def warm_entity_cache_task(self, user_id):
+    """
+    Gather mails, contracts, transactions; warm entity cache.
+    Track progress in the DB via WarmProgress.
+    """
+    user_main = get_main_character_name(user_id) or str(user_id)
+
+    # Abort if already warming
+    if WarmProgress.objects.filter(user_main=user_main).exists() and WarmProgress.objects.get(user_main=user_main).total > 0:
+        logger.info(f"Aborting: {user_main} already warming.")
+        raise Ignore(f"Task for {user_main} is already running.")
+
+    # Build list of (entity_id, timestamp)
+    entries = []
+    for c in gather_user_contracts(user_id):
+        entries.append((c.issuer_id, getattr(c, "date_issued", timezone.now())))
+        assignee = c.assignee_id or c.acceptor_id
+        entries.append((assignee, getattr(c, "date_issued", timezone.now())))
+    for m in gather_user_mails(user_id):
+        entries.append((m.from_id, getattr(m, "timestamp", timezone.now())))
         for mr in m.recipients.all():
-            unique_ids.add(mr.recipient_id)
-    for c in qsss:
-        unique_ids.add(c.first_party_id)
-        mail_timestamps[c.entry_id] = getattr(c, "date", timezone.now())
-        unique_ids.add(c.second_party_id)
-    for eid in unique_ids:
-        ts = mail_timestamps.get(eid, timezone.now())
+            entries.append((mr.recipient_id, getattr(m, "timestamp", timezone.now())))
+    for t in gather_user_transactions(user_id):
+        entries.append((t.first_party_id, getattr(t, "date", timezone.now())))
+        entries.append((t.second_party_id, getattr(t, "date", timezone.now())))
+
+    total = len(entries)
+    logger.info(f"Starting warm cache for {user_main} ({total} entries)")
+
+    # Initialize or update the progress record
+    WarmProgress.objects.update_or_create(
+        user_main=user_main,
+        defaults={"current": 0, "total": total}
+    )
+
+    # Process each entry, updating the DB record
+    for idx, (eid, ts) in enumerate(entries, start=1):
+        WarmProgress.objects.filter(user_main=user_main).update(current=idx)
         get_entity_info(eid, ts)
 
+    # Clean up when done
+    WarmProgress.objects.filter(user_main=user_main).delete()
+    logger.info(f"Completed warm cache for {user_main}")
+    return total
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def warm_cache(request):
+    """
+    Endpoint to kick off warming for a given character name (option).
+    Immediately registers a WarmProgress row so queued tasks also appear.
+    """
+    option  = request.GET.get("option", "")
+    user_id = get_user_id(option)
+    if not user_id:
+        return JsonResponse({"error": "Unknown account"}, status=400)
+
+    # Pre-create progress record so queued jobs show up
+    user_main = get_main_character_name(user_id) or str(user_id)
+    WarmProgress.objects.get_or_create(
+        user_main=user_main,
+        defaults={"current": 0, "total": 0}
+    )
+
+    # Enqueue the celery task
+    warm_entity_cache_task.delay(user_id)
+    return JsonResponse({"started": True})
+
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def get_warm_progress(request):
+    """
+    AJAX endpoint returning all in-flight and queued warm-up info:
+      {
+        in_progress: bool,
+        users: [ { user, current, total }, … ],
+        queued: { count, names: [...] }
+      }
+    """
+    qs = WarmProgress.objects.all()
+    users = [
+        {"user": wp.user_main, "current": wp.current, "total": wp.total}
+        for wp in qs
+    ]
+    # Those still at current == 0 are queued/not yet started
+    queued_names = [wp.user_main for wp in qs if wp.current == 0]
+
+    #logger.debug(f"get_warm_progress → users={users}, queued={queued_names}")
+    return JsonResponse({
+        "in_progress": bool(users),
+        "users": users,
+        "queued": {
+            "count": len(queued_names),
+            "names": queued_names,
+        },
+    })
 
 # Index view
 @login_required

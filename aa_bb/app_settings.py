@@ -18,7 +18,8 @@ import time
 from bravado.exception import HTTPError
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
-
+from django.contrib.auth import get_user_model
+from allianceauth.framework.api.user import get_main_character_name_from_user
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
@@ -43,6 +44,13 @@ def _find_employment_at(employment: List[dict], date: datetime) -> Optional[dict
             return rec
     return None
 
+def get_main_character_name(user_id):
+    User = get_user_model()
+    try:
+        user = User.objects.get(id=user_id)
+        return get_main_character_name_from_user(user)
+    except User.DoesNotExist:
+        return None
 
 def _find_alliance_at(history: List[dict], date: datetime) -> Optional[int]:
     for i, rec in enumerate(history):

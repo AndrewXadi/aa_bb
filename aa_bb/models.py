@@ -409,3 +409,13 @@ class SusTransactionNote(models.Model):
 
     def __str__(self):
         return f"Transaction {self.transaction.entry_id} note for user {self.user_id}"
+
+
+class WarmProgress(models.Model):
+    user_main = models.CharField(max_length=100, unique=True)
+    current   = models.PositiveIntegerField()
+    total     = models.PositiveIntegerField()
+    updated   = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user_main}: {self.current}/{self.total}"
