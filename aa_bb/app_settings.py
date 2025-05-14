@@ -167,7 +167,7 @@ def get_character_id(name: str) -> int | None:
         logger.error(f"Character lookup failed for '{name}': {e}")
         return None
 
-_EXPIRY = timedelta(hours=2)
+_EXPIRY = timedelta(days=30)
 
 def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
     """

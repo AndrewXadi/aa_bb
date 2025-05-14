@@ -195,7 +195,8 @@ def warm_entity_cache_task(self, user_id):
     # Build list of (entity_id, timestamp)
     entries = []
     for c in gather_user_contracts(user_id):
-        entries.append((c.issuer_id, getattr(c, "date_issued")))
+        issuer_id = get_character_id(c.issuer_name)
+        entries.append((issuer_id, getattr(c, "date_issued")))
         assignee = c.assignee_id or c.acceptor_id
         entries.append((assignee, getattr(c, "date_issued")))
     for m in gather_user_mails(user_id):
