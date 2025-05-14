@@ -94,7 +94,7 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
             'issuer_corporation':       iinfo["corp_name"],
             'issuer_corporation_id':    iinfo["corp_id"],
             'issuer_alliance':          iinfo["alli_name"],
-            'issuer_alliance_id':       ainfo["alli_id"],
+            'issuer_alliance_id':       iinfo["alli_id"],
             'assignee_name':            ainfo["name"],
             'assignee_id':              assignee_id,
             'assignee_corporation':     ainfo["corp_name"],

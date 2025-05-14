@@ -53,6 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     "sender_name", "sender_corporation", "sender_alliance",
     "recipient_names", "recipient_corps", "recipient_alliances", "status"
   ];
+  const CONTR_VISIBLE = [
+    "issued_date", "end_date",
+    "contract_type", "issuer_name", "issuer_corporation",
+    "issuer_alliance", "assignee_name", "assignee_corporation",
+    "assignee_alliance", "status"
+  ];
   const TOTAL_CARDS      = CARD_DEFINITIONS.length;
   const SUS_CONTR_KEY    = 'sus_contr';
   let loadedNonSus       = 0;
@@ -121,10 +127,13 @@ async function loadSuspiciousContracts(option, idx) {
   const cardBody = document.querySelector(`#collapse${idx} .card-body`);
   cardBody.innerHTML = `
     <table class="table table-striped">
-      <thead><tr id="contracts-header"></tr></thead>
+      <thead>
+        <tr id="contracts-header">
+          ${CONTR_VISIBLE.map(h => `<th>${h.replace(/_/g,' ')}</th>`).join('')}
+        </tr>
+      </thead>
       <tbody id="contracts-body"></tbody>
-    </table>
-  `;
+    </table>`
 
   return new Promise((resolve, reject) => {
     const source = new EventSource(

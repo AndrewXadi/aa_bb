@@ -50,7 +50,7 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
-from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id
 from .models import BigBrotherConfig, WarmProgress
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
 #from datetime import datetime
@@ -407,49 +407,62 @@ def stream_contracts_sse(request: WSGIRequest):
             '<p>No contracts found.</p>', content_type='text/html'
         )
 
-    # Prepare header list once
-    # We peek at one hydrated row to determine headers:
-    sample_batch = qs[:1]
-    sample_map   = get_user_contracts(sample_batch)
-    sample_row   = next(iter(sample_map.values()))
-    HIDDEN       = {
-        'assignee_alliance_id','assignee_corporation_id',
-        'issuer_alliance_id','issuer_corporation_id',
-        'assignee_id','issuer_id','contract_id'
-    }
-    headers = [h for h in sample_row.keys() if h not in HIDDEN and h != 'cell_styles']
-
     def generator():
         # Initial SSE heartbeat
         yield ": ok\n\n"
         processed = hostile_count = 0
 
-        # Stream header once as an SSE event
-        header_html = (
-            "<tr>" +
-            "".join(f"<th>{html.escape(h.replace('_',' ').title())}</th>" for h in headers) +
-            "</tr>"
-        )
-        yield f"event: header\ndata:{json.dumps(header_html)}\n\n"
-
-        for contract in qs:
+        for c in qs:
             processed += 1
             # Ping to keep connection alive
             yield ": ping\n\n"
 
+            issued = getattr(c, "issued_date", timezone.now())
+            issuer_id = get_character_id(c.issuer_name)
+            yield ": ping\n\n"
+            cid = c.contract_id
+            if c.assignee_id != 0:
+                assignee_id = c.assignee_id
+            else:
+                assignee_id = c.acceptor_id
+            yield ": ping\n\n"
+            iinfo     = get_entity_info(issuer_id, issued)
+            yield ": ping\n\n"
+            ainfo     = get_entity_info(assignee_id, issued)
+            yield ": ping\n\n"
+
             # Hydrate just this one
-            batch_map = get_user_contracts([contract])
-            row = next(iter(batch_map.values()))
+
+            row = {
+                'contract_id':              cid,
+                'issued_date':              issued,
+                'end_date':                 c.date_completed or c.date_expired,
+                'contract_type':            c.contract_type,
+                'issuer_name':              iinfo["name"],
+                'issuer_id':                issuer_id,
+                'issuer_corporation':       iinfo["corp_name"],
+                'issuer_corporation_id':    iinfo["corp_id"],
+                'issuer_alliance':          iinfo["alli_name"],
+                'issuer_alliance_id':       iinfo["alli_id"],
+                'assignee_name':            ainfo["name"],
+                'assignee_id':              assignee_id,
+                'assignee_corporation':     ainfo["corp_name"],
+                'assignee_corporation_id':  ainfo["corp_id"],
+                'assignee_alliance':        ainfo["alli_name"],
+                'assignee_alliance_id':     ainfo["alli_id"],
+                'status':                   c.status,
+            }
 
             style_map = {
                 col: get_cell_style_for_contract_row(col, row)
-                for col in headers
+                for col in row
             }
+            yield ": ping\n\n"
             row['cell_styles'] = style_map
 
             if is_contract_row_hostile(row):
                 hostile_count += 1
-                tr_html = _render_contract_row_html(row, headers)
+                tr_html = _render_contract_row_html(row)
                 yield f"event: contract\ndata:{json.dumps(tr_html)}\n\n"
 
             # Progress update
@@ -475,7 +488,14 @@ VISIBLE = [
     "content", "status",
 ]
 
-def _render_contract_row_html(row: dict, headers: list) -> str:
+VISIBLE_CONTR = [
+    "issued_date", "end_date",
+    "contract_type", "issuer_name", "issuer_corporation",
+    "issuer_alliance", "assignee_name", "assignee_corporation",
+    "assignee_alliance", "status",
+]
+
+def _render_contract_row_html(row: dict) -> str:
     """
     Render one hostile contract row, applying inline styles 
     from row['cell_styles'] *or* from any hidden-ID–based flags.
@@ -484,27 +504,22 @@ def _render_contract_row_html(row: dict, headers: list) -> str:
 
     # for any visible header like "issuer_name", map its ID column:
     def id_for(col):
-        # replace suffixes _name, _corporation, _alliance with _id
-        for suffix in ("_name", "_corporation", "_alliance"):
-            if col.endswith(suffix):
-                return col.replace(suffix, "_id")
+        if col.endswith("_name"):
+            return col[:-5] + "_id"
+        elif col.endswith("_corporation"):
+            return col[:-12] + "_corporation_id"
+        elif col.endswith("_alliance"):
+            return col[:-9] + "_alliance_id"
         return None
 
     style_map = row.get('cell_styles', {})
 
-    for col in headers:
+    for col in VISIBLE_CONTR:
         val   = row.get(col, "")
         text  = html.escape(str(val))
 
         # first, try the direct style:
-        style = style_map.get(col, "")
-
-        # if none, see if there's a hidden-ID style to inherit:
-        if not style:
-            id_col = id_for(col)
-            if id_col:
-                # compute style on the ID column if not already done
-                style = style_map.get(id_col) or get_cell_style_for_contract_row(id_col, row)
+        style = style_map.get(col, "") or ""
 
         # render the cell
         if style:

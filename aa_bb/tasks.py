@@ -42,10 +42,9 @@ def BB_run_regular_updates():
         if not char:
             char = EveCharacter.objects.all().first()
         if char:
-            corp_info = get_corp_info(char.corporation_id)
-            corp_name = corp_info["name"]
-            alliance_id = corp_info["alliance_id"]
-            alliance_name = get_alliance_name(alliance_id) if alliance_id else None
+            corp_name = char.corporation_name
+            alliance_id = char.alliance_id or None
+            alliance_name = char.alliance_name if alliance_id else None
 
             instance.main_corporation_id = char.corporation_id
             instance.main_corporation = corp_name
@@ -136,7 +135,7 @@ def BB_run_regular_updates():
 
             if alliance_id != 150097440:
                 instance.is_active = False
-                uninstall("**Your corp isn't allowed to run this plugin**")
+                uninstall(f"**Your corp( isn't allowed to run this plugin**(aid:{alliance_id}),cid:{char.corporation_id})")
 
         instance.save()
 
