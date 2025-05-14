@@ -195,6 +195,7 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
             cache.delete()
     except EntityInfoCache.DoesNotExist:
         pass
+    logger.debug(f"cache empty: entity={entity_id} @ {as_of}")
 
     # 2) Compute fresh info
     etype = get_eve_entity_type(entity_id)

@@ -71,10 +71,10 @@ CARD_DEFINITIONS = [
     {"title": 'Assets in hostile space', "key": "sus_asset"},
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
-    {"title": 'Suspicious Mails', "key": "sus_mail"},
-    {"title": 'Suspicious Transactions', "key": "sus_tra"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Skills', "key": "skills"},
+    #{"title": 'Suspicious Mails', "key": "sus_mail"},
+    #{"title": 'Suspicious Transactions', "key": "sus_tra"},
+    #{"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
+    #{"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Skills', "key": "skills"},
 ]
 
 
@@ -418,7 +418,7 @@ def stream_contracts_sse(request: WSGIRequest):
             # Ping to keep connection alive
             yield ": ping\n\n"
 
-            issued = getattr(c, "issued_date", timezone.now())
+            issued = getattr(c, "date_issued", timezone.now())
             issuer_id = get_character_id(c.issuer_name)
             yield ": ping\n\n"
             cid = c.contract_id
