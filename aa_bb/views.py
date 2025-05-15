@@ -569,12 +569,12 @@ def _render_mail_row_html(row: dict) -> str:
         else:
             # single-valued columns: subject, content, sender_*
             style = ""
+            if col.startswith("sender_"):
+                style = get_cell_style_for_mail_cell(col, row, None)
             if col == "sender_name":
                 for key in ["GM ","CCP "]:
                     if key in str(row["sender_name"]):
                         style = "color:red;"
-            if col.startswith("sender_"):
-                style = get_cell_style_for_mail_cell(col, row, None)
             if style:
                 cell_html = f'<span style="{style}">{html.escape(str(val))}</span>'
             else:

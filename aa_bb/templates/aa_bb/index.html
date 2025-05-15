@@ -170,7 +170,8 @@ async function loadSuspiciousContracts(option, idx) {
       source.close();
       hideContract();
       // If none hostile, ensure green
-      if (hostileCount === 0) {
+      const clean = hostileCount === 0;
+      if (clean) {
         updateCardStatus(idx, true);
 
         // **NEW**: inject a “no hostile” row
@@ -182,7 +183,7 @@ async function loadSuspiciousContracts(option, idx) {
            </td></tr>`
         );
       }
-      resolve();
+      resolve(clean);
     });
 
     source.onerror = err => {
@@ -240,7 +241,8 @@ async function loadSuspiciousMails(option, idx) {
       source.close();
       hideContract();
       // If we never saw any hostile, ensure the icon is green
-      if (hostileCount === 0) {
+      const clean = hostileCount === 0;
+      if (clean) {
         updateCardStatus(idx, true);
 
         // **NEW**: inject a “no hostile” mail row
@@ -252,7 +254,7 @@ async function loadSuspiciousMails(option, idx) {
            </td></tr>`
         );
       }
-      resolve();
+      resolve(clean);
     });
 
     source.onerror = err => {
@@ -311,7 +313,8 @@ async function loadSuspiciousTransactions(option, idx) {
     source.addEventListener('done', () => {
       source.close();
       hideContract();
-      if (hostileCount === 0) {
+      const clean = hostileCount === 0;
+      if (clean) {
         updateCardStatus(idx, true);
         // inject “no hostile” row
         const colspan = thead.querySelectorAll('th').length;
@@ -321,7 +324,7 @@ async function loadSuspiciousTransactions(option, idx) {
            </td></tr>`
         );
       }
-      resolve();
+      resolve(clean);
     });
 
     source.onerror = err => {
