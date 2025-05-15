@@ -402,16 +402,16 @@ def stream_contracts_sse(request: WSGIRequest):
 
     qs    = gather_user_contracts(user_id)
     total = qs.count()
-    if total == 0:
-        # No contracts
-        return StreamingHttpResponse(
-            '<p>No contracts found.</p>', content_type='text/html'
-        )
 
     def generator():
         # Initial SSE heartbeat
         yield ": ok\n\n"
         processed = hostile_count = 0
+
+        if total == 0:
+            # tell client we're done with zero hostile
+            yield "event: done\ndata:0\n\n"
+            return
 
         for c in qs:
             processed += 1
