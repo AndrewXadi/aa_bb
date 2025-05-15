@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def BB_run_regular_updates():
+    global update_check_time
     instance = BigBrotherConfig.get_solo()
     instance.is_active = True
 
