@@ -324,6 +324,14 @@ def get_user_characters(user_id: int) -> dict[int, str]:
         for co in qs
     }
 
+def format_int(value: int) -> str:
+    """
+    Format an integer SP value using dots as thousands separators.
+    E.g. 65861521 → "65.861.521"
+    """
+    # Python’s built-in uses commas; swap them out for dots
+    return f"{value:,}".replace(",", ".")
+
 def is_npc_corporation(corp_id):
     return 1_000_000 <= corp_id < 2_000_000
 

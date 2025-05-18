@@ -57,6 +57,7 @@ from corptools.models import Contract  # Ensure this is the correct import for C
 from django.utils import timezone
 from celery import shared_task
 from celery.exceptions import Ignore
+from aa_bb.checks.skills import render_user_skills_html
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -74,7 +75,7 @@ CARD_DEFINITIONS = [
     {"title": 'Suspicious Mails', "key": "sus_mail"},
     {"title": 'Suspicious Transactions', "key": "sus_tra"},
     {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Skills', "key": "skills"},
+    {"title": 'Skills', "key": "skills"},
 ]
 
 
@@ -831,6 +832,10 @@ def get_card_data(request, target_user_id: int, key: str):
     elif key == "cyno":
         content = cyno(target_user_id)
         status  = not content
+
+    elif key == "skills":
+        content = render_user_skills_html(target_user_id)
+        status  = not (content and "red" in content)
 
     else:
         content = "WiP"

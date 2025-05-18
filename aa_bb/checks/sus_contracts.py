@@ -297,11 +297,17 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
                 flags.append(f"Assignee corp **{c['assignee_corporation']}** is hostile")
             if str(c['assignee_alliance_id']) in hostile_allis:
                 flags.append(f"Assignee alliance **{c['assignee_alliance']}** is hostile")
+            flags_text = "\n    - ".join(flags)
 
             note_text = (
-                f"- Contract {cid} ({c['contract_type']}) "
-                f"issued {c['issued_date']}, ended {c['end_date']}; "
-                f"flags: {'; '.join(flags)}"
+                f"- **{c['contract_type']}**: "
+                f"\n  - issued **{c['issued_date']}**, "
+                f"\n  - ended **{c['end_date']}**, "
+                f"\n  - from **{c['issuer_name']}**(**{c['issuer_corporation']}**/"
+                  f"**{c['issuer_alliance']}**), "
+                f"\n  - to **{c['assignee_name']}**(**{c['assignee_corporation']}**/"
+                  f"**{c['assignee_alliance']}**); "
+                f"\n  - flags:\n    - {flags_text}"
             )
             SusContractNote.objects.update_or_create(
                 contract=pc,

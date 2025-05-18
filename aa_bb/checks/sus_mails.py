@@ -305,10 +305,14 @@ def get_user_hostile_mails(user_id: int) -> Dict[int, str]:
                 aid = m['recipient_alliance_ids'][idx]
                 if aid and str(aid) in cfg.hostile_alliances:
                     flags.append(f"Recipient alliance **{m['recipient_alliances'][idx]}** is hostile")
+            flags_text = "\n    - ".join(flags)
 
             note_text = (
-                f"- Mail {mid} ('{m['subject']}') sent {m['sent_date']}; "
-                f"flags: {'; '.join(flags)}"
+                f"- **'{m['subject']}'**: "
+                f"\n  - sent {m['sent_date']}; "
+                f"\n  - from **{m['sender_name']}**(**{m['sender_corporation']}**/"
+                  f"**{m['sender_alliance']}**), "
+                f"\n  - flags:\n    - {flags_text}"
             )
             SusMailNote.objects.update_or_create(
                 mail=pm,
