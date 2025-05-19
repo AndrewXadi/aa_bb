@@ -111,8 +111,8 @@ def BB_run_regular_updates():
                     time_left = timer_duration
                     send_message(
                         f"A newer version is available: {latest_version}. "
-                        f"You have {format_time_left(time_left)} remaining to update."
-                        f'As a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                        f"\nYou have {format_time_left(time_left)} remaining to update."
+                        f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                     )
                 else:
                     elapsed = now - update_check_time
@@ -120,13 +120,13 @@ def BB_run_regular_updates():
                         time_left = timer_duration - elapsed
                         send_message(
                             f"A newer version is available: {latest_version}. "
-                            f"You have {format_time_left(time_left)} remaining to update."
-                            f'As a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                            f"\nYou have {format_time_left(time_left)} remaining to update."
+                            f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                     else:
                         send_message(
                             f"The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
-                            f'As a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                            f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                         instance.is_active = False
 
@@ -206,11 +206,11 @@ def BB_run_regular_updates():
                     logger.info(f"{char_name} old links {link_list2}")
                     if status.has_awox_kills != has_awox and has_awox:
                         changes.append(f"## AwoX kills: {'🚩' if has_awox else '❌'}")
+                        status.has_awox_kills = has_awox
                         logger.info(f"{char_name} changed")
                     if new_links:
                         changes.append(f"## @everyone New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
-                    status.has_awox_kills = has_awox
                     old = set(status.awox_kill_links or [])
                     new = set(awox_links) - old
                     if new:
