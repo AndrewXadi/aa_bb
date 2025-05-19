@@ -18,7 +18,7 @@ from django.utils.safestring import mark_safe
 import json
 from aa_bb.checks.awox import render_awox_kills_html
 from aa_bb.checks.corp_changes import get_frequent_corp_changes
-from aa_bb.checks.cyno import cyno
+from aa_bb.checks.cyno import render_user_cyno_info_html
 from aa_bb.checks.hostile_assets import render_assets
 from aa_bb.checks.hostile_clones import render_clones
 from aa_bb.checks.imp_blacklist import generate_blacklist_links
@@ -74,7 +74,7 @@ CARD_DEFINITIONS = [
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
     {"title": 'Suspicious Mails', "key": "sus_mail"},
     {"title": 'Suspicious Transactions', "key": "sus_tra"},
-    {"title": '<span style=\"color: #FF0000;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
+    {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
     {"title": 'Skills', "key": "skills"},
 ]
 
@@ -830,8 +830,8 @@ def get_card_data(request, target_user_id: int, key: str):
         status  = not content
 
     elif key == "cyno":
-        content = cyno(target_user_id)
-        status  = not content
+        content = render_user_cyno_info_html(target_user_id)
+        status  = not (content and "red" in content)
 
     elif key == "skills":
         content = render_user_skills_html(target_user_id)

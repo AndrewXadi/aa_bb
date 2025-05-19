@@ -56,23 +56,19 @@ def get_user_skill_info(user_id: int, skill_id: int) -> dict:
 
     Characters without the given skill will show levels = 0.
     """
-    # 1) grab all of this user's owned characters
-    ownerships = CharacterOwnership.objects.filter(user_id=user_id)
-    # Map EVE character ID → ownership record (for name lookup)
-    ownership_map = {co.character_id: co for co in ownerships}
+    ownership_map = get_user_characters(user_id)
 
     # 2) fetch audits only for those character IDs
     audits = (
         CharacterAudit.objects
-        .filter(character_id__in=ownership_map.keys())
+        .filter(character__character_id__in=ownership_map.keys())
         .select_related("skilltotals")
         .prefetch_related("skill_set")
     )
 
     result = {}
     for audit in audits:
-        co = ownership_map[audit.character_id]
-        char_name = co.character_name
+        char_name = ownership_map[audit.character.character_id]
 
         # Try to pull the desired skill; if missing, default to zeros
         try:
@@ -124,6 +120,7 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
     # 3) Build the output dict
     for audit in audits:
         name = ownership_map[audit.character.character_id]
+        logger.info(name)
         totals = audit.skilltotals
 
         # Gather this character's skills into a lookup by skill_id
