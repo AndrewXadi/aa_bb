@@ -22,6 +22,13 @@ skill_ids = [
     28656,  # Black Ops
     12093,  # Covert Ops
     20533,  # Capital Ships
+    19719,  # Blockade Runners
+    12093,  # Stealth Bombers
+    30651,  # Stategic Cruisers
+    30652,  # Stategic Cruisers
+    30653,  # Stategic Cruisers
+    30650,  # Stategic Cruisers
+    33856,  # Expedition Frigates
 ]
 
 def get_skill_map():

@@ -3,6 +3,7 @@ from corptools.models import CharacterAudit, CharacterAsset
 from .skills import get_user_skill_info, get_char_age
 from ..app_settings import get_user_characters, format_int, get_character_id
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,13 @@ skill_ids = {
     "hic":    28609,  # Heavy Interdiction Cruisers
     "blops":  28656,  # Black Ops
     "covops": 12093,  # Covert Ops
+    "brun":   19719,  # Blockade Runners
+    "sbomb":  12093,  # Stealth Bombers
+    "calscru":30651,  # Stategic Cruisers
+    "galscru":30652,  # Stategic Cruisers
+    "minscru":30653,  # Stategic Cruisers
+    "amascru":30650,  # Stategic Cruisers
+    "expfrig":33856,  # Expedition Frigates
 }
 
 def get_user_cyno_info(user_id: int) -> dict:
@@ -32,6 +40,10 @@ def get_user_cyno_info(user_id: int) -> dict:
         "hic":    1,  # Heavy Interdiction Cruisers
         "blops":  1,  # Black Ops
         "covops": 1,  # Covert Ops
+        "brun":   1,  # Blockade Runners
+        "sbomb":  1,  # Stealth Bombers
+        "scru":   1,  # Stategic Cruisers
+        "expfrig":1,  # Exploration Frigates
     }
 
     # 1) grab all of this user's owned characters
@@ -62,19 +74,32 @@ def get_user_cyno_info(user_id: int) -> dict:
         i_hic = owns_items_in_group(cid, 894)
         i_blops = owns_items_in_group(cid, 898)
         i_covops = owns_items_in_group(cid, 830)
+        i_brun = owns_items_in_group(cid, 1202)
+        i_sbomb = owns_items_in_group(cid, 834)
+        i_scru = owns_items_in_group(cid, 963)
+        i_expfrig = owns_items_in_group(cid, 1283)
 
         # initialize all flags to 0
         char_dic = {
-            "s_cyno":  0,
-            "s_recon": 0,
-            "s_hic":   0,
-            "s_blops": 0,
-            "s_covops":0,
-            "i_recon": i_recon,
-            "i_hic":   i_hic,
-            "i_blops": i_blops,
-            "i_covops":i_covops,
-            "age":     age,
+            "s_cyno":    0,
+            "s_cov_cyno":0,
+            "s_recon":   0,
+            "s_hic":     0,
+            "s_blops":   0,
+            "s_covops":  0,
+            "s_brun":    0,
+            "s_sbomb":   0,
+            "s_scru":    0,
+            "s_expfrig": 0,
+            "i_recon":   i_recon,
+            "i_hic":     i_hic,
+            "i_blops":   i_blops,
+            "i_covops":  i_covops,
+            "i_brun":    i_brun,  
+            "i_sbomb":   i_sbomb,
+            "i_scru":    i_scru,
+            "i_expfrig": i_expfrig,
+            "age":       age,
             "can_light": False,
         }
 
@@ -84,17 +109,40 @@ def get_user_cyno_info(user_id: int) -> dict:
             info = data.get(name, {"trained_skill_level": 0, "active_skill_level": 0})
 
             # s_<skill>
-            if info["trained_skill_level"] >= lvl_req:
-                char_dic[f"s_{key}"] = 1
-            if info["active_skill_level"] >= lvl_req:
-                char_dic[f"s_{key}"] = 2
+            if key == "calscru" or key == "amascru" or key == "galscru" or key == "minscru":
+                if info["trained_skill_level"] >= lvl_req:
+                    char_dic[f"s_scru"] = 1
+                if info["active_skill_level"] >= lvl_req:
+                    char_dic[f"s_scru"] = 2
+            elif key == "cyno":
+                if info["trained_skill_level"] >= lvl_req:
+                    char_dic[f"s_{key}"] = 1
+                if info["active_skill_level"] >= lvl_req:
+                    char_dic[f"s_{key}"] = 2
+                if info["trained_skill_level"] == 5:
+                    char_dic[f"s_cov_{key}"] = 1
+                if info["active_skill_level"] == 5:
+                    char_dic[f"s_cov_{key}"] = 2
+            else:
+                if info["trained_skill_level"] >= lvl_req:
+                    char_dic[f"s_{key}"] = 1
+                if info["active_skill_level"] >= lvl_req:
+                    char_dic[f"s_{key}"] = 2
         if char_dic[f"s_cyno"] > 0 and char_dic[f"s_recon"] > 0 and char_dic[f"i_recon"] == True:
             char_dic[f"can_light"] = True
         if char_dic[f"s_cyno"] > 0 and char_dic[f"s_hic"] > 0 and char_dic[f"i_hic"] == True:
             char_dic[f"can_light"] = True
         if char_dic[f"s_cyno"] > 0 and char_dic[f"s_blops"] > 0 and char_dic[f"i_blops"] == True:
             char_dic[f"can_light"] = True
-        if char_dic[f"s_cyno"] > 0 and char_dic[f"s_covops"] > 0 and char_dic[f"i_covops"] == True:
+        if char_dic[f"s_cov_cyno"] > 0 and char_dic[f"s_covops"] > 0 and char_dic[f"i_covops"] == True:
+            char_dic[f"can_light"] = True
+        if char_dic[f"s_cov_cyno"] > 0 and char_dic[f"s_brun"] > 0 and char_dic[f"i_brun"] == True:
+            char_dic[f"can_light"] = True
+        if char_dic[f"s_cov_cyno"] > 0 and char_dic[f"s_sbomb"] > 0 and char_dic[f"i_sbomb"] == True:
+            char_dic[f"can_light"] = True
+        if char_dic[f"s_cov_cyno"] > 0 and char_dic[f"s_scru"] > 0 and char_dic[f"i_scru"] == True:
+            char_dic[f"can_light"] = True
+        if char_dic[f"s_cov_cyno"] > 0 and char_dic[f"s_expfrig"] > 0 and char_dic[f"i_expfrig"] == True:
             char_dic[f"can_light"] = True
         result[name] = char_dic
 
@@ -130,7 +178,7 @@ def render_user_cyno_info_html(user_id: int) -> str:
         <table class="table table-striped">
           <thead>
             <tr>
-              <th>Skill</th><th>Can use</th><th>Owns ships</th>
+              <th>Name</th><th>Can use</th><th>Owns ships</th>
             </tr>
           </thead>
           <tbody>
@@ -138,35 +186,51 @@ def render_user_cyno_info_html(user_id: int) -> str:
 
         # loop through each skill
         for key, label in (
-            ("cyno",   "Cynosural Field"),
-            ("recon",  "Recon"),
-            ("hic",    "HIC"),
-            ("blops",  "Black Ops"),
-            ("covops", "Covert Ops"),
+            ("cyno",     "Cynosural Field"),
+            ("cov_cyno", "Cynosural Field 5"),
+            ("recon",    "Recon"),
+            ("hic",      "HIC"),
+            ("blops",    "Black Ops"),
+            ("covops",   "Covert Ops"),
+            ("brun",     "Blockade Runners"),
+            ("sbomb",    "Stealth Bombers"),
+            ("scru",     "Stategic Cruisers"),
+            ("expfrig",  "Exploration Frigates"),
         ):
             s = info[f"s_{key}"]
             # map trained/active flag to human text
             if s == 0:
-                s_txt = "no"
+                s_txt = "False"
             elif s == 1:
-                s_txt = "yes but alpha"
+                s_txt = mark_safe('<span style="color:orange;">True (but alpha)</span>')
             else:  # s == 2
-                s_txt = "yes"
+                s_txt = mark_safe('<span style="color:red;">True</span>')
             # only cyno has no “owns” flag
-            owns = info.get(f"i_{key}", "")
+            if info.get(f"i_{key}", "") == True:
+                owns = mark_safe(f'<span style="color:red;">{info.get(f"i_{key}", "")}</span>')
+            else:
+                owns = f'{info.get(f"i_{key}", "")}'
             html += format_html(
                 "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
                 label, s_txt, owns
             )
 
         # add the “can light?” and age rows
+        if info["can_light"] == True:
+            can_light = mark_safe(f'<span style="color:red;">{info["can_light"]}</span>')
+        else:
+            can_light = f'{info["can_light"]}'
+        if info["age"] < 90:
+            age = mark_safe(f'<span style="color:red;">{info["age"]}</span>')
+        else:
+            age = f'{info["age"]}'
         html += format_html(
             "<tr><td>Can light?</td><td colspan='2'>{}</td></tr>",
-            info["can_light"]
+            can_light
         )
         html += format_html(
             "<tr><td>Age</td><td colspan='2'>{}</td></tr>",
-            info["age"]
+            age
         )
 
         # table end
