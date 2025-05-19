@@ -174,5 +174,5 @@ def render_user_cyno_info_html(user_id: int) -> str:
 
     return format_html(html)
 
-def cyno():
+def cyno(user_id):
     return False
