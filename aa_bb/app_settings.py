@@ -154,10 +154,13 @@ def get_character_id(name: str) -> int | None:
             
             # Save the new ID to the database for future use
             with transaction.atomic():
-                Character_names.objects.update_or_create(
-                    name=name,
-                    defaults={"id": char_id}
+                obj, created = Character_names.objects.get_or_create(
+                    id=char_id,
+                    defaults={"name": name}
                 )
+                if not created and obj.name != name:
+                    obj.name = name
+                    obj.save()
 
             return char_id
         
