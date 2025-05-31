@@ -4,7 +4,8 @@ from .models import BigBrotherConfig, UserStatus
 import logging
 from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id
 from aa_bb.checks.awox import  get_awox_kill_links
-from aa_bb.checks.cyno import cyno
+from aa_bb.checks.cyno import get_user_cyno_info
+from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids
 from aa_bb.checks.hostile_assets import get_hostile_asset_locations
 from aa_bb.checks.hostile_clones import get_hostile_clone_locations
 from aa_bb.checks.imp_blacklist import imp_bl
@@ -150,12 +151,13 @@ def BB_run_regular_updates():
                     continue
                 
                 pingroleID = instance.pingroleID
-                cyno_result = cyno(user_id)
                 imp_blacklist_result = imp_bl(user_id)
                 lawn_blacklist_result = lawn_bl(user_id)
                 game_time_notifications_result = game_time(user_id)
                 skill_injected_result = skill_injected(user_id)
 
+                cyno_result = get_user_cyno_info(user_id)
+                skills_result = get_multiple_user_skill_info(user_id, skill_ids)
                 awox_links = get_awox_kill_links(user_id)
                 hostile_clones_result = get_hostile_clone_locations(user_id)
                 hostile_assets_result = get_hostile_asset_locations(user_id)
@@ -164,12 +166,20 @@ def BB_run_regular_updates():
                 sus_mails_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_mails(user_id).items() }
                 sus_trans_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_transactions(user_id).items() }
 
-                has_cyno = cyno_result != None
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
                 has_game_time_notifications = game_time_notifications_result != None
                 has_skill_injected = skill_injected_result != None
                 
+                has_cyno = any(
+                    char_dic.get("can_light", False)
+                    for char_dic in (cyno_result or {}).values()
+                )
+                has_skills = any(
+                    entry[sid]["trained"] > 0 or entry[sid]["active"] > 0
+                    for entry in skills_result.values()
+                    for sid in skill_ids
+                )
                 has_awox = bool(awox_links)
                 has_hostile_clones = bool(hostile_clones_result)
                 has_hostile_assets = bool(hostile_assets_result)
@@ -191,6 +201,8 @@ def BB_run_regular_updates():
                 #status.sus_contacts = {}
                 #status.sus_contracts = {}
                 #status.sus_mails = {}
+                status.skills = {}
+                #status.cyno = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
 
@@ -220,9 +232,210 @@ def BB_run_regular_updates():
 
 
 
-                if status.has_cyno != has_cyno:
-                    changes.append(f"Cyno: {'🚩' if has_cyno else '❌'}")
-                    status.has_cyno = has_cyno
+                if status.has_cyno != has_cyno or set(cyno_result) != set(status.cyno or []):
+                    # 1) Flag change for top-level boolean
+                    if status.has_cyno != has_cyno:
+                        changes.append(f"Cyno: {'🚩' if has_cyno else '❌'}")
+                        status.has_cyno = has_cyno
+
+                    # 2) Grab the old vs. new JSON blobs
+                    old_cyno: dict = status.cyno or {}
+                    new_cyno: dict = cyno_result
+
+                    # Determine which character names actually changed
+                    changed_chars = []
+                    for char_namee, new_data in new_cyno.items():
+                        old_data = old_cyno.get(char_namee, {})
+                        if old_data != new_data:
+                            changed_chars.append(char_namee)
+
+                    # 3) If any changed, build one table per character
+                    if changed_chars:
+                        # Mapping for display names
+                        cyno_display = {
+                            "s_cyno": "Cyno Skill",
+                            "s_cov_cyno": "CovOps Cyno",
+                            "s_recon": "Recon Ships",
+                            "s_hic": "Heavy Interdiction",
+                            "s_blops": "Black Ops",
+                            "s_covops": "Covert Ops",
+                            "s_brun": "Blockade Runners",
+                            "s_sbomb": "Stealth Bombers",
+                            "s_scru": "Strat Cruisers",
+                            "s_expfrig": "Expedition Frigs",
+                            "i_recon":   "Has Recon",
+                            "i_hic":     "Has Hic",
+                            "i_blops":   "Has Blops",
+                            "i_covops":  "Has covops",
+                            "i_brun":    "Has blockade Runner",  
+                            "i_sbomb":   "Has bomber",
+                            "i_scru":    "Has strat crus",
+                            "i_expfrig": "Has exp frig",
+                        }
+
+                        # Column order
+                        cyno_keys = [
+                            "s_cyno", "s_cov_cyno", "s_recon", "s_hic", "s_blops",
+                            "s_covops", "s_brun", "s_sbomb", "s_scru", "s_expfrig",
+                            "i_recon", "i_hic", "i_blops", "i_covops", "i_brun",  
+                            "i_sbomb", "i_scru", "i_expfrig",
+                        ]
+
+                        for charname in changed_chars:
+                            old_entry = old_cyno.get(charname, {})
+                            new_entry = new_cyno.get(charname, {})
+                            anything = any(
+                                val in (1, 2, 3, 4, 5)
+                                for val in new_entry.values()
+                            )
+                            if anything == False:
+                                continue
+                            if new_entry.get("can_light", False) == True:
+                                pingrole = "@everyone"
+                            else:
+                                pingrole = ""
+
+                            changes.append(f"- **{charname}**{pingrole}:")
+                            table_lines = [
+                                "Value                  | Old | New (1 = trained but alpha, 2 = active)",
+                                "-----------------------------------"
+                            ]
+
+                            for key in cyno_keys:
+                                display = cyno_display.get(key, key)
+                                old_val = str(old_entry.get(key, 0))
+                                new_val = str(new_entry.get(key, 0))
+                                table_lines.append(f"{display.ljust(22)} | {old_val.ljust(3)} | {new_val.ljust(3)}")
+
+                            # Show can_light as a summary at bottom
+                            can_light_old = old_entry.get("can_light", False)
+                            can_light_new = new_entry.get("can_light", False)
+                            table_lines.append("")
+                            table_lines.append(f"{'Can Light':<22} | {'🚩' if can_light_old else '❌'} | {'🚩' if can_light_new else '❌'}")
+
+                            table_block = "```\n" + "\n".join(table_lines) + "\n```"
+                            changes.append(table_block)
+
+                    # 4) Save new blob
+                    status.cyno = new_cyno
+
+                if status.has_skills != has_skills or set(skills_result) != set(status.skills or []):
+                    # 1) If the boolean flag flipped, append the 🚩 / ❌ as before
+                    if status.has_skills != has_skills:
+                        changes.append(f"Has Skills: {'🚩' if has_skills else '❌'}")
+                        status.has_skills = has_skills
+
+                    # 2) Grab the old vs. new JSON blobs
+                    old_skills: dict = status.skills or {}
+                    new_skills: dict = skills_result
+
+                    # Determine which character names actually changed
+                    changed_chars = []
+                    for character_name, new_data in new_skills.items():
+                        # Defensive: ensure old_data is a dict; otherwise treat as empty
+                        old_data = old_skills.get(character_name)
+                        if not isinstance(old_data, dict):
+                            old_data = {}
+
+                        # Defensive: ensure new_data is a dict as well
+                        if not isinstance(new_data, dict):
+                            new_data = {}
+
+                        # If anything differs, we mark this character as “changed”
+                        if old_data != new_data:
+                            changed_chars.append(character_name)
+
+                    # 3) If any changed, build one table per character
+                    if changed_chars:
+                        # A mapping from skill_id → human-readable name
+                        skill_names = {
+                            3426:   "CPU Management",
+                            21603:  "Cynosural Field Theory",
+                            22761:  "Recon Ships",
+                            28609:  "Heavy Interdiction Cruisers",
+                            28656:  "Black Ops",
+                            12093:  "Covert Ops / Stealth Bombers",
+                            20533:  "Capital Ships",
+                            19719:  "Blockade Runners",
+                            30651:  "Caldari Strategic Cruisers",
+                            30652:  "Gallente Strategic Cruisers",
+                            30653:  "Minmatar Strategic Cruisers",
+                            30650:  "Amarr Strategic Cruisers",
+                            33856:  "Expedition Frigates",
+                        }
+
+                        # Keep the same order you gave, but dedupe 12093 once
+                        ordered_skill_ids = [
+                            3426, 21603, 22761, 28609, 28656,
+                            12093, 20533, 19719,
+                            30651, 30652, 30653, 30650, 33856,
+                        ]
+
+                        for charname in changed_chars:
+                            # Defensive retrieval of old vs. new
+                            raw_old = old_skills.get(charname)
+                            old_entry = raw_old if isinstance(raw_old, dict) else {}
+
+                            raw_new = new_skills.get(charname)
+                            new_entry = raw_new if isinstance(raw_new, dict) else {}
+                            anything = any(
+                                (
+                                    new_entry.get(sid, {"trained": 0, "active": 0})["trained"] > 0
+                                    or
+                                    new_entry.get(sid, {"trained": 0, "active": 0})["active"] > 0
+                                )
+                                for sid in ordered_skill_ids
+                            )
+                            if anything == False:
+                                continue
+                            logger.info(new_entry.values())
+
+
+                            # 3a) Append the “- **CharacterName**:” header
+                            changes.append(f"- **{charname}**:")
+
+                            # 3b) Build the table header and separator
+                            table_lines = [
+                                "Skill                           | Old (Trained/Active) | New (Trained/Active)",
+                                "------------------------------------------------------"
+                            ]
+
+                            # 3c) For each skill_id in order, look up old vs. new levels
+                            for sid in ordered_skill_ids:
+                                name = skill_names.get(sid, f"Skill ID {sid}")
+
+                                # Because JSONField stores keys as strings, do str(sid)
+                                old_skill = old_entry.get(str(sid), {"trained": 0, "active": 0})
+                                new_skill = new_entry.get(sid, {"trained": 0, "active": 0})
+
+                                # Defensive: if old_skill is not a dict, coerce it
+                                if not isinstance(old_skill, dict):
+                                    old_skill = {"trained": 0, "active": 0}
+                                if not isinstance(new_skill, dict):
+                                    new_skill = {"trained": 0, "active": 0}
+
+                                old_tr = old_skill.get("trained", 0)
+                                old_ac = old_skill.get("active", 0)
+                                new_tr = new_skill.get("trained", 0)
+                                new_ac = new_skill.get("active", 0)
+
+                                old_fmt = f"{old_tr}/{old_ac}"
+                                new_fmt = f"{new_tr}/{new_ac}"
+
+                                # Pad the skill name to 30 chars for alignment
+                                name_padded = name.ljust(30)
+
+                                # Pad the “trained/active” to at least 9 chars so columns line up
+                                table_lines.append(f"{name_padded} | {old_fmt.ljust(9)} | {new_fmt.ljust(9)}")
+
+                            # 3d) Wrap the lines in triple backticks
+                            table_block = "```\n" + "\n".join(table_lines) + "\n```"
+                            changes.append(table_block)
+
+                    # 4) Finally, write back the new blob so that next time “old” is fresh
+                    status.skills = new_skills
+                # …rest of your saving logic, e.g. status.save(), etc.
+                    
 
                 if status.has_hostile_assets != has_hostile_assets or set(hostile_assets_result) != set(status.hostile_assets or []):
                     # Compare and find new links
@@ -243,6 +456,7 @@ def BB_run_regular_updates():
                         logger.info(f"{char_name} new assets")
                     status.has_hostile_assets = has_hostile_assets
                     status.hostile_assets = hostile_assets_result
+
 
                 if status.has_hostile_clones != has_hostile_clones or set(hostile_clones_result) != set(status.hostile_clones or []):
                     # Compare and find new links

@@ -74,8 +74,9 @@ CARD_DEFINITIONS = [
     {"title": 'Suspicious Contracts', "key": "sus_contr"},
     {"title": 'Suspicious Mails', "key": "sus_mail"},
     {"title": 'Suspicious Transactions', "key": "sus_tra"},
-    {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>Cyno?', "key": "cyno"},
+    {"title": 'Cyno?', "key": "cyno"},
     {"title": 'Skills', "key": "skills"},
+    {"title": '<span style=\"color: Red;\"><b>WiP </b></span>Omega?', "key": "cyno"},
 ]
 
 
