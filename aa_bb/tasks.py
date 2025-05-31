@@ -18,6 +18,7 @@ from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from datetime import datetime, timedelta
 import time
+import traceback
 from . import __version__
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
@@ -201,7 +202,7 @@ def BB_run_regular_updates():
                 #status.sus_contacts = {}
                 #status.sus_contracts = {}
                 #status.sus_mails = {}
-                status.skills = {}
+                #status.skills = {}
                 #status.cyno = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
@@ -217,7 +218,7 @@ def BB_run_regular_updates():
                     link_list2 = "\n".join(f"- {link}" for link in old_links)
                     logger.info(f"{char_name} old links {link_list2}")
                     if status.has_awox_kills != has_awox and has_awox:
-                        changes.append(f"## AwoX kills: {'🚩' if has_awox else '❌'}")
+                        changes.append(f"## AwoX kills: {'🚩' if has_awox else '✖'}")
                         status.has_awox_kills = has_awox
                         logger.info(f"{char_name} changed")
                     if new_links:
@@ -230,12 +231,10 @@ def BB_run_regular_updates():
                         status.awox_kill_links = list(old | new)
                         status.save()
 
-
-
                 if status.has_cyno != has_cyno or set(cyno_result) != set(status.cyno or []):
                     # 1) Flag change for top-level boolean
                     if status.has_cyno != has_cyno:
-                        changes.append(f"Cyno: {'🚩' if has_cyno else '❌'}")
+                        changes.append(f"Cyno: {'🚩' if has_cyno else '✖'}")
                         status.has_cyno = has_cyno
 
                     # 2) Grab the old vs. new JSON blobs
@@ -311,7 +310,7 @@ def BB_run_regular_updates():
                             can_light_old = old_entry.get("can_light", False)
                             can_light_new = new_entry.get("can_light", False)
                             table_lines.append("")
-                            table_lines.append(f"{'Can Light':<22} | {'🚩' if can_light_old else '❌'} | {'🚩' if can_light_new else '❌'}")
+                            table_lines.append(f"{'Can Light':<22} | {'🚩' if can_light_old else '✖'} | {'🚩' if can_light_new else '✖'}")
 
                             table_block = "```\n" + "\n".join(table_lines) + "\n```"
                             changes.append(table_block)
@@ -319,10 +318,11 @@ def BB_run_regular_updates():
                     # 4) Save new blob
                     status.cyno = new_cyno
 
+
                 if status.has_skills != has_skills or set(skills_result) != set(status.skills or []):
-                    # 1) If the boolean flag flipped, append the 🚩 / ❌ as before
+                    # 1) If the boolean flag flipped, append the 🚩 / ✖ as before
                     if status.has_skills != has_skills:
-                        changes.append(f"Has Skills: {'🚩' if has_skills else '❌'}")
+                        changes.append(f"## Skills: {'🚩' if has_skills else '✖'}")
                         status.has_skills = has_skills
 
                     # 2) Grab the old vs. new JSON blobs
@@ -449,7 +449,7 @@ def BB_run_regular_updates():
                     link_list2 = "\n- ".join(f"🔗 {link}" for link in old_links)
                     logger.info(f"{char_name} old assets {link_list2}")
                     if status.has_hostile_assets != has_hostile_assets:
-                        changes.append(f"## Hostile Assets: {'🚩' if has_hostile_assets else '❌'}")
+                        changes.append(f"## Hostile Assets: {'🚩' if has_hostile_assets else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
                         changes.append(f"## <@&{pingroleID}> New Hostile Assets:\n{link_list}")
@@ -470,7 +470,7 @@ def BB_run_regular_updates():
                     link_list2 = "\n".join(f"🔗 {link}" for link in old_links)
                     logger.info(f"{char_name} old clones: {link_list2}")
                     if status.has_hostile_clones != has_hostile_clones:
-                        changes.append(f"## Hostile Clones: {'🚩' if has_hostile_clones else '❌'}")
+                        changes.append(f"## Hostile Clones: {'🚩' if has_hostile_clones else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
                         changes.append(f"## <@&{pingroleID}> New Hostile Clone(s):\n{link_list}")
@@ -479,19 +479,19 @@ def BB_run_regular_updates():
                     status.hostile_clones = hostile_clones_result
 
                 if status.has_imp_blacklist != has_imp_blacklist:
-                    changes.append(f"Imp Blacklist: {'🚩' if has_imp_blacklist else '❌'}")
+                    changes.append(f"Imp Blacklist: {'🚩' if has_imp_blacklist else '✖'}")
                     status.has_imp_blacklist = has_imp_blacklist
 
                 if status.has_lawn_blacklist != has_lawn_blacklist:
-                    changes.append(f"Lawn Backlist: {'🚩' if has_lawn_blacklist else '❌'}")
+                    changes.append(f"Lawn Backlist: {'🚩' if has_lawn_blacklist else '✖'}")
                     status.has_lawn_blacklist = has_lawn_blacklist
 
                 if status.has_game_time_notifications != has_game_time_notifications:
-                    changes.append(f"Game Time: {'🚩' if has_game_time_notifications else '❌'}")
+                    changes.append(f"Game Time: {'🚩' if has_game_time_notifications else '✖'}")
                     status.has_game_time_notifications = has_game_time_notifications
 
                 if status.has_skill_injected != has_skill_injected:
-                    changes.append(f"Skill Injected: {'🚩' if has_skill_injected else '❌'}")
+                    changes.append(f"Skill Injected: {'🚩' if has_skill_injected else '✖'}")
                     status.has_skill_injected = has_skill_injected
 
                 if status.has_sus_contacts != has_sus_contacts or set(sus_contacts_result) != set(as_dict(status.sus_contacts) or {}):
@@ -515,7 +515,7 @@ def BB_run_regular_updates():
                         logger.info(f"{char_name} old assets:\n{old_link_list}")
 
                     if status.has_sus_contacts != has_sus_contacts:
-                        changes.append(f"## Sus Contacts: {'🚩' if has_sus_contacts else '❌'}")
+                        changes.append(f"## Sus Contacts: {'🚩' if has_sus_contacts else '✖'}")
                     logger.info(f"{char_name} status changed")
 
                     if new_links:
@@ -551,7 +551,7 @@ def BB_run_regular_updates():
                         logger.info(f"{char_name} old assets:\n{old_link_list}")
 
                     if status.has_sus_contracts != has_sus_contracts:
-                        changes.append(f"## Sus Contracts: {'🚩' if has_sus_contracts else '❌'}")
+                        changes.append(f"## Sus Contracts: {'🚩' if has_sus_contracts else '✖'}")
                     logger.info(f"{char_name} status changed")
 
                     if new_links:
@@ -587,7 +587,7 @@ def BB_run_regular_updates():
                         logger.info(f"{char_name} old assets:\n{old_link_list}")
 
                     if status.has_sus_mails != has_sus_mails:
-                        changes.append(f"## Sus Mails: {'🚩' if has_sus_mails else '❌'}")
+                        changes.append(f"## Sus Mails: {'🚩' if has_sus_mails else '✖'}")
                     logger.info(f"{char_name} status changed")
 
                     if new_links:
@@ -623,7 +623,7 @@ def BB_run_regular_updates():
                         logger.info(f"{char_name} old trans:\n{old_link_list}")
 
                     if status.has_sus_trans != has_sus_trans:
-                        changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '❌'}")
+                        changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '✖'}")
                     logger.info(f"{char_name} status changed")
                     changes.append(f"## New Sus Transactions @here:\n{link_list}")
                     #if new_links:
@@ -652,7 +652,8 @@ def BB_run_regular_updates():
                 status.save()
 
     except Exception as e:
-        logger.error(f"Task failed: {e}")
+        logger.error("Task failed", exc_info=True)
         instance.is_active = False
         instance.save()
-        send_message(f"Big Brother encountered an unexpected error and disabled itself, please forward your aa worker.log and the error below to Andrew Xadi so he can fix it/n```{e}```")
+        tb_str = traceback.format_exc()
+        send_message(f"Big Brother encountered an unexpected error and disabled itself, please forward your aa worker.log and the error below to Andrew Xadi so he can fix it/n```{tb_str}```")
