@@ -655,5 +655,22 @@ def BB_run_regular_updates():
         logger.error("Task failed", exc_info=True)
         instance.is_active = False
         instance.save()
+        send_message(
+            "Big Brother encountered an unexpected error and disabled itself, "
+            "please forward your aa worker.log and the error below to Andrew Xadi"
+        )
+
         tb_str = traceback.format_exc()
-        send_message(f"Big Brother encountered an unexpected error and disabled itself, please forward your aa worker.log and the error below to Andrew Xadi so he can fix it/n```{tb_str}```")
+        max_chunk = 1000
+        start = 0
+        length = len(tb_str)
+
+        while start < length:
+            end = min(start + max_chunk, length)
+            if end < length:
+                nl = tb_str.rfind('\n', start, end)
+                if nl != -1 and nl > start:
+                    end = nl + 1
+            chunk = tb_str[start:end]
+            send_message(f"```{chunk}```")
+            start = end

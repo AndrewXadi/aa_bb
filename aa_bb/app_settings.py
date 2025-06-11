@@ -185,6 +185,11 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
       }
     Caches the result in the DB for 2 hours.
     """
+    if entity_id == None:
+        entity_id = 342545170
+        errent = True
+    else:
+        errent = False
     now = timezone.now()
 
     # 1) Attempt to fetch fresh-enough cache entry
@@ -245,6 +250,17 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
             as_of=as_of,
             defaults={"data": info}
         )
+
+    if errent:
+        errmsg = "Error: entity id provided is None "
+        info = {
+            "name":      errmsg,
+            "type":      etype,
+            "corp_id":   corp_id,
+            "corp_name": errmsg,
+            "alli_id":   alli_id,
+            "alli_name": errmsg,
+        }
 
     return info
 
