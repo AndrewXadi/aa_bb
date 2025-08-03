@@ -1,6 +1,6 @@
 from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter
-from .models import BigBrotherConfig, UserStatus
+from .models import BigBrotherConfig, UserStatus, Messages
 import logging
 from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id
 from aa_bb.checks.awox import  get_awox_kill_links
@@ -19,6 +19,7 @@ from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from datetime import datetime, timedelta
 import time
 import traceback
+import random
 from . import __version__
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
@@ -245,7 +246,16 @@ def BB_run_regular_updates():
                     changed_chars = []
                     for char_namee, new_data in new_cyno.items():
                         old_data = old_cyno.get(char_namee, {})
-                        if old_data != new_data:
+                        old_filtered = {k: v for k, v in old_data.items() if k != 'age'}
+                        new_filtered = {k: v for k, v in new_data.items() if k != 'age'}
+
+                        #logger.info(f"Comparing skills for character '{char_namee}':")
+                        #logger.info(f"Old data normalized: {old_filtered}")
+                        #logger.info(f"New data normalized: {new_filtered}")
+                        #from deepdiff import DeepDiff
+                        #diff = DeepDiff(old_filtered, new_filtered, ignore_order=True)
+                        #logger.info(f"Diff for '{char_namee}': {diff}")
+                        if old_filtered != new_filtered:
                             changed_chars.append(char_namee)
 
                     # 3) If any changed, build one table per character
@@ -331,6 +341,11 @@ def BB_run_regular_updates():
 
                     # Determine which character names actually changed
                     changed_chars = []
+                    def normalize_keys(d):
+                        return {
+                            str(k): v for k, v in d.items()
+                            if str(k) != "total_sp"
+                        }
                     for character_name, new_data in new_skills.items():
                         # Defensive: ensure old_data is a dict; otherwise treat as empty
                         old_data = old_skills.get(character_name)
@@ -341,8 +356,17 @@ def BB_run_regular_updates():
                         if not isinstance(new_data, dict):
                             new_data = {}
 
-                        # If anything differs, we mark this character as “changed”
-                        if old_data != new_data:
+                        old_data_norm = normalize_keys(old_data)
+                        new_data_norm = normalize_keys(new_data)
+
+                        #logger.info(f"Comparing skills for character '{character_name}':")
+                        #logger.info(f"Old data normalized: {old_data_norm}")
+                        #logger.info(f"New data normalized: {new_data_norm}")
+                        #from deepdiff import DeepDiff
+                        #diff = DeepDiff(old_data_norm, new_data_norm, ignore_order=True)
+                        #logger.info(f"Diff for '{character_name}': {diff}")
+
+                        if old_data_norm != new_data_norm:
                             changed_chars.append(character_name)
 
                     # 3) If any changed, build one table per character
@@ -674,3 +698,30 @@ def BB_run_regular_updates():
             chunk = tb_str[start:end]
             send_message(f"```{chunk}```")
             start = end
+
+@shared_task
+def BB_send_daily_messages():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.dailywebhook
+    enabled = config.are_daily_messages_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = Messages.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        Messages.objects.update(sent_in_cycle=False)
+        unsent_messages = Messages.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()

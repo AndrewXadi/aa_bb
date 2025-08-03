@@ -76,7 +76,6 @@ CARD_DEFINITIONS = [
     {"title": 'Suspicious Transactions', "key": "sus_tra"},
     {"title": 'Cyno?', "key": "cyno"},
     {"title": 'Skills', "key": "skills"},
-    {"title": '<span style=\"color: Red;\"><b>WiP </b></span>Omega?', "key": "cyno"},
 ]
 
 

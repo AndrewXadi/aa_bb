@@ -705,14 +705,17 @@ def validate_token_with_server(token, client_version=None, self_des=None, self_d
 _webhook_history = deque()  # stores timestamp floats of last webhook sends
 _channel_history = deque()  # stores timestamp floats of last channel sends
 
-def send_message(message: str):
+def send_message(message: str, hook: str = None):
     """
     Sends `message` via Discord webhook, splitting long messages,
     honoring Retry-After on 429, AND proactively rate-limiting:
       - ≤5 req per 2s
       - ≤30 msgs per 60s
     """
-    webhook_url = BigBrotherConfig.get_solo().webhook
+    if hook:
+        webhook_url = hook
+    else:
+        webhook_url = BigBrotherConfig.get_solo().webhook
     MAX_LEN     = 2000
     SPLIT_LEN   = 1900
 

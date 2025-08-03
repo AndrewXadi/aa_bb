@@ -5,7 +5,7 @@ from django.contrib import admin
 from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
-    BigBrotherConfig
+    BigBrotherConfig,Messages
 )
 
 @admin.register(BigBrotherConfig)
@@ -22,3 +22,7 @@ class BB_ConfigAdmin(SingletonModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Prevent deleting the singleton instance
         return True
+    
+@admin.register(Messages)
+class DailyMessageConfig(admin.ModelAdmin):
+    search_fields = ['text']

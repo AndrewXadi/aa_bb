@@ -100,11 +100,14 @@ def get_user_transactions(qs) -> Dict[int, Dict]:
 
         logger.info(f"first party:{first_party_id}, cid:{iinfo['corp_id']}, aid:{iinfo['alli_id']}, 2nd: {second_party_id}, cid:{ainfo['corp_id']}, aid:{ainfo['alli_id']}")
 
+        amount =  "{:,}".format(entry.amount)
+        balance =  "{:,}".format(entry.balance)
+
         result[tx_id] = {
             'entry_id': tx_id,
             'date': tx_date,
-            'amount': entry.amount,
-            'balance': entry.balance,
+            'amount': amount,
+            'balance': balance,
             'description': entry.description,
             'reason': entry.reason,
             'first_party_id': first_party_id,
@@ -130,12 +133,25 @@ def is_transaction_hostile(tx: dict) -> bool:
     """
     Mark transaction as hostile if first_party or second_party or corps/alliances are blacklisted
     """
+    cfg = BigBrotherConfig.get_solo()
     if check_char_corp_bl(tx.get('first_party_id')) or check_char_corp_bl(tx.get('second_party_id')):
         return True
+    wlcorp = set((cfg.whitelist_corporations or "").split(','))
+    wlali = set((cfg.whitelist_alliances or "").split(','))
+    fpcorp = str(tx.get('first_party_corporation_id') or '')
+    spcorp = str(tx.get('second_party_corporation_id') or '')
+    fpali = str(tx.get('first_party_alliance_id') or '')
+    spali = str(tx.get('second_party_alliance_id') or '')
+    # Check if both parties are whitelisted (corp OR alliance)
+    fp_whitelisted = fpcorp in wlcorp or fpali in wlali
+    sp_whitelisted = spcorp in wlcorp or spali in wlali
+    # logger.info(f"first party:{tx.get('first_party_id')}, cid:{fpcorp}, aid:{fpali}, fpwl:{fp_whitelisted}, 2nd: {tx.get('second_party_id')}, cid:{spcorp}, aid:{spali}, spwl:{sp_whitelisted}, wlali:{wlali}")
+
+    if fp_whitelisted and sp_whitelisted:
+        return False
     for key in SUS_TYPES:
         if key in tx.get('type'):
             return True
-    cfg = BigBrotherConfig.get_solo()
     for key in ('first_party_corporation_id', 'second_party_corporation_id'):
         if tx.get(key) and str(tx[key]) in cfg.hostile_corporations:
             return True

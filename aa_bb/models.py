@@ -53,6 +53,12 @@ class UserStatus(models.Model):
     sus_trans = JSONField(default=dict, blank=True)
     last_updated = models.DateTimeField(auto_now=True)
 
+class Messages(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+
 
 class BigBrotherConfig(SingletonModel):
     token = models.CharField(
@@ -82,10 +88,29 @@ class BigBrotherConfig(SingletonModel):
         help_text="List of corporation IDs considered hostile, separated by ','"
     )
 
+    whitelist_alliances = models.TextField(
+        default="",
+        blank=True,
+        null=True,
+        help_text="List of alliance IDs considered whitelisted, separated by ','"
+    )
+
+    whitelist_corporations = models.TextField(
+        blank=True,
+        null=True,
+        help_text="List of corporation IDs considered whitelisted, separated by ','"
+    )
+
     webhook = models.URLField(
         blank=True,
         null=True,
-        help_text="Discord webhook for sending notifications"
+        help_text="Discord webhook for sending BB notifications"
+    )
+
+    dailywebhook = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending daily messages"
     )
 
     main_corporation_id = models.BigIntegerField(
@@ -116,6 +141,12 @@ class BigBrotherConfig(SingletonModel):
         default=False,
         editable=False,
         help_text="has the plugin been activated/deactivated?"
+    )
+
+    are_daily_messages_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are daily messages activated/deactivated?"
     )
 
     def __str__(self):
