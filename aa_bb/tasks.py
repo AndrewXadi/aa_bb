@@ -1,6 +1,6 @@
 from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter
-from .models import BigBrotherConfig, UserStatus, Messages
+from .models import BigBrotherConfig, UserStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5
 import logging
 from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id
 from aa_bb.checks.awox import  get_awox_kill_links
@@ -21,6 +21,7 @@ import time
 import traceback
 import random
 from . import __version__
+from django_celery_beat.models import PeriodicTask, CrontabSchedule
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
 timer_duration = timedelta(days=7)
@@ -725,3 +726,233 @@ def BB_send_daily_messages():
     # Mark as sent
     message.sent_in_cycle = True
     message.save()
+
+@shared_task
+def BB_send_opt_message1():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook1
+    enabled = config.are_opt_messages1_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages1.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages1.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages1.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message2():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook2
+    enabled = config.are_opt_messages2_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages2.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages2.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages2.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message3():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook3
+    enabled = config.are_opt_messages3_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages3.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages3.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages3.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message4():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook4
+    enabled = config.are_opt_messages4_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages4.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages4.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages4.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message5():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook5
+    enabled = config.are_opt_messages5_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages5.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages5.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages5.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+
+@shared_task
+def BB_register_message_tasks():
+    logger.info("🔄 Running BB_register_message_tasks...")
+
+    config = BigBrotherConfig.get_solo()
+
+    # Default fallback schedule (12:00 UTC daily)
+    default_schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute='0',
+        hour='12',
+        day_of_week='*',
+        day_of_month='*',
+        month_of_year='*',
+        timezone='UTC',
+    )
+
+    # Tasks info: name, task path, config schedule attr, active flag attr
+    tasks = [
+        {
+            "name": "BB send daily message",
+            "task_path": "aa_bb.tasks.BB_send_daily_messages",
+            "schedule_attr": "dailyschedule",
+            "active_attr": "are_daily_messages_active",
+        },
+        {
+            "name": "BB send optional message 1",
+            "task_path": "aa_bb.tasks.BB_send_opt_message1",
+            "schedule_attr": "optschedule1",
+            "active_attr": "are_opt_messages1_active",
+        },
+        {
+            "name": "BB send optional message 2",
+            "task_path": "aa_bb.tasks.BB_send_opt_message2",
+            "schedule_attr": "optschedule2",
+            "active_attr": "are_opt_messages2_active",
+        },
+        {
+            "name": "BB send optional message 3",
+            "task_path": "aa_bb.tasks.BB_send_opt_message3",
+            "schedule_attr": "optschedule3",
+            "active_attr": "are_opt_messages3_active",
+        },
+        {
+            "name": "BB send optional message 4",
+            "task_path": "aa_bb.tasks.BB_send_opt_message4",
+            "schedule_attr": "optschedule4",
+            "active_attr": "are_opt_messages4_active",
+        },
+        {
+            "name": "BB send optional message 5",
+            "task_path": "aa_bb.tasks.BB_send_opt_message5",
+            "schedule_attr": "optschedule5",
+            "active_attr": "are_opt_messages5_active",
+        },
+    ]
+
+    for task_info in tasks:
+        name = task_info["name"]
+        task_path = task_info["task_path"]
+        schedule = getattr(config, task_info["schedule_attr"], None) or default_schedule
+        is_active = getattr(config, task_info["active_attr"], False)
+
+        existing_task = PeriodicTask.objects.filter(name=name).first()
+
+        if is_active:
+            if existing_task is None:
+                PeriodicTask.objects.create(
+                    name=name,
+                    task=task_path,
+                    crontab=schedule,
+                    enabled=True,
+                )
+                logger.info(f"✅ Created '{name}' periodic task with enabled=True")
+            else:
+                updated = False
+                if existing_task.crontab != schedule:
+                    existing_task.crontab = schedule
+                    updated = True
+                if existing_task.task != task_path:
+                    existing_task.task = task_path
+                    updated = True
+                if not existing_task.enabled:
+                    existing_task.enabled = True
+                    updated = True
+                if updated:
+                    existing_task.save()
+                    logger.info(f"✅ Updated '{name}' periodic task")
+                else:
+                    logger.info(f"ℹ️ '{name}' periodic task already exists and is up to date")
+        else:
+            if existing_task:
+                existing_task.delete()
+                logger.info(f"🗑️ Deleted '{name}' periodic task because messages are disabled")

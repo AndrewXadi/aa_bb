@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from solo.models import SingletonModel
 from django.contrib.auth.models import User
 from django.db.models import JSONField
+from django_celery_beat.models import CrontabSchedule
 
 
 
@@ -58,6 +59,54 @@ class Messages(models.Model):
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
         return self.text
+    class Meta:
+        verbose_name = "Daily Message"
+        verbose_name_plural = "Daily Messages"
+
+class OptMessages1(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+    class Meta:
+        verbose_name = "Opt Message 1"
+        verbose_name_plural = "Opt Messages 1"
+
+class OptMessages2(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+    class Meta:
+        verbose_name = "Opt Message 2"
+        verbose_name_plural = "Opt Messages 2"
+
+class OptMessages3(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+    class Meta:
+        verbose_name = "Opt Message 3"
+        verbose_name_plural = "Opt Messages 3"
+
+class OptMessages4(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+    class Meta:
+        verbose_name = "Opt Message 4"
+        verbose_name_plural = "Opt Messages 4"
+
+class OptMessages5(models.Model):
+    text = models.TextField(max_length=2000)
+    sent_in_cycle = models.BooleanField(default=False)
+    def __str__(self):
+        return self.text
+    class Meta:
+        verbose_name = "Opt Message 5"
+        verbose_name_plural = "Opt Messages 5"
 
 
 class BigBrotherConfig(SingletonModel):
@@ -113,6 +162,90 @@ class BigBrotherConfig(SingletonModel):
         help_text="Discord webhook for sending daily messages"
     )
 
+    optwebhook1 = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending optional messages 1"
+    )
+
+    optwebhook2 = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending optional messages 2"
+    )
+
+    optwebhook3 = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending optional messages 3"
+    )
+
+    optwebhook4 = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending optional messages 4"
+    )
+
+    optwebhook5 = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending optional messages 5"
+    )
+
+    dailyschedule = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_dailyschedule',
+        null=True,
+        blank=True,
+        help_text="schedule for daily messages"
+    )
+
+    optschedule1 = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_optschedule1',
+        null=True,
+        blank=True,
+        help_text="schedule for optional messages 1"
+    )
+
+    optschedule2 = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_optschedule2',
+        null=True,
+        blank=True,
+        help_text="schedule for optional messages 2"
+    )
+
+    optschedule3 = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_optschedule3',
+        null=True,
+        blank=True,
+        help_text="schedule for optional messages 3"
+    )
+
+    optschedule4 = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_optschedule4',
+        null=True,
+        blank=True,
+        help_text="schedule for optional messages 4"
+    )
+
+    optschedule5 = models.ForeignKey(
+        CrontabSchedule, 
+        on_delete=models.CASCADE,
+        related_name='bigbrother_optschedule5',
+        null=True,
+        blank=True,
+        help_text="schedule for optional messages 5"
+    )
+
     main_corporation_id = models.BigIntegerField(
         default=0,  # Replace with your actual corp ID
         editable=False,
@@ -147,6 +280,36 @@ class BigBrotherConfig(SingletonModel):
         default=False,
         editable=True,
         help_text="are daily messages activated/deactivated?"
+    )
+
+    are_opt_messages1_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are optional messages 1 activated/deactivated?"
+    )
+
+    are_opt_messages2_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are optional messages 2 activated/deactivated?"
+    )
+
+    are_opt_messages3_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are optional messages 3 activated/deactivated?"
+    )
+
+    are_opt_messages4_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are optional messages 4 activated/deactivated?"
+    )
+
+    are_opt_messages5_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="are optional messages 5 activated/deactivated?"
     )
 
     def __str__(self):
