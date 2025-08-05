@@ -1,0 +1,17 @@
+{% extends 'allianceauth/base-bs5.html' %}
+
+{% load i18n %}
+
+{% block page_title %}
+    {% translate "Leave of Absence" %}
+{% endblock %}
+
+{% block header_nav_collapse_left %}
+    {% include 'loa/menu.html' %}
+{% endblock %}
+
+{% block content %}
+    <div class="loa">
+        {% block details %}{% endblock %}
+    </div>
+{% endblock %}

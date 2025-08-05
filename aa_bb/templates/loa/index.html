@@ -1,0 +1,48 @@
+{% extends 'loa/base.html' %}
+{% load static %}
+
+{% block details %}
+  <h1>My Leave of Absence requests</h1>
+
+  {% if loa_requests %}
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Start Date</th>
+          <th>End Date</th>
+          <th>Created</th>
+          <th>Reason</th>
+          <th>Status</th>
+          <th></th>  {# actions column #}
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in loa_requests %}
+          <tr>
+            <td>{{ req.start_date }}</td>
+            <td>{{ req.end_date }}</td>
+            <td>{{ req.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ req.reason }}</td>
+            <td>{{ req.get_status_display }}</td>
+            <td>
+              <form
+                method="post"
+                action="{% url 'loa:delete_request' req.id %}"
+                style="display:inline;"
+              >
+                {% csrf_token %}
+                <button
+                  type="submit"
+                  class="btn btn-sm {% if req.status == 'pending' %}btn-danger{% else %}btn-secondary{% endif %}"
+                  {% if req.status != 'pending' %}disabled{% endif %}
+                >Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>You have no Leave of Absence requests.</p>
+  {% endif %}
+{% endblock %}

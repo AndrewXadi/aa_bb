@@ -1,0 +1,15 @@
+{# templates/loa/_loa_subtabs.html #}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item">
+    <a
+      class="nav-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}"
+      href="{% url 'loa:index' %}"
+    >Leave of Absence</a>
+  </li>
+  <li class="nav-item">
+    <a
+      class="nav-link {% if request.resolver_match.url_name == 'admin' %}active{% endif %}"
+      href="{% url 'loa:admin' %}"
+    >LoA Admin</a>
+  </li>
+</ul>

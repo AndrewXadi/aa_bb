@@ -1,0 +1,94 @@
+{% extends 'loa/base.html' %}
+{% load static %}
+
+{% block details %}
+  <h1>All Leave of Absence Requests</h1>
+
+  <form method="get" class="row g-3 mb-4">
+    <div class="col-auto">
+      <label class="form-label" for="filter-user">User:</label>
+      <select name="user" id="filter-user" class="form-select">
+        <option value="">All</option>
+        {% for uid, uname in users %}
+          <option value="{{ uid }}" {% if uid|stringformat:"s" == current_user %}selected{% endif %}>
+            {{ uname }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label" for="filter-status">Status:</label>
+      <select name="status" id="filter-status" class="form-select">
+        <option value="">All</option>
+        {% for code, label in status_choices %}
+          <option value="{{ code }}" {% if code == current_status %}selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto align-self-end">
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+
+  {% if loa_requests %}
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Created</th>
+          <th>Reason</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in loa_requests %}
+          <tr>
+            <td>{{ req.main_character }}</td>
+            <td>{{ req.start_date }}</td>
+            <td>{{ req.end_date }}</td>
+            <td>{{ req.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ req.reason }}</td>
+            <td>{{ req.get_status_display }}</td>
+            <td class="text-end">
+              {# Approve #}
+              <form method="post" action="{% url 'loa:approve_request' req.id %}" class="d-inline">
+                {% csrf_token %}
+                <button
+                  type="submit"
+                  class="btn btn-sm btn-success"
+                  {% if req.status != 'pending' %}disabled{% endif %}
+                >Approve</button>
+              </form>
+
+              {# Deny #}
+              <form method="post" action="{% url 'loa:deny_request' req.id %}" class="d-inline">
+                {% csrf_token %}
+                <button
+                  type="submit"
+                  class="btn btn-sm btn-warning"
+                  {% if req.status != 'pending' %}disabled{% endif %}
+                >Deny</button>
+              </form>
+
+              {# Delete #}
+              <form method="post" action="{% url 'loa:delete_request_admin' req.id %}" class="d-inline">
+                {% csrf_token %}
+                <button
+                  type="submit"
+                  class="btn btn-sm btn-danger"
+                >Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No Leave Requests found.</p>
+  {% endif %}
+{% endblock %}
