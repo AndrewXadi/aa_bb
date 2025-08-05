@@ -2,13 +2,14 @@ import html
 import logging
 
 from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib import messages
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import (
     JsonResponse,
     HttpResponseBadRequest,
     StreamingHttpResponse,
 )
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
 import time
@@ -16,6 +17,8 @@ from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from django_celery_beat.models import PeriodicTask
 from django.utils.safestring import mark_safe
 import json
+from django.http import HttpResponseForbidden
+from .forms import LeaveRequestForm
 from aa_bb.checks.awox import render_awox_kills_html
 from aa_bb.checks.corp_changes import get_frequent_corp_changes
 from aa_bb.checks.cyno import render_user_cyno_info_html
@@ -50,8 +53,8 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
-from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id
-from .models import BigBrotherConfig, WarmProgress
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message
+from .models import BigBrotherConfig, WarmProgress, LeaveRequest
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
 #from datetime import datetime
 from django.utils import timezone
@@ -845,6 +848,7 @@ def get_card_data(request, target_user_id: int, key: str):
 
 
 @require_POST
+@permission_required("can_blacklist_characters")
 def add_blacklist_view(request):
     issuer_id = int(request.POST["issuer_user_id"])
     target_id = int(request.POST["target_user_id"])
@@ -858,3 +862,122 @@ def add_blacklist_view(request):
         request.META.get("HTTP_REFERER", "/"),
         message=f"Blacklisted: {', '.join(added)}"
     )
+
+
+@login_required
+@permission_required("aa_bb.can_access_loa")
+def loa_loa(request):
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.is_loa_active:
+        return render(request, "loa/disabled.html")
+    user_requests = LeaveRequest.objects.filter(user=request.user).order_by('-created_at')
+    return render(request, "loa/index.html", {"loa_requests": user_requests})
+
+@login_required
+@permission_required("aa_bb.can_view_all_loa")
+def loa_admin(request):
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.is_loa_active:
+        return render(request, "loa/disabled.html")
+    # Filtering
+    qs = LeaveRequest.objects.select_related('user').order_by('-created_at')
+    user_filter   = request.GET.get('user')
+    status_filter = request.GET.get('status')
+
+    if user_filter:
+        qs = qs.filter(user__id=user_filter)
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    # Build dropdown options from existing requests
+    users_in_requests = (
+        LeaveRequest.objects
+                    .values_list('user__id', 'user__username')
+                    .distinct()
+    )
+
+    context = {
+        'loa_requests': qs,
+        'users': users_in_requests,
+        'status_choices': LeaveRequest.STATUS_CHOICES,
+        'current_user': user_filter,
+        'current_status': status_filter,
+    }
+    return render(request, "loa/admin.html", context)
+
+@login_required
+@permission_required("aa_bb.can_access_loa")
+def loa_request(request):
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.is_loa_active:
+        return render(request, "loa/disabled.html")
+
+    if request.method == 'POST':
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            main_char = get_main_character_name(request.user.id)
+            # 2) save with main_character
+            lr = form.save(commit=False)
+            lr.user = request.user
+            lr.main_character = main_char
+            lr.save()
+
+            # 3) send webhook with character
+            hook = cfg.loawebhook
+            send_message(f"{main_char} requested LOA from {lr.start_date} to {lr.end_date}, reason: {lr.reason}", hook)
+
+            return redirect('loa:index')
+        else:
+            form.add_error(None, "Please fill in all fields correctly.")
+    else:
+        form = LeaveRequestForm()
+
+    return render(request, 'loa/request.html', {'form': form})
+
+@login_required
+@permission_required("aa_bb.can_access_loa")
+def delete_request(request, pk):
+    if request.method == 'POST':
+        lr = get_object_or_404(LeaveRequest, pk=pk, user=request.user)
+        if lr.user != request.user:
+            return HttpResponseForbidden("You may only delete your own requests.")
+        elif lr.status == 'pending':
+            lr.delete()
+            hook = BigBrotherConfig.get_solo().loawebhook
+            send_message(f"{lr.main_character} deleted their LOA from {lr.start_date} to {lr.end_date}", hook)
+    return redirect('loa:index')
+
+@login_required
+@permission_required("aa_bb.can_manage_loa")
+def delete_request_admin(request, pk):
+    if request.method == 'POST':
+        lr = get_object_or_404(LeaveRequest, pk=pk, user=request.user)
+        lr.delete()
+        hook = BigBrotherConfig.get_solo().loawebhook
+        userrr = get_main_character_name(request.user.id)
+        send_message(f"{userrr} deleted {lr.main_character}'s LOA from {lr.start_date} to {lr.end_date}", hook)
+    return redirect('loa:admin')
+
+@login_required
+@permission_required("aa_bb.can_manage_loa")
+def approve_request(request, pk):
+    if request.method == 'POST':
+        lr = get_object_or_404(LeaveRequest, pk=pk)
+        lr.status = 'approved'
+        lr.save()
+        hook = BigBrotherConfig.get_solo().loawebhook
+        userrr = get_main_character_name(request.user.id)
+        send_message(f"{userrr} approved {lr.main_character}'s LOA from {lr.start_date} to {lr.end_date}", hook)
+    return redirect('loa:admin')
+
+@login_required
+@permission_required("aa_bb.can_manage_loa")
+def deny_request(request, pk):
+    if request.method == 'POST':
+        lr = get_object_or_404(LeaveRequest, pk=pk)
+        lr.status = 'denied'
+        lr.save()
+        hook = BigBrotherConfig.get_solo().loawebhook
+        userrr = get_main_character_name(request.user.id)
+        send_message(f"{userrr} denied {lr.main_character}'s LOA from {lr.start_date} to {lr.end_date}", hook)
+    return redirect('loa:admin')

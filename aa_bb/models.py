@@ -26,6 +26,9 @@ class General(models.Model):
             ("full_access", "Can view all main characters"),
             ("recruiter_access", "Can view guest main characters only"),
             ("can_blacklist_characters", "Can add characters to blacklist"),
+            ("can_access_loa", "Can submit a Leave Of Absence request"),
+            ("can_view_all_loa", "Can view all Leave Of Absence requests"),
+            ("can_manage_loa", "Can manage Leave Of Absence requests"),
             )
         
 class UserStatus(models.Model):
@@ -156,6 +159,12 @@ class BigBrotherConfig(SingletonModel):
         help_text="Discord webhook for sending BB notifications"
     )
 
+    loawebhook = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Discord webhook for sending Leave of Absence"
+    )
+
     dailywebhook = models.URLField(
         blank=True,
         null=True,
@@ -274,6 +283,12 @@ class BigBrotherConfig(SingletonModel):
         default=False,
         editable=False,
         help_text="has the plugin been activated/deactivated?"
+    )
+
+    is_loa_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="has the Leave of Absence module been activated/deactivated? (You will need to restart AA for this to take effect)"
     )
 
     are_daily_messages_active = models.BooleanField(
@@ -630,3 +645,25 @@ class EntityInfoCache(models.Model):
             models.Index(fields=["entity_id", "as_of"]),
             models.Index(fields=["updated"]),
         ]
+
+class LeaveRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('denied', 'Denied'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='leave_requests')
+    main_character = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="The user's primary character when they made the request"
+    )
+    start_date = models.DateField()
+    end_date   = models.DateField()
+    reason     = models.TextField()
+    status     = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username}: {self.start_date} → {self.end_date} ({self.status})"

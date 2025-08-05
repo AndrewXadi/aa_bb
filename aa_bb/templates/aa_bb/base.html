@@ -3,12 +3,16 @@
 {% load i18n %}
 
 {% block page_title %}
-    {% translate "BigBrother" %}
+    {% translate "Big Brother" %}
 {% endblock %}
 
 {% block header_nav_brand %}
-    {% translate "BigBrother" %}
+    {% translate "Big Brother" %}
 {% endblock header_nav_brand %}
+
+{% block header_nav %}
+    {{ block.super }}
+{% endblock %}
 
 {% block content %}
     <div class="aa_bb">

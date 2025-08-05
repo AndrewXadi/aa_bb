@@ -1,6 +1,10 @@
 from django.apps import AppConfig
 from django.db.utils import OperationalError, ProgrammingError
 
+class LoAConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "loa"
+    verbose_name = "Leave of Absence"
 
 class AaBbConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
