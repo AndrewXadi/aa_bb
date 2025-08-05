@@ -57,7 +57,9 @@ class LoAMenuItem(MenuItemHook):
         # Optional permission check:
         # if not request.user.has_perm("aa_bb.can_access_loa"):
         #     return ""
-        return super().render(request)
+        if request.user.has_perm("aa_bb.can_access_loa"):
+            return super().render(request)
+        return ""
 
 @hooks.register("menu_item_hook")
 def register_loa_menu():

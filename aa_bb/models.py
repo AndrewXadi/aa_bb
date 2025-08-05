@@ -26,7 +26,7 @@ class General(models.Model):
             ("full_access", "Can view all main characters"),
             ("recruiter_access", "Can view guest main characters only"),
             ("can_blacklist_characters", "Can add characters to blacklist"),
-            ("can_access_loa", "Can submit a Leave Of Absence request"),
+            ("can_access_loa", "Can access and submit a Leave Of Absence request"),
             ("can_view_all_loa", "Can view all Leave Of Absence requests"),
             ("can_manage_loa", "Can manage Leave Of Absence requests"),
             )

@@ -924,7 +924,8 @@ def loa_request(request):
 
             # 3) send webhook with character
             hook = cfg.loawebhook
-            send_message(f"{main_char} requested LOA from {lr.start_date} to {lr.end_date}, reason: {lr.reason}", hook)
+            pingroleID = cfg.pingroleID
+            send_message(f"## <@&{pingroleID}> {main_char} requested LOA:\n- from {lr.start_date}\n- to {lr.end_date}\n- reason: {lr.reason}", hook)
 
             return redirect('loa:index')
         else:
