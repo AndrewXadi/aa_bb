@@ -46,30 +46,38 @@ def register_bigbrother_urls():
 
 
 from .models import BigBrotherConfig
-cfg = BigBrotherConfig.get_solo()
-if cfg.is_loa_active:
-    class LoAMenuItem(MenuItemHook):
-        def __init__(self):
-            super().__init__(
-                _("Leave of Absence"),
-                "fas fa-plane",
-                "loa:index",
-                navactive=["loa:"],
-            )
-        def render(self, request):
-            # Optional permission check:
-            # if not request.user.has_perm("aa_bb.can_access_loa"):
-            #     return ""
-            return super().render(request)
+class LoAMenuItem(MenuItemHook):
+    def __init__(self):
+        super().__init__(
+            _("Leave of Absence"),
+            "fas fa-plane",
+            "loa:index",
+            navactive=["loa:"],
+        )
 
-    @hooks.register("menu_item_hook")
-    def register_loa_menu():
+    def render(self, request):
+        # Optional permission check:
+        # if not request.user.has_perm("aa_bb.can_access_loa"):
+        #     return ""
+        return super().render(request)
+
+@hooks.register("menu_item_hook")
+def register_loa_menu():
+    try:
+        cfg = BigBrotherConfig.get_solo()
+    except Exception:
+        # In case DB not ready (e.g. during migration)
+        return None
+    if cfg.is_loa_active:
         return LoAMenuItem()
 
-    @hooks.register("url_hook")
-    def register_loa_urls():
-        from .models import BigBrotherConfig
+@hooks.register("url_hook")
+def register_loa_urls():
+    try:
         cfg = BigBrotherConfig.get_solo()
-        if not cfg.is_loa_active:
-            return
-        return UrlHook(urls_loa, "loa", r"^loa/")
+    except Exception:
+        return None
+    if not cfg.is_loa_active:
+        return None
+    from .urls import urls_loa
+    return UrlHook(urls_loa, "loa", r"^loa/")
