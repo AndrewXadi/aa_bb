@@ -1040,11 +1040,11 @@ def BB_run_regular_loa_updates():
         days_since = (timezone.now() - latest_logoff).days
         if days_since > cfg.loa_max_logoff_days:
             if in_progress == False:
-                flags.append(f"## <@&{pingroleID}> {user.username} was last seen online on {latest_logoff} ({days_since} days ago where maximum w/o a LoA request is {cfg.loa_max_logoff_days})")
+                flags.append(f"- {user.username} was last seen online on {latest_logoff} ({days_since} days ago where maximum w/o a LoA request is {cfg.loa_max_logoff_days})")
     if flags:
         pingroleID = cfg.pingroleID
-        flags_text = "\n - ".join(flags)
-        send_message(f"## <@&{pingroleID}>\n{flags_text}")
+        flags_text = "\n".join(flags)
+        send_message(f"## <@&{pingroleID}> Inactive Members Found:\n{flags_text}")
 
 
 
