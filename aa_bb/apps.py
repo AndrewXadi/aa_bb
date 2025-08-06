@@ -42,15 +42,19 @@ class AaBbConfig(AppConfig):
             else:
                 logger.info("✅ Created ‘BB run regular updates’ periodic task with enabled=False")
 
-            scheduleloa, _ = IntervalSchedule.objects.get_or_create(
-                every=1,
-                period=IntervalSchedule.HOURS,
+            scheduleloa, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="12",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+                timezone="UTC",
             )
 
             task_loa, created_loa = PeriodicTask.objects.get_or_create(
                 name="BB run regular LoA updates",
                 defaults={
-                    "interval": scheduleloa,
+                    "crontab": scheduleloa,
                     "task": "aa_bb.tasks.BB_run_regular_loa_updates",
                     "enabled": True,  # only on creation
                 },
