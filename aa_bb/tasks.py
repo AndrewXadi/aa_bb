@@ -980,6 +980,8 @@ def BB_run_regular_loa_updates():
     if not qs_profiles.exists():
         logger.info("No member mains found.")
         return
+    
+    flags = []
 
     for profile in qs_profiles:
         user = profile.user
@@ -1036,10 +1038,14 @@ def BB_run_regular_loa_updates():
 
         # Compute days since that logoff
         days_since = (timezone.now() - latest_logoff).days
-        if days_since >= cfg.loa_max_logoff_days:
+        if days_since > cfg.loa_max_logoff_days:
             if in_progress == False:
-                pingroleID = cfg.pingroleID
-                send_message(f"## <@&{pingroleID}> Most recent logoff for {user.username} was {latest_logoff} ({days_since} days ago where maximum w/o a LoA request is {cfg.loa_max_logoff_days})")
+                flags.append(f"## <@&{pingroleID}> {user.username} was last seen online on {latest_logoff} ({days_since} days ago where maximum w/o a LoA request is {cfg.loa_max_logoff_days})")
+    if flags:
+        pingroleID = cfg.pingroleID
+        flags_text = "\n - ".join(flags)
+        send_message(f"## <@&{pingroleID}>\n{flags_text}")
+
 
 
         
