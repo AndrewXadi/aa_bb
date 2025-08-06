@@ -62,8 +62,12 @@ class AaBbConfig(AppConfig):
 
             if not created_loa:
                 updated_loa = False
-                if task_loa.interval != scheduleloa or task_loa.task != "aa_bb.tasks.BB_run_regular_loa_updates":
-                    task_loa.interval = scheduleloa
+                # Clear interval if set
+                if task_loa.interval is not None:
+                    task_loa.interval = None
+                    updated_loa = True
+                if task_loa.crontab != scheduleloa or task_loa.task != "aa_bb.tasks.BB_run_regular_loa_updates":
+                    task_loa.crontab = scheduleloa
                     task_loa.task = "aa_bb.tasks.BB_run_regular_loa_updates"
                     task_loa.save()
                     updated_loa = True
