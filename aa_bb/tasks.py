@@ -1,8 +1,9 @@
 from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter
-from .models import BigBrotherConfig, UserStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5
+from allianceauth.authentication.models import UserProfile, CharacterOwnership
+from .models import BigBrotherConfig, UserStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
 import logging
-from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id
+from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids
@@ -16,7 +17,11 @@ from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone, date
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from corptools.models import LastLoginfilter
+from corptools.api.helpers import get_alts_queryset
 import time
 import traceback
 import random
@@ -956,3 +961,86 @@ def BB_register_message_tasks():
             if existing_task:
                 existing_task.delete()
                 logger.info(f"🗑️ Deleted '{name}' periodic task because messages are disabled")
+
+
+
+@shared_task
+def BB_run_regular_loa_updates():
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.is_loa_active:
+        logger.info("LoA feature disabled; skipping updates.")
+        return
+
+    qs_profiles = (
+        UserProfile.objects
+        .filter(state=2)
+        .exclude(main_character=None)
+        .select_related("user", "main_character")
+    )
+    if not qs_profiles.exists():
+        logger.info("No member mains found.")
+        return
+
+    for profile in qs_profiles:
+        user = profile.user
+        # Determine main_character_id
+        try:
+            main_id = profile.main_character.character_id
+        except Exception:
+            main_id = get_character_id(profile)
+
+        # Load main character
+        ec = EveCharacter.objects.filter(character_id=main_id).first()
+        if not ec:
+            continue
+
+        # Find the most recent logoff among all alts
+        latest_logoff = None
+        for char in get_alts_queryset(ec):
+            audit = getattr(char, "characteraudit", None)
+            ts = getattr(audit, "last_known_logoff", None) if audit else None
+            if ts and (latest_logoff is None or ts > latest_logoff):
+                latest_logoff = ts
+
+        if not latest_logoff:
+            continue
+
+         # 1) Check and update any existing approved requests for this user
+        lr_qs = LeaveRequest.objects.filter(
+            user=user,
+            status="approved",
+        )
+        today = date.today()
+        in_progress = False
+        for lr in lr_qs:
+            if lr.start_date <= today <= lr.end_date:
+                # it’s now in progress
+                if lr.status != "in_progress":
+                    lr.status = "in_progress"
+                    lr.save(update_fields=["status"])
+                    logger.info(
+                        "   → Marked LOA %s as in_progress for %s",
+                        lr, user.username,
+                    )
+            elif today > lr.end_date:
+                # the approved window has passed
+                if lr.status != "finished":
+                    lr.status = "finished"
+                    lr.save(update_fields=["status"])
+                    logger.info(
+                        "   → Marked LOA %s as finished for %s",
+                        lr, user.username,
+                    )
+            if lr.status == "in_progress":
+                in_progress = True
+
+        # Compute days since that logoff
+        days_since = (timezone.now() - latest_logoff).days
+        if days_since >= cfg.loa_max_logoff_days:
+            if in_progress == False:
+                pingroleID = cfg.pingroleID
+                send_message(f"## <@&{pingroleID}> Most recent logoff for {user.username} was {latest_logoff} ({days_since} days ago where maximum w/o a LoA request is {cfg.loa_max_logoff_days})")
+
+
+        
+

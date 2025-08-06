@@ -291,6 +291,11 @@ class BigBrotherConfig(SingletonModel):
         help_text="has the Leave of Absence module been activated/deactivated? (You will need to restart AA for this to take effect)"
     )
 
+    loa_max_logoff_days = models.IntegerField(
+        default=30,
+        help_text="How many days can a user not login w/o a loa request before notifications"
+    )
+
     are_daily_messages_active = models.BooleanField(
         default=False,
         editable=True,
@@ -650,6 +655,8 @@ class LeaveRequest(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
+        ("in_progress","In Progress"),
+        ("finished",   "Finished"),
         ('denied', 'Denied'),
     ]
 

@@ -1,11 +1,6 @@
 from django.apps import AppConfig
 from django.db.utils import OperationalError, ProgrammingError
 
-class LoAConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "loa"
-    verbose_name = "Leave of Absence"
-
 class AaBbConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "aa_bb"
@@ -15,7 +10,6 @@ class AaBbConfig(AppConfig):
         import aa_bb.signals
         import logging
         logger = logging.getLogger(__name__)
-        logger.info("🟢 aa_bb.AaBbConfig.ready() fired!")
 
         try:
             from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule
@@ -47,6 +41,34 @@ class AaBbConfig(AppConfig):
                     logger.info("ℹ️ ‘BB run regular updates’ periodic task already exists and is up to date")
             else:
                 logger.info("✅ Created ‘BB run regular updates’ periodic task with enabled=False")
+
+            scheduleloa, _ = IntervalSchedule.objects.get_or_create(
+                every=1,
+                period=IntervalSchedule.HOURS,
+            )
+
+            task_loa, created_loa = PeriodicTask.objects.get_or_create(
+                name="BB run regular LoA updates",
+                defaults={
+                    "interval": scheduleloa,
+                    "task": "aa_bb.tasks.BB_run_regular_loa_updates",
+                    "enabled": True,  # only on creation
+                },
+            )
+
+            if not created_loa:
+                updated_loa = False
+                if task_loa.interval != scheduleloa or task_loa.task != "aa_bb.tasks.BB_run_regular_loa_updates":
+                    task_loa.interval = scheduleloa
+                    task_loa.task = "aa_bb.tasks.BB_run_regular_loa_updates"
+                    task_loa.save()
+                    updated_loa = True
+                if updated_loa:
+                    logger.info("✅ Updated ‘BB run regular LoA updates’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB run regular LoA updates’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB run regular LoA updates’ periodic task with enabled=False")
 
 
 
