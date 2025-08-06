@@ -1033,6 +1033,7 @@ def BB_run_regular_loa_updates():
                         "   → Marked LOA %s as finished for %s",
                         lr, user.username,
                     )
+                    send_message(f"## <@&{ec}>'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
             if lr.status == "in_progress":
                 in_progress = True
 
