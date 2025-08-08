@@ -53,7 +53,7 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
-from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message
+from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message, get_pings
 from .models import BigBrotherConfig, WarmProgress, LeaveRequest
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
 #from datetime import datetime
@@ -924,8 +924,7 @@ def loa_request(request):
 
             # 3) send webhook with character
             hook = cfg.loawebhook
-            pingroleID = cfg.pingroleID
-            send_message(f"## <@&{pingroleID}> {main_char} requested LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
+            send_message(f"##{get_pings("LoA Request")} {main_char} requested LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
 
             return redirect('loa:index')
         else:
@@ -945,7 +944,7 @@ def delete_request(request, pk):
         elif lr.status == 'pending':
             lr.delete()
             hook = BigBrotherConfig.get_solo().loawebhook
-            send_message(f"## {lr.main_character} deleted their LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
+            send_message(f"##{get_pings("LoA Changed Status")} {lr.main_character} deleted their LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
     return redirect('loa:index')
 
 @login_required
@@ -956,7 +955,7 @@ def delete_request_admin(request, pk):
         lr.delete()
         hook = BigBrotherConfig.get_solo().loawebhook
         userrr = get_main_character_name(request.user.id)
-        send_message(f"## {userrr} deleted {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
+        send_message(f"##{get_pings("LoA Changed Status")} {userrr} deleted {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
     return redirect('loa:admin')
 
 @login_required
@@ -968,7 +967,7 @@ def approve_request(request, pk):
         lr.save()
         hook = BigBrotherConfig.get_solo().loawebhook
         userrr = get_main_character_name(request.user.id)
-        send_message(f"## {userrr} approved {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
+        send_message(f"##{get_pings("LoA Changed Status")} {userrr} approved {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
     return redirect('loa:admin')
 
 @login_required
@@ -980,5 +979,5 @@ def deny_request(request, pk):
         lr.save()
         hook = BigBrotherConfig.get_solo().loawebhook
         userrr = get_main_character_name(request.user.id)
-        send_message(f"## {userrr} denied {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
+        send_message(f"##{get_pings("LoA Changed Status")} {userrr} denied {lr.main_character}'s LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
     return redirect('loa:admin')

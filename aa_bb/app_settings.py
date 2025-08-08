@@ -36,6 +36,35 @@ _CACHE_TTL = timedelta(hours=24)
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
 
+def get_pings(message_type: str) -> str:
+    """
+    Given a MessageType instance, return a string of pings separated by spaces.
+    """
+    logger.info(f"message type recieved - {message_type}")
+    cfg = BigBrotherConfig.get_solo()
+    pings = []
+
+    if cfg.pingrole1_messages.all().filter(name=message_type).exists():
+        pings.append(f"<@&{cfg.pingroleID}>")
+
+    if cfg.pingrole2_messages.all().filter(name=message_type).exists():
+        pings.append(f"<@&{cfg.pingroleID2}>")
+
+    if cfg.here_messages.all().filter(name=message_type).exists():
+        pings.append("@here")
+
+    if cfg.everyone_messages.all().filter(name=message_type).exists():
+        pings.append("@everyone")
+
+    ping = " " + " ".join(pings) if pings else ""
+    logger.info(f"pingrole1 - {cfg.pingrole1_messages.all()}")
+    logger.info(f"pingrole2 - {cfg.pingrole2_messages.all()}")
+    logger.info(f"here - {cfg.here_messages.all()}")
+    logger.info(f"everyone - {cfg.everyone_messages.all()}")
+    logger.info(f"ping sent - {ping}")
+
+    return ping
+
 def _find_employment_at(employment: List[dict], date: datetime) -> Optional[dict]:
     for rec in employment:
         start = rec.get('start_date')
@@ -101,6 +130,8 @@ def get_eve_entity_type(
     # 1. Cache lookup
     try:
         record = id_types.objects.get(pk=eve_id)  # raises id_types.DoesNotExist if not found :contentReference[oaicite:0]{index=0}
+        record.updated = timezone.now()
+        record.save()
         return record.name
     except id_types.DoesNotExist:
         pass
@@ -134,6 +165,8 @@ def get_character_id(name: str) -> int | None:
     # Step 1: Check if the character's ID exists in the database
     try:
         record = Character_names.objects.get(name=name)
+        record.updated = timezone.now()
+        record.save()
         return record.id  # Return the stored ID from the database if found
     except Character_names.DoesNotExist:
         pass  # Continue to ESI if not found in the database
@@ -160,6 +193,7 @@ def get_character_id(name: str) -> int | None:
                 )
                 if not created and obj.name != name:
                     obj.name = name
+                    obj.updated = timezone.now()
                     obj.save()
 
             return char_id
@@ -195,6 +229,8 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
     # 1) Attempt to fetch fresh-enough cache entry
     try:
         cache = EntityInfoCache.objects.get(entity_id=entity_id, as_of=as_of)
+        cache.updated = timezone.now()
+        cache.save()
         if now - cache.updated < _EXPIRY:
             logger.debug(f"cache hit: entity={entity_id} @ {as_of}")
             return cache.data
@@ -467,6 +503,8 @@ def resolve_alliance_name(owner_id: int) -> str:
     # 1. Try permanent table first
     try:
         record = Alliance_names.objects.get(pk=owner_id)
+        record.updated = timezone.now()
+        record.save()
         return record.name
     except Alliance_names.DoesNotExist:
         pass  # need to fetch and store
@@ -514,6 +552,8 @@ def resolve_corporation_name(corp_id: int) -> str:
     # 1. Try permanent table first
     try:
         record = Corporation_names.objects.get(pk=corp_id)
+        record.updated = timezone.now()
+        record.save()
         return record.name
     except Corporation_names.DoesNotExist:
         pass  # need to fetch and store
@@ -561,6 +601,8 @@ def resolve_character_name(char_id: int) -> str:
     # 1. Try permanent table first
     try:
         record = Character_names.objects.get(pk=char_id)
+        record.updated = timezone.now()
+        record.save()
         return record.name
     except Character_names.DoesNotExist:
         pass  # need to fetch and store

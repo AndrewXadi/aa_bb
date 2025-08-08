@@ -33,4 +33,8 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aa_bb.tasks.BB_send_opt_message5',
         'schedule': crontab(minute=0, hour=12),  # Every day at 12:00
     },
+    'BB-daily-DB-cleanup': {
+        'task': 'aa_bb.tasks.BB_daily_DB_cleanup',
+        'schedule': crontab(minute=0, hour=1),  # Every day at 12:00
+    },
 }

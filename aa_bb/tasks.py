@@ -3,7 +3,7 @@ from allianceauth.eveonline.models import EveCharacter
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from .models import BigBrotherConfig, UserStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
 import logging
-from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name
+from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name, get_pings
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids
@@ -119,7 +119,7 @@ def BB_run_regular_updates():
                     update_check_time = now
                     time_left = timer_duration
                     send_message(
-                        f"A newer version is available: {latest_version}. "
+                        f"#{get_pings("New Version")} A newer version is available: {latest_version}. "
                         f"\nYou have {format_time_left(time_left)} remaining to update."
                         f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                     )
@@ -128,13 +128,13 @@ def BB_run_regular_updates():
                     if elapsed < timer_duration:
                         time_left = timer_duration - elapsed
                         send_message(
-                            f"A newer version is available: {latest_version}. "
+                            f"#{get_pings("New Version")} A newer version is available: {latest_version}. "
                             f"\nYou have {format_time_left(time_left)} remaining to update."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                     else:
                         send_message(
-                            f"The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
+                            f"#{get_pings("New Version")} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                         instance.is_active = False
@@ -229,13 +229,14 @@ def BB_run_regular_updates():
                         status.has_awox_kills = has_awox
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"## @everyone New AwoX kill(s):\n{link_list}")
+                        changes.append(f"##{get_pings("AwoX")} New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
                     old = set(status.awox_kill_links or [])
                     new = set(awox_links) - old
                     if new:
                         # notify
                         status.awox_kill_links = list(old | new)
+                        status.updated = timezone.now()
                         status.save()
 
                 if status.has_cyno != has_cyno or set(cyno_result) != set(status.cyno or []):
@@ -306,9 +307,9 @@ def BB_run_regular_updates():
                             if anything == False:
                                 continue
                             if new_entry.get("can_light", False) == True:
-                                pingrole = "@everyone"
+                                pingrole = get_pings("Can Light Cyno")
                             else:
-                                pingrole = ""
+                                pingrole = get_pings("Cyno Update")
 
                             changes.append(f"- **{charname}**{pingrole}:")
                             table_lines = [
@@ -482,7 +483,7 @@ def BB_run_regular_updates():
                         changes.append(f"## Hostile Assets: {'🚩' if has_hostile_assets else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"## <@&{pingroleID}> New Hostile Assets:\n{link_list}")
+                        changes.append(f"##{get_pings("New Hostile Assets")} New Hostile Assets:\n{link_list}")
                         logger.info(f"{char_name} new assets")
                     status.has_hostile_assets = has_hostile_assets
                     status.hostile_assets = hostile_assets_result
@@ -503,7 +504,7 @@ def BB_run_regular_updates():
                         changes.append(f"## Hostile Clones: {'🚩' if has_hostile_clones else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"## <@&{pingroleID}> New Hostile Clone(s):\n{link_list}")
+                        changes.append(f"##{get_pings("New Hostile Clones")} New Hostile Clone(s):\n{link_list}")
                         logger.info(f"{char_name} new clones")
                     status.has_hostile_clones = has_hostile_clones
                     status.hostile_clones = hostile_clones_result
@@ -552,7 +553,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Contacts:")
                         for cid in new_links:
                             res = sus_contacts_result[cid]
-                            ping = f"<@&{pingroleID}>"
+                            ping = get_pings("New Sus Contacts")
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -588,7 +589,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Contracts:")
                         for issuer_id in new_links:
                             res = sus_contracts_result[issuer_id]
-                            ping = f"<@&{pingroleID}>"
+                            ping = get_pings("New Sus Contracts")
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -624,7 +625,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Mails:")
                         for issuer_id in new_links:
                             res = sus_mails_result[issuer_id]
-                            ping = f"<@&{pingroleID}>"
+                            ping = get_pings("New Sus Mails")
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -655,7 +656,7 @@ def BB_run_regular_updates():
                     if status.has_sus_trans != has_sus_trans:
                         changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '✖'}")
                     logger.info(f"{char_name} status changed")
-                    changes.append(f"## New Sus Transactions @here:\n{link_list}")
+                    changes.append(f"## New Sus Transactions{get_pings("New Sus Transactions")}:\n{link_list}")
                     #if new_links:
                     #    changes.append(f"## New Sus Transactions @here:")
                     #    for issuer_id in new_links:
@@ -678,7 +679,7 @@ def BB_run_regular_updates():
                         logger.info(f"Measage: {msg}")
                         send_message(msg)
                         time.sleep(0.03)
-
+                status.updated = timezone.now()
                 status.save()
 
     except Exception as e:
@@ -686,7 +687,7 @@ def BB_run_regular_updates():
         instance.is_active = False
         instance.save()
         send_message(
-            "Big Brother encountered an unexpected error and disabled itself, "
+            f"#{get_pings("Error")} Big Brother encountered an unexpected error and disabled itself, "
             "please forward your aa worker.log and the error below to Andrew Xadi"
         )
 
@@ -1033,7 +1034,7 @@ def BB_run_regular_loa_updates():
                         "   → Marked LOA %s as finished for %s",
                         lr, user.username,
                     )
-                    send_message(f"## <@&{ec}>'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
+                    send_message(f"##{get_pings("LoA Changed Status")} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
             if lr.status == "in_progress":
                 in_progress = True
 
@@ -1043,11 +1044,88 @@ def BB_run_regular_loa_updates():
             if in_progress == False:
                 flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
     if flags:
-        pingroleID = cfg.pingroleID
         flags_text = "\n".join(flags)
-        send_message(f"## <@&{pingroleID}> Inactive Members Found:\n{flags_text}")
+        send_message(f"##{get_pings("LoA Inactivity")} Inactive Members Found:\n{flags_text}")
 
 
+@shared_task
+def BB_daily_DB_cleanup():
+    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache
+    two_months_ago = timezone.now() - timedelta(days=60)
+    flags = []
+    #Delete old model entries
+    models_to_cleanup = [
+        (Alliance_names, "alliance"),
+        (Character_names, "character"),
+        (Corporation_names, "corporation"),
+        (UserStatus, "User Status"),
+        (EntityInfoCache, "Entity Info Cache"),
+    ]
 
-        
+    for model, name in models_to_cleanup:
+        old_entries = model.objects.filter(updated__lt=two_months_ago)
+        count, _ = old_entries.delete()
+        flags.append(f"- Deleted {count} old {name} records.")
 
+
+    from .models import (
+    ProcessedContract, SusContractNote,
+    ProcessedMail, SusMailNote,
+    ProcessedTransaction, SusTransactionNote,
+    )
+    from corptools.models import Contract, MailMessage, CharacterWalletJournalEntry as WalletJournalEntry
+    from django.db import transaction
+    # -- CONTRACTS --
+    # Get all contract_ids that exist in Contract
+    existing_contract_ids = set(
+        Contract.objects.values_list('contract_id', flat=True)
+    )
+    
+    # Find ProcessedContract entries not in Contract
+    orphaned_processed_contracts = ProcessedContract.objects.exclude(contract_id__in=existing_contract_ids)
+    orphaned_contract_ids = list(orphaned_processed_contracts.values_list('contract_id', flat=True))
+    
+    # Delete orphans in SusContractNote (OneToOneField links to ProcessedContract)
+    sus_contracts_to_delete = SusContractNote.objects.filter(contract_id__in=orphaned_contract_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_contracts_to_delete.delete()[0]
+        count_proc = orphaned_processed_contracts.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedContract and {count_sus} SusContractNote records.")
+    
+    # -- MAILS --
+    existing_mail_ids = set(
+        MailMessage.objects.values_list('id_key', flat=True)
+    )
+    
+    orphaned_processed_mails = ProcessedMail.objects.exclude(mail_id__in=existing_mail_ids)
+    orphaned_mail_ids = list(orphaned_processed_mails.values_list('mail_id', flat=True))
+    
+    sus_mails_to_delete = SusMailNote.objects.filter(mail_id__in=orphaned_mail_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_mails_to_delete.delete()[0]
+        count_proc = orphaned_processed_mails.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedMail and {count_sus} SusMailNote records.")
+    
+    # -- TRANSACTIONS --
+    existing_entry_ids = set(
+        WalletJournalEntry.objects.values_list('entry_id', flat=True)
+    )
+    
+    orphaned_processed_transactions = ProcessedTransaction.objects.exclude(entry_id__in=existing_entry_ids)
+    orphaned_entry_ids = list(orphaned_processed_transactions.values_list('entry_id', flat=True))
+    
+    sus_transactions_to_delete = SusTransactionNote.objects.filter(transaction_id__in=orphaned_entry_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_transactions_to_delete.delete()[0]
+        count_proc = orphaned_processed_transactions.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedTransaction and {count_sus} SusTransactionNote records.")
+
+    if flags:
+        flags_text = "\n".join(flags)
+        send_message(f"### DB Cleanup Complete:\n{flags_text}")

@@ -55,7 +55,11 @@ class UserStatus(models.Model):
     sus_mails = JSONField(default=dict, blank=True)
     has_sus_trans = models.BooleanField(default=False)
     sus_trans = JSONField(default=dict, blank=True)
-    last_updated = models.DateTimeField(auto_now=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Status"
+        verbose_name_plural = "User Statuses"
 
 class Messages(models.Model):
     text = models.TextField(max_length=2000)
@@ -112,6 +116,13 @@ class OptMessages5(models.Model):
         verbose_name_plural = "Opt Messages 5"
 
 
+class MessageType(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
 class BigBrotherConfig(SingletonModel):
     token = models.CharField(
         max_length=255,
@@ -125,6 +136,42 @@ class BigBrotherConfig(SingletonModel):
         blank=False,
         default=0,
         help_text="Input the role ID you want pinged when people need to investigate"
+    )
+    
+    pingroleID2 = models.CharField(
+        max_length=255,
+        null=True,
+        blank=False,
+        default=0,
+        help_text="Input the 2nd role ID you want pinged when people need to investigate"
+    )
+
+    pingrole1_messages = models.ManyToManyField(
+        MessageType,
+        related_name="pingrole1_configs",
+        blank=True,
+        help_text="List of message types that should ping the pingrole1"
+    )
+
+    pingrole2_messages = models.ManyToManyField(
+        MessageType,
+        related_name="pingrole2_configs",
+        blank=True,
+        help_text="List of message types that should ping the pingrole2"
+    )
+
+    here_messages = models.ManyToManyField(
+        MessageType,
+        related_name="here_configs",
+        blank=True,
+        help_text="List of message types that should ping @here"
+    )
+
+    everyone_messages = models.ManyToManyField(
+        MessageType,
+        related_name="everyone_configs",
+        blank=True,
+        help_text="List of message types that should ping @everyone"
     )
 
     hostile_alliances = models.TextField(

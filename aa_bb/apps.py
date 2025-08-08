@@ -10,6 +10,34 @@ class AaBbConfig(AppConfig):
         import aa_bb.signals
         import logging
         logger = logging.getLogger(__name__)
+        from .models import MessageType
+
+        PREDEFINED_MESSAGE_TYPES = [
+            "LoA Request",
+            "LoA Changed Status",
+            "LoA Inactivity",
+            "New Version",
+            "Error",
+            "AwoX",
+            "Can Light Cyno",
+            "Cyno Update",
+            "New Hostile Assets",
+            "New Hostile Clones",
+            "New Sus Contacts",
+            "New Sus Contracts",
+            "New Sus Mails",
+            "New Sus Transactions",
+            "New Blacklist Entry",
+        ]
+
+        try:
+            for msg_name in PREDEFINED_MESSAGE_TYPES:
+                obj, created = MessageType.objects.get_or_create(name=msg_name)
+                if created:
+                    logger.info(f"✅ Added predefined MessageType: {msg_name}")
+        except (OperationalError, ProgrammingError):
+            # Database not ready (e.g., during migrate)
+            pass
 
         try:
             from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule
@@ -77,6 +105,45 @@ class AaBbConfig(AppConfig):
                     logger.info("ℹ️ ‘BB run regular LoA updates’ periodic task already exists and is up to date")
             else:
                 logger.info("✅ Created ‘BB run regular LoA updates’ periodic task with enabled=False")
+
+
+
+
+            scheduleDB, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="1",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+                timezone="UTC",
+            )
+
+            task_DB, created_DB = PeriodicTask.objects.get_or_create(
+                name="BB run regular DB cleanup",
+                defaults={
+                    "crontab": scheduleDB,
+                    "task": "aa_bb.tasks.BB_daily_DB_cleanup",
+                    "enabled": True,  # only on creation
+                },
+            )
+
+            if not created_DB:
+                updated_DB = False
+                # Clear interval if set
+                if task_DB.interval is not None:
+                    task_DB.interval = None
+                    updated_DB = True
+                if task_DB.crontab != scheduleDB or task_DB.task != "aa_bb.tasks.BB_daily_DB_cleanup":
+                    task_DB.crontab = scheduleDB
+                    task_DB.task = "aa_bb.tasks.BB_daily_DB_cleanup"
+                    task_DB.save()
+                    updated_DB = True
+                if updated_DB:
+                    logger.info("✅ Updated ‘BB run regular DB cleanup’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB run regular DB cleanup’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB run regular DB cleanup’ periodic task with enabled=False")
 
 
 
