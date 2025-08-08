@@ -119,7 +119,7 @@ def BB_run_regular_updates():
                     update_check_time = now
                     time_left = timer_duration
                     send_message(
-                        f"#{get_pings("New Version")} A newer version is available: {latest_version}. "
+                        f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
                         f"\nYou have {format_time_left(time_left)} remaining to update."
                         f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                     )
@@ -128,13 +128,13 @@ def BB_run_regular_updates():
                     if elapsed < timer_duration:
                         time_left = timer_duration - elapsed
                         send_message(
-                            f"#{get_pings("New Version")} A newer version is available: {latest_version}. "
+                            f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
                             f"\nYou have {format_time_left(time_left)} remaining to update."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                     else:
                         send_message(
-                            f"#{get_pings("New Version")} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
+                            f"#{get_pings('New Version')} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                         instance.is_active = False
@@ -229,7 +229,7 @@ def BB_run_regular_updates():
                         status.has_awox_kills = has_awox
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"##{get_pings("AwoX")} New AwoX kill(s):\n{link_list}")
+                        changes.append(f"##{get_pings('AwoX')} New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
                     old = set(status.awox_kill_links or [])
                     new = set(awox_links) - old
@@ -307,9 +307,9 @@ def BB_run_regular_updates():
                             if anything == False:
                                 continue
                             if new_entry.get("can_light", False) == True:
-                                pingrole = get_pings("Can Light Cyno")
+                                pingrole = get_pings('Can Light Cyno')
                             else:
-                                pingrole = get_pings("Cyno Update")
+                                pingrole = get_pings('Cyno Update')
 
                             changes.append(f"- **{charname}**{pingrole}:")
                             table_lines = [
@@ -483,7 +483,7 @@ def BB_run_regular_updates():
                         changes.append(f"## Hostile Assets: {'🚩' if has_hostile_assets else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"##{get_pings("New Hostile Assets")} New Hostile Assets:\n{link_list}")
+                        changes.append(f"##{get_pings('New Hostile Assets')} New Hostile Assets:\n{link_list}")
                         logger.info(f"{char_name} new assets")
                     status.has_hostile_assets = has_hostile_assets
                     status.hostile_assets = hostile_assets_result
@@ -504,7 +504,7 @@ def BB_run_regular_updates():
                         changes.append(f"## Hostile Clones: {'🚩' if has_hostile_clones else '✖'}")
                         logger.info(f"{char_name} changed")
                     if new_links:
-                        changes.append(f"##{get_pings("New Hostile Clones")} New Hostile Clone(s):\n{link_list}")
+                        changes.append(f"##{get_pings('New Hostile Clones')} New Hostile Clone(s):\n{link_list}")
                         logger.info(f"{char_name} new clones")
                     status.has_hostile_clones = has_hostile_clones
                     status.hostile_clones = hostile_clones_result
@@ -553,7 +553,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Contacts:")
                         for cid in new_links:
                             res = sus_contacts_result[cid]
-                            ping = get_pings("New Sus Contacts")
+                            ping = get_pings('New Sus Contacts')
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -589,7 +589,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Contracts:")
                         for issuer_id in new_links:
                             res = sus_contracts_result[issuer_id]
-                            ping = get_pings("New Sus Contracts")
+                            ping = get_pings('New Sus Contracts')
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -625,7 +625,7 @@ def BB_run_regular_updates():
                         changes.append(f"## New Sus Mails:")
                         for issuer_id in new_links:
                             res = sus_mails_result[issuer_id]
-                            ping = get_pings("New Sus Mails")
+                            ping = get_pings('New Sus Mails')
                             if res.startswith("- A -"):
                                 ping = ""
                             changes.append(f"{res} {ping}")
@@ -656,7 +656,7 @@ def BB_run_regular_updates():
                     if status.has_sus_trans != has_sus_trans:
                         changes.append(f"## Sus Transactions: {'🚩' if has_sus_trans else '✖'}")
                     logger.info(f"{char_name} status changed")
-                    changes.append(f"## New Sus Transactions{get_pings("New Sus Transactions")}:\n{link_list}")
+                    changes.append(f"## New Sus Transactions{get_pings('New Sus Transactions')}:\n{link_list}")
                     #if new_links:
                     #    changes.append(f"## New Sus Transactions @here:")
                     #    for issuer_id in new_links:
@@ -687,7 +687,7 @@ def BB_run_regular_updates():
         instance.is_active = False
         instance.save()
         send_message(
-            f"#{get_pings("Error")} Big Brother encountered an unexpected error and disabled itself, "
+            f"#{get_pings('Error')} Big Brother encountered an unexpected error and disabled itself, "
             "please forward your aa worker.log and the error below to Andrew Xadi"
         )
 
@@ -1034,7 +1034,7 @@ def BB_run_regular_loa_updates():
                         "   → Marked LOA %s as finished for %s",
                         lr, user.username,
                     )
-                    send_message(f"##{get_pings("LoA Changed Status")} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
+                    send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
             if lr.status == "in_progress":
                 in_progress = True
 
@@ -1045,7 +1045,7 @@ def BB_run_regular_loa_updates():
                 flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
     if flags:
         flags_text = "\n".join(flags)
-        send_message(f"##{get_pings("LoA Inactivity")} Inactive Members Found:\n{flags_text}")
+        send_message(f"##{get_pings('LoA Inactivity')} Inactive Members Found:\n{flags_text}")
 
 
 @shared_task

@@ -162,6 +162,6 @@ def add_user_characters_to_blacklist(
             alliance_name=None,
         )
         newly_blacklisted.append(char.character_name)
-        send_message(f"{get_pings("New Blacklist Entry")}{target_main_name}'s character {char.character_name} added to blacklist by {added_by}")
+        send_message(f"{get_pings('New Blacklist Entry')}{target_main_name}'s character {char.character_name} added to blacklist by {added_by}")
 
     return newly_blacklisted
