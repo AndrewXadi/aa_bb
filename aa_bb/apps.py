@@ -28,6 +28,8 @@ class AaBbConfig(AppConfig):
             "New Sus Mails",
             "New Sus Transactions",
             "New Blacklist Entry",
+            "skills",
+            "All Cyno Changes",
         ]
 
         try:

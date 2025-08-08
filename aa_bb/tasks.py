@@ -297,6 +297,9 @@ def BB_run_regular_updates():
                             "i_sbomb", "i_scru", "i_expfrig",
                         ]
 
+                        if changed_chars:
+                            changes.append(f"##{get_pings('All Cyno Changes')} Changes in cyno capabilities detected:")
+
                         for charname in changed_chars:
                             old_entry = old_cyno.get(charname, {})
                             new_entry = new_cyno.get(charname, {})
@@ -401,6 +404,9 @@ def BB_run_regular_updates():
                             12093, 20533, 19719,
                             30651, 30652, 30653, 30650, 33856,
                         ]
+
+                        if changed_chars:
+                            changes.append(f"##{get_pings('skills')} Changes in skills detected:")
 
                         for charname in changed_chars:
                             # Defensive retrieval of old vs. new
