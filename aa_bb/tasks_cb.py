@@ -34,20 +34,32 @@ def CB_run_regular_updates():
                       .order_by("corporation_name")
                 ).filter(
                     corporationaudit__isnull=False,
-                    corporationaudit__last_update_assets__isnull=False,
-                    corporationaudit__last_update_wallet__isnull=False,
-                    corporationaudit__last_update_contracts__isnull=False,
+                ).values(
+                    "corporation_id",
+                    "corporationaudit__last_update_assets",
+                    "corporationaudit__last_update_wallet",
+                    "corporationaudit__last_update_contracts",
                 )
             
 
-            for corp_id in corps:
+            for corp in corps:
                 ignored_str = BigBrotherConfig.get_solo().ignored_corporations or ""
                 ignored_ids = {int(s) for s in ignored_str.split(",") if s.strip().isdigit()}
+                corp_id = corp["corporation_id"]
+                assets_updated = corp["corporationaudit__last_update_assets"] is not None
+                wallet_updated = corp["corporationaudit__last_update_wallet"] is not None
+                contracts_updated = corp["corporationaudit__last_update_contracts"] is not None
                 if corp_id in ignored_ids:
                     continue
-                hostile_assets_result = get_corp_hostile_asset_locations(corp_id)
-                sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_contracts(corp_id).items() }
-                sus_trans_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_transactions(corp_id).items() }
+                hostile_assets_result = []
+                sus_contracts_result = {}
+                sus_trans_result = {}
+                if assets_updated:
+                    hostile_assets_result = get_corp_hostile_asset_locations(corp_id)
+                if contracts_updated:
+                    sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_contracts(corp_id).items() }
+                if wallet_updated:
+                    sus_trans_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_transactions(corp_id).items() }
 
                 has_hostile_assets = bool(hostile_assets_result)
                 has_sus_contracts = bool(sus_contracts_result)
