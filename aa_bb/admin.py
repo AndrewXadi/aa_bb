@@ -6,7 +6,7 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,
+    UserStatus,LeaveRequest,WarmProgress
 )
 
 @admin.register(BigBrotherConfig)
@@ -59,6 +59,10 @@ class OptMessage4Config(admin.ModelAdmin):
 class OptMessage5Config(admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
+
+@admin.register(WarmProgress)
+class WarmProgressConfig(admin.ModelAdmin):
+    list_display = ['user_main', 'updated']
 
 @admin.register(UserStatus)
 class UserStatusConfig(admin.ModelAdmin):

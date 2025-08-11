@@ -11,7 +11,7 @@ import requests
 from datetime import datetime, timedelta
 from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, OperationalError
 from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache
 from dateutil.parser import parse as parse_datetime
 import time
@@ -280,12 +280,21 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
 
     # 3) Store in cache table (create or update)
     #    wrap in transaction to avoid race conditions
-    with transaction.atomic():
-        EntityInfoCache.objects.update_or_create(
-            entity_id=entity_id,
-            as_of=as_of,
-            defaults={"data": info}
-        )
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        try:
+            with transaction.atomic():
+                EntityInfoCache.objects.update_or_create(
+                    entity_id=entity_id,
+                    as_of=as_of,
+                    defaults={"data": info}
+                )
+            break  # Success, exit loop
+        except OperationalError as e:
+            if 'Deadlock' in str(e) and attempt < MAX_RETRIES - 1:
+                time.sleep(0.1 * (attempt + 1))  # small backoff
+                continue
+            raise
 
     if errent:
         errmsg = "Error: entity id provided is None "
