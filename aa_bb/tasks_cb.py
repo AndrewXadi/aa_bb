@@ -32,7 +32,7 @@ def CB_run_regular_updates():
                 corps = (
                     qs.values_list("corporation_id", flat=True)
                       .order_by("corporation_name")
-                )
+                ).filter(corporationaudit__isnull=False)
             
 
             for corp_id in corps:
@@ -41,11 +41,8 @@ def CB_run_regular_updates():
                 if corp_id in ignored_ids:
                     continue
                 hostile_assets_result = get_corp_hostile_asset_locations(corp_id)
-                logger.info("assets")
                 sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_contracts(corp_id).items() }
-                logger.info(f"contracts {len(sus_contracts_result)}")
                 sus_trans_result = { str(issuer_id): v for issuer_id, v in get_corp_hostile_transactions(corp_id).items() }
-                logger.info("trans")
 
                 has_hostile_assets = bool(hostile_assets_result)
                 has_sus_contracts = bool(sus_contracts_result)
@@ -56,7 +53,7 @@ def CB_run_regular_updates():
 
                 corp_changes = []
 
-                #corpstatus.hostile_assets = []
+                corpstatus.hostile_assets = []
                 #corpstatus.sus_contracts = {}
                 #corpstatus.sus_trans = {}
                 def as_dict(x):
