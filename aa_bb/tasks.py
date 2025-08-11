@@ -715,6 +715,12 @@ def BB_run_regular_updates():
             chunk = tb_str[start:end]
             send_message(f"```{chunk}```")
             start = end
+    
+    from django_celery_beat.models import PeriodicTask
+    task_name = 'BB run regular updates'
+    task = PeriodicTask.objects.filter(name=task_name).first()
+    if not task.enabled:
+        send_message("Big Brother task has finished, you can now enable the task")
 
 @shared_task
 def BB_send_daily_messages():
