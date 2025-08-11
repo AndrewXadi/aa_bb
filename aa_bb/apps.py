@@ -72,6 +72,29 @@ class AaBbConfig(AppConfig):
             else:
                 logger.info("✅ Created ‘BB run regular updates’ periodic task with enabled=False")
 
+            task_cb, created_cb = PeriodicTask.objects.get_or_create(
+                name="CB run regular updates",
+                defaults={
+                    "interval": schedule,
+                    "task": "aa_bb.tasks_cb.CB_run_regular_updates",
+                    "enabled": False,  # only on creation
+                },
+            )
+
+            if not created_cb:
+                updated_cb = False
+                if task_cb.interval != schedule or task_cb.task != "aa_bb.tasks_cb.CB_run_regular_updates":
+                    task_cb.interval = schedule
+                    task_cb.task = "aa_bb.tasks_cb.CB_run_regular_updates"
+                    task_cb.save()
+                    updated_cb = True
+                if updated_cb:
+                    logger.info("✅ Updated ‘CB run regular updates’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘CB run regular updates’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘CB run regular updates’ periodic task with enabled=False")
+
             scheduleloa, _ = CrontabSchedule.objects.get_or_create(
                 minute="0",
                 hour="12",
