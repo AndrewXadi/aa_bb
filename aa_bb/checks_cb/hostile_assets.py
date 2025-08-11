@@ -45,7 +45,7 @@ def get_asset_locations(corp_id: int) -> Dict[int, Optional[str]]:
     )
     return dict(sorted_items)
 
-def get_hostile_asset_locations(user_id: int) -> Dict[str, str]:
+def get_corp_hostile_asset_locations(user_id: int) -> Dict[str, str]:
     """
     Returns a dict of system display name → owning alliance name
     for systems where the user's characters have assets in space,

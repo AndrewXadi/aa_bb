@@ -211,7 +211,7 @@ def render_transactions(user_id: int) -> str:
     return '\n'.join(parts)
 
 
-def get_user_hostile_transactions(user_id: int) -> Dict[int, str]:
+def get_corp_hostile_transactions(user_id: int) -> Dict[int, str]:
     """
     Identify and note hostile transactions, storing notes and returning summary
     """

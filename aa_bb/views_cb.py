@@ -59,8 +59,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 CARD_DEFINITIONS = [
     {"title": 'Assets in hostile space', "key": "sus_asset"},
-    {"title": '<span style="color:red;"><b>WiP</b> </span>Suspicious Contracts', "key": "sus_contr"},
-    {"title": '<span style="color:red;"><b>WiP</b> </span>Suspicious Transactions', "key": "sus_tra"},
+    {"title": 'Suspicious Contracts', "key": "sus_contr"},
+    {"title": 'Suspicious Transactions', "key": "sus_tra"},
 ]
 
 
@@ -79,6 +79,11 @@ def index(request: WSGIRequest):
             "Corp Brother is currently inactive; please fill settings and enable the task"
         )
         return render(request, "aa_cb/disabled.html", {"message": msg})
+    ignored_str = BigBrotherConfig.get_solo().ignored_corporations or ""
+    ignored_ids = {int(s) for s in ignored_str.split(",") if s.strip().isdigit()}
+    ignored_corps = EveCorporationInfo.objects.filter(
+            corporation_id__in=ignored_ids).distinct()
+    logger.info(f"ignored ids: {str(ignored_ids)}, corps {len(ignored_corps)}")
 
     if request.user.has_perm("aa_bb.full_access_cb"):
         # Full access: all registered corporations
@@ -97,8 +102,12 @@ def index(request: WSGIRequest):
         qs = None
 
     if qs is not None:
+        qsa = qs.exclude(corporation_id__in=ignored_corps.values_list("corporation_id", flat=True))
+        logger.info(f"qs len: {len(qs)}, qsa {len(qsa)}, ignored {len(ignored_corps)}")
+        logger.info(f"qs first corp id: {repr(qs[0].corporation_id)} type: {type(qs[0].corporation_id)}")
+        logger.info(f"ignored corps: {[ (repr(corp), type(corp)) for corp in ignored_corps ]}")
         dropdown_options = (
-            qs.values_list("corporation_id", "corporation_name")
+            qsa.values_list("corporation_id", "corporation_name")
               .order_by("corporation_name")
         )
 

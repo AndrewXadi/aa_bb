@@ -66,7 +66,7 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
         cid = c.contract_id
         issue = c.date_issued
         number += 1
-        logger.info(f"contract number: {number}")
+        logger.info(f"corp contract number: {number}")
 
         # -- issuer --
         issuer_id = get_character_id(c.issuer_name)
@@ -251,7 +251,7 @@ def render_contracts(user_id: int) -> str:
 
 
 
-def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
+def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
     cfg = BigBrotherConfig.get_solo()
     hostile_corps = cfg.hostile_corporations
     hostile_allis = cfg.hostile_alliances
@@ -278,6 +278,7 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
             # if we've processed it before, skip the rest
             if not created:
                 continue
+            
 
             if not is_contract_row_hostile(c):
                 continue

@@ -63,6 +63,21 @@ class UserStatus(models.Model):
     class Meta:
         verbose_name = "User Status"
         verbose_name_plural = "User Statuses"
+        
+class CorpStatus(models.Model):
+    corp_id = models.PositiveIntegerField(default=1)
+    corp_name = models.TextField(max_length=50)
+    has_hostile_assets = models.BooleanField(default=False)
+    hostile_assets = JSONField(default=dict, blank=True)
+    has_sus_contracts = models.BooleanField(default=False)
+    sus_contracts = JSONField(default=dict, blank=True)
+    has_sus_trans = models.BooleanField(default=False)
+    sus_trans = JSONField(default=dict, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Corp Status"
+        verbose_name_plural = "Corp Statuses"
 
 class Messages(models.Model):
     text = models.TextField(max_length=2000)
@@ -201,6 +216,12 @@ class BigBrotherConfig(SingletonModel):
         blank=True,
         null=True,
         help_text="List of corporation IDs considered whitelisted, separated by ','"
+    )
+
+    ignored_corporations = models.TextField(
+        blank=True,
+        null=True,
+        help_text="List of corporation IDs to be ignored in the corp brother task and to not show up in Corp Brother tab, separated by ','"
     )
 
     webhook = models.URLField(
