@@ -106,7 +106,12 @@ def index(request: WSGIRequest):
         logger.info(f"qs len: {len(qs)}, qsa {len(qsa)}, ignored {len(ignored_corps)}")
         logger.info(f"qs first corp id: {repr(qs[0].corporation_id)} type: {type(qs[0].corporation_id)}")
         logger.info(f"ignored corps: {[ (repr(corp), type(corp)) for corp in ignored_corps ]}")
-        qsa = qsa.filter(corporationaudit__isnull=False)
+        qsa = qsa.filter(
+            corporationaudit__isnull=False,
+            corporationaudit__last_update_assets__isnull=False,
+            corporationaudit__last_update_wallet__isnull=False,
+            corporationaudit__last_update_contracts__isnull=False,
+        )
         dropdown_options = (
             qsa.values_list("corporation_id", "corporation_name")
               .order_by("corporation_name")

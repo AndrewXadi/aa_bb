@@ -32,7 +32,12 @@ def CB_run_regular_updates():
                 corps = (
                     qs.values_list("corporation_id", flat=True)
                       .order_by("corporation_name")
-                ).filter(corporationaudit__isnull=False)
+                ).filter(
+                    corporationaudit__isnull=False,
+                    corporationaudit__last_update_assets__isnull=False,
+                    corporationaudit__last_update_wallet__isnull=False,
+                    corporationaudit__last_update_contracts__isnull=False,
+                )
             
 
             for corp_id in corps:
