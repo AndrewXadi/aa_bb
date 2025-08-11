@@ -1,0 +1,21 @@
+{% extends 'allianceauth/base-bs5.html' %}
+
+{% load i18n %}
+
+{% block page_title %}
+    {% translate "Corp Brother" %}
+{% endblock %}
+
+{% block header_nav_brand %}
+    {% translate "Corp Brother" %}
+{% endblock header_nav_brand %}
+
+{% block header_nav %}
+    {{ block.super }}
+{% endblock %}
+
+{% block content %}
+    <div class="aa_cb">
+        {% block details %}{% endblock %}
+    </div>
+{% endblock %}

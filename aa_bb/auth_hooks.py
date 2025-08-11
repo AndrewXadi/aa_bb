@@ -8,7 +8,41 @@ from allianceauth import hooks
 from allianceauth.services.hooks import MenuItemHook, UrlHook
 
 # AA Example App
-from aa_bb import urls, urls_loa
+from aa_bb import urls, urls_loa, urls_cb
+
+
+class CorpBrotherMenuItem(MenuItemHook):
+    """This class ensures only authorized users will see the menu entry"""
+
+    def __init__(self):
+        # setup menu entry for sidebar
+        MenuItemHook.__init__(
+            self,
+            _("Corp Brother"),
+            "fas fa-eye fa-fw",
+            "aa_cb:index",
+            navactive=["aa_cb:"],
+        )
+
+    def render(self, request):
+        """Render the menu item"""
+
+        if request.user.has_perm("aa_bb.basic_access_cb"):
+            return MenuItemHook.render(self, request)
+
+        return ""
+
+
+@hooks.register("menu_item_hook")
+def register_menu_cb():
+    """Register the menu item"""
+
+    return CorpBrotherMenuItem()
+
+
+@hooks.register("url_hook")
+def register_corpbrother_urls():
+    return UrlHook(urls_cb, "CorpBrother", r"^aa_cb/")
 
 
 class BigBrotherMenuItem(MenuItemHook):

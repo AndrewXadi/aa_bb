@@ -23,8 +23,9 @@ from ..app_settings import (
     get_entity_info,
 )
 
-from .corp_blacklist import check_char_corp_bl
-from corptools.models import CharacterWalletJournalEntry as WalletJournalEntry
+from aa_bb.checks.corp_blacklist import check_char_corp_bl
+from corptools.models import CorporationAudit, CorporationWalletJournalEntry
+from allianceauth.eveonline.models import EveCorporationInfo
 from ..models import BigBrotherConfig, ProcessedTransaction, SusTransactionNote
 
 SUS_TYPES = ("player_trading","corporation_account_withdrawal","player_donation")
@@ -48,16 +49,11 @@ def _find_alliance_at(history: list, date: datetime) -> Optional[int]:
 
 
 def gather_user_transactions(user_id: int):
-    """
-    Fetch all wallet journal entries for user's characters
-    """
-    user_chars = get_user_characters(user_id)
-    user_ids = set(user_chars.keys())
-    qs = WalletJournalEntry.objects.filter(
-        second_party_id__in=user_ids
-    )
-    #for entry in qs:
-    #    entry.character.
+    corp_info = EveCorporationInfo.objects.get(corporation_id=user_id)
+    corp_audit = CorporationAudit.objects.get(corporation=corp_info)
+
+    qs = CorporationWalletJournalEntry.objects.filter(division__corporation=corp_audit)
+    logger.info(f"qs:{qs.count()}")
     return qs
 
 
