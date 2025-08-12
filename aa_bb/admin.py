@@ -6,7 +6,7 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,WarmProgress
+    UserStatus,LeaveRequest,WarmProgress,AllianceHistoryCache
 )
 
 @admin.register(BigBrotherConfig)
@@ -71,3 +71,7 @@ class UserStatusConfig(admin.ModelAdmin):
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(admin.ModelAdmin):
     list_display = ['main_character', 'start_date', 'end_date', 'reason', 'status']
+
+@admin.register(AllianceHistoryCache)
+class AllianceHistoryCacheConfig(admin.ModelAdmin):
+    list_display = ['corp_id', 'updated']
