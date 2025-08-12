@@ -450,7 +450,7 @@ def stream_contracts_sse(request: WSGIRequest):
                 yield "event: done\ndata:0\n\n"
                 return
 
-            for c in qs:
+            for c in qs.iterator():
                 processed += 1
                 # Ping to keep connection alive
                 yield ": ping\n\n"
@@ -645,7 +645,7 @@ def stream_transactions_sse(request):
         )
         yield f"event: header\ndata:{json.dumps(header_html)}\n\n"
 
-        for entry in qs:
+        for entry in qs.iterator():
             processed += 1
             yield ": ping\n\n"         # keep‐alive
 
