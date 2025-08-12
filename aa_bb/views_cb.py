@@ -242,14 +242,31 @@ def warm_entity_cache_task(self, user_id):
 
     # Build list of (entity_id, timestamp)
     entries = []
-    for c in gather_user_contracts(user_id):
+    contracts = gather_user_contracts(user_id)
+    trans = gather_user_transactions(user_id)
+    candidates = []
+    for c in contracts:
         issuer_id = get_character_id(c.issuer_name)
-        entries.append((issuer_id, getattr(c, "date_issued")))
+        candidates.append((issuer_id, getattr(c, "date_issued")))
         assignee = c.assignee_id or c.acceptor_id
-        entries.append((assignee, getattr(c, "date_issued")))
-    for t in gather_user_transactions(user_id):
-        entries.append((t.first_party_id, getattr(t, "date")))
-        entries.append((t.second_party_id, getattr(t, "date")))
+        candidates.append((assignee, getattr(c, "date_issued")))
+    for t in trans:
+        candidates.append((t.first_party_id, getattr(t, "date")))
+        candidates.append((t.second_party_id, getattr(t, "date")))
+    from django.db.models import Q
+    from .models import EntityInfoCache
+    query_filter = Q()
+    for entity_id, as_of in candidates:
+        query_filter |= Q(entity_id=entity_id, as_of=as_of)
+
+    existing = set(
+        EntityInfoCache.objects.filter(query_filter)
+        .values_list('entity_id', 'as_of')
+    )
+
+    for candidate in candidates:
+        if candidate not in existing:
+            entries.append(candidate)
 
     total = len(entries)
     logger.info(f"Starting warm cache for {user_main} ({total} entries)")
