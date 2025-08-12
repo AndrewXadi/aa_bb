@@ -266,8 +266,10 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
 
     notes: Dict[int, str] = {}
     new_ids = [cid for cid in all_ids if cid not in seen_ids]
-
+    processed =0
     if new_ids:
+        processed + 1
+        logger.info(f"Processing {processed}/{len(new_ids)} contracts for {user_id}, total was {len(all_ids)}")
         # 3) Hydrate only new contracts
         new_qs = all_qs.filter(contract_id__in=new_ids)
         new_rows = get_user_contracts(new_qs)

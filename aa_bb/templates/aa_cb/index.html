@@ -358,9 +358,12 @@ dropdown.addEventListener('change', () => {
 
 // Poll every 5 seconds for warming-progress updates
 const warmerBox = document.getElementById('warmerBox');
+let progressInFlight = false;
 async function fetchProgress() {
+  if (progressInFlight) return;
+  progressInFlight = true;
   try {
-    const res = await fetch("{% url 'aa_cb:warm_progress' %}");
+    const res = await fetch("{% url 'aa_cb:warm_progress' %}", { keepalive: true });
     if (!res.ok) throw new Error('Progress fetch failed');
     const data = await res.json();
      if (data.in_progress) {
@@ -378,12 +381,14 @@ async function fetchProgress() {
   } catch (e) {
     console.error('Warm-progress error:', e);
     warmerBox.style.display = 'none';
+  } finally {
+    progressInFlight = false;
   }
 }
 
 // Kick off immediately and then every 5s
 fetchProgress();
-setInterval(fetchProgress, 500);
+setInterval(fetchProgress, 5000);
 });
 </script>
 {% endblock %}

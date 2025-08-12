@@ -3,12 +3,15 @@ import logging
 
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib import messages
+from django.db import connection
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import (
     JsonResponse,
     HttpResponseBadRequest,
     StreamingHttpResponse,
 )
+import errno
+import socket
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
@@ -295,31 +298,27 @@ def warm_cache(request):
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def get_warm_progress(request):
-    """
-    AJAX endpoint returning all in-flight and queued warm-up info:
-      {
-        in_progress: bool,
-        users: [ { user, current, total }, … ],
-        queued: { count, names: [...] }
-      }
-    """
-    qs = WarmProgress.objects.all()
-    users = [
-        {"user": wp.user_main, "current": wp.current, "total": wp.total}
-        for wp in qs
-    ]
-    # Those still at current == 0 are queued/not yet started
-    queued_names = [wp.user_main for wp in qs if wp.current == 0]
+    try:
+        qs = WarmProgress.objects.all()
+        users = [
+            {"user": wp.user_main, "current": wp.current, "total": wp.total}
+            for wp in qs
+        ]
+        queued_names = [wp.user_main for wp in qs if wp.current == 0]
 
-    #logger.debug(f"get_warm_progress → users={users}, queued={queued_names}")
-    return JsonResponse({
-        "in_progress": bool(users),
-        "users": users,
-        "queued": {
-            "count": len(queued_names),
-            "names": queued_names,
-        },
-    })
+        return JsonResponse({
+            "in_progress": bool(users),
+            "users": users,
+            "queued": {
+                "count": len(queued_names),
+                "names": queued_names,
+            },
+        })
+    except (ConnectionResetError, socket.error) as e:
+        if isinstance(e, ConnectionResetError) or getattr(e, 'errno', None) == errno.ECONNRESET:
+            # client disconnected — nothing to log
+            return None
+        raise
 
 
 
@@ -415,6 +414,12 @@ def stream_contracts_sse(request: WSGIRequest):
 
     qs    = gather_user_contracts(user_id)
     total = qs.count()
+    connection.close()
+    if total == 0:
+        return StreamingHttpResponse(
+            "<p>No contracts found.</p>",
+            content_type="text/html"
+        )
 
     def generator():
         # Initial SSE heartbeat
@@ -486,6 +491,7 @@ def stream_contracts_sse(request: WSGIRequest):
                 "event: progress\n"
                 f"data:{processed},{total},{hostile_count}\n\n"
             )
+            connection.close()
 
         # Done
         yield "event: done\ndata:bye\n\n"
@@ -560,6 +566,7 @@ def stream_transactions_sse(request):
 
     qs    = gather_user_transactions(user_id)
     total = qs.count()
+    connection.close()
     if total == 0:
         return StreamingHttpResponse(
             "<p>No transactions found.</p>",
@@ -637,6 +644,7 @@ def stream_transactions_sse(request):
                 "event: progress\n"
                 f"data:{processed},{total},{hostile_count}\n\n"
             )
+            connection.close()
 
         # Done
         yield "event: done\ndata:bye\n\n"

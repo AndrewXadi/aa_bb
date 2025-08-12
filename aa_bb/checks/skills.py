@@ -85,8 +85,12 @@ def get_user_skill_info(user_id: int, skill_id: int) -> dict:
         except Skill.DoesNotExist:
             trained = 0
             active  = 0
-
-        totals = audit.skilltotals  # SkillTotals instance
+        if hasattr(audit, "skilltotals"):
+            totals = audit.skilltotals  # SkillTotals instance
+        else:
+            class DummyTotals:
+                total_sp = 0
+            totals = DummyTotals()
 
         result[char_name] = {
             "trained_skill_level": trained,

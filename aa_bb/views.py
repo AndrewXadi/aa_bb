@@ -3,6 +3,7 @@ import logging
 
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib import messages
+from django.db import connection
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import (
     JsonResponse,
@@ -406,6 +407,12 @@ def stream_contracts_sse(request: WSGIRequest):
 
     qs    = gather_user_contracts(user_id)
     total = qs.count()
+    connection.close()
+    if total == 0:
+        return StreamingHttpResponse(
+            "<p>No contracts found.</p>",
+            content_type="text/html"
+        )
 
     def generator():
         # Initial SSE heartbeat
@@ -477,6 +484,7 @@ def stream_contracts_sse(request: WSGIRequest):
                 "event: progress\n"
                 f"data:{processed},{total},{hostile_count}\n\n"
             )
+            connection.close()
 
         # Done
         yield "event: done\ndata:bye\n\n"
@@ -598,6 +606,7 @@ def stream_mails_sse(request):
 
     qs    = gather_user_mails(user_id)
     total = qs.count()
+    connection.close()
     if total == 0:
         return StreamingHttpResponse("<p>No mails found.</p>",
                                      content_type="text/html")
@@ -671,6 +680,7 @@ def stream_mails_sse(request):
                 "event: progress\n"
                 f"data:{processed},{total},{hostile_count}\n\n"
             )
+            connection.close()
 
         # done
         yield "event: done\ndata:bye\n\n"
@@ -696,6 +706,7 @@ def stream_transactions_sse(request):
 
     qs    = gather_user_transactions(user_id)
     total = qs.count()
+    connection.close()
     if total == 0:
         return StreamingHttpResponse(
             "<p>No transactions found.</p>",
@@ -773,6 +784,7 @@ def stream_transactions_sse(request):
                 "event: progress\n"
                 f"data:{processed},{total},{hostile_count}\n\n"
             )
+            connection.close()
 
         # Done
         yield "event: done\ndata:bye\n\n"

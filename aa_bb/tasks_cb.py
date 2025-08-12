@@ -56,7 +56,7 @@ def CB_run_regular_updates():
 
                 corp_changes = []
 
-                corpstatus.hostile_assets = []
+                #corpstatus.hostile_assets = []
                 #corpstatus.sus_contracts = {}
                 #corpstatus.sus_trans = {}
                 def as_dict(x):
@@ -198,7 +198,7 @@ def CB_run_regular_updates():
             start = end
     
     from django_celery_beat.models import PeriodicTask
-    task_name = 'BB run regular updates'
+    task_name = 'CB run regular updates'
     task = PeriodicTask.objects.filter(name=task_name).first()
     if not task.enabled:
         send_message("Corp Brother task has finished, you can now enable the task")
