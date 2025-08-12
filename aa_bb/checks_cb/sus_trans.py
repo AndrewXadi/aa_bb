@@ -217,10 +217,13 @@ def get_corp_hostile_transactions(user_id: int) -> Dict[int, str]:
     """
     qs_all = gather_user_transactions(user_id)
     all_ids = list(qs_all.values_list('entry_id', flat=True))
+    del qs_all
     seen = set(ProcessedTransaction.objects.filter(entry_id__in=all_ids)
                                               .values_list('entry_id', flat=True))
     notes: Dict[int, str] = {}
     new = [eid for eid in all_ids if eid not in seen]
+    del all_ids
+    del seen
     processed = 0
     if new:
         processed + 1

@@ -259,6 +259,7 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
     # 1) Gather all raw contracts
     all_qs = gather_user_contracts(user_id)
     all_ids = list(all_qs.values_list('contract_id', flat=True))
+    del all_qs
 
     # 2) Which are already processed?
     seen_ids = set(ProcessedContract.objects.filter(contract_id__in=all_ids)
@@ -266,6 +267,8 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
 
     notes: Dict[int, str] = {}
     new_ids = [cid for cid in all_ids if cid not in seen_ids]
+    del all_ids
+    del seen_ids
     processed =0
     if new_ids:
         processed + 1
