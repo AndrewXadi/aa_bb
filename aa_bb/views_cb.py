@@ -57,6 +57,10 @@ from django.utils import timezone
 from celery import shared_task
 from celery.exceptions import Ignore
 from aa_bb.checks.skills import render_user_skills_html
+import sys
+import tracemalloc
+tracemalloc.start()
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -440,6 +444,7 @@ def stream_contracts_sse(request: WSGIRequest):
         )
 
     def generator():
+        
         try:
             # Initial SSE heartbeat
             yield ": ok\n\n"
@@ -450,7 +455,7 @@ def stream_contracts_sse(request: WSGIRequest):
                 yield "event: done\ndata:0\n\n"
                 return
 
-            for c in qs.iterator():
+            for c in qs:
                 processed += 1
                 # Ping to keep connection alive
                 yield ": ping\n\n"
@@ -500,17 +505,24 @@ def stream_contracts_sse(request: WSGIRequest):
                     }
                     yield ": ping\n\n"
                     row['cell_styles'] = style_map
+                    logger.info(f"Size of row dict: {sys.getsizeof(row)} bytes")
 
                     if is_contract_row_hostile(row):
                         hostile_count += 1
                         tr_html = _render_contract_row_html(row)
                         yield f"event: contract\ndata:{json.dumps(tr_html)}\n\n"
+                        logger.info(f"Size of row dict: {sys.getsizeof(tr_html)} bytes")
 
                     # Progress update
                     yield (
                         "event: progress\n"
                         f"data:{processed},{total},{hostile_count}\n\n"
                     )
+                    snapshot = tracemalloc.take_snapshot()
+                    top_stats = snapshot.statistics('lineno')
+                    logger.info(f"Top memory usage after {processed} iterations:")
+                    for stat in top_stats[:5]:
+                        logger.info(stat)
                     connection.close()
                 except (ConnectionResetError, BrokenPipeError):
                     # client disconnected — stop quietly
@@ -645,7 +657,7 @@ def stream_transactions_sse(request):
         )
         yield f"event: header\ndata:{json.dumps(header_html)}\n\n"
 
-        for entry in qs.iterator():
+        for entry in qs:
             processed += 1
             yield ": ping\n\n"         # keep‐alive
 

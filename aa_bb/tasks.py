@@ -1066,7 +1066,7 @@ def BB_run_regular_loa_updates():
 
 @shared_task
 def BB_daily_DB_cleanup():
-    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache
+    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache, CorporationInfoCache, AllianceHistoryCache
     two_months_ago = timezone.now() - timedelta(days=60)
     flags = []
     #Delete old model entries
@@ -1076,6 +1076,8 @@ def BB_daily_DB_cleanup():
         (Corporation_names, "corporation"),
         (UserStatus, "User Status"),
         (EntityInfoCache, "Entity Info Cache"),
+        (CorporationInfoCache, "Corporation Info Cache")
+        (AllianceHistoryCache, "Alliance History Cache")
     ]
 
     for model, name in models_to_cleanup:

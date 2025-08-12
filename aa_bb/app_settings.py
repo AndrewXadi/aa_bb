@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError, OperationalError
-from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache
+from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache, SovereigntyMapCache, AllianceHistoryCache, CorporationInfoCache
 from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
@@ -28,10 +28,7 @@ ESI_BASE = "https://esi.evetech.net/latest"
 DATASOURCE = "tranquility"
 HEADERS = {"Accept": "application/json"}
 
-# Sovereignty map cache (24h TTL)
-_sov_map_cache: Optional[list] = None
-_sov_map_cache_time: Optional[datetime] = None
-_CACHE_TTL = timedelta(hours=24)
+
 
 # Owner-name cache (7d TTL)
 _owner_name_cache: Dict[int, Tuple[str, datetime]] = {}
@@ -399,47 +396,45 @@ def format_int(value: int) -> str:
 def is_npc_corporation(corp_id):
     return 1_000_000 <= corp_id < 2_000_000
 
-corp_cache = {}
 CORP_TTL = timedelta(hours=24)
 
 def get_corporation_info(corp_id):
     """
-    Fetch corporation info from the ESI API, with a manual 24 h TTL cache.
+    Fetch corporation info from DB cache or ESI (24h TTL).
     """
-    # 1) Cache lookup & expiration check (LBYL)
-    entry = corp_cache.get(corp_id)
-    if entry:
-        if datetime.utcnow() - entry["stored"] < CORP_TTL:
-            return entry["value"]
-        # expired → remove old entry
-        del corp_cache[corp_id]
+    # 1) Try DB cache first
+    try:
+        entry = CorporationInfoCache.objects.get(pk=corp_id)
+        if timezone.now() - entry.updated < CORP_TTL:
+            return {"name": entry.name, "member_count": entry.member_count}
+        # else: expired → delete to refresh
+        entry.delete()
+    except CorporationInfoCache.DoesNotExist:
+        pass
 
-    # 2) Cache miss or expired → fetch fresh data
+    # 2) Fetch fresh from ESI
     try:
         result = esi.client.Corporation.get_corporations_corporation_id(
             corporation_id=corp_id
         ).results()
-        # carry through name & member_count
         info = {
-            "name":         result.get("name", f"Unknown ({corp_id})"),
+            "name": result.get("name", f"Unknown ({corp_id})"),
             "member_count": result.get("member_count", 0),
         }
     except (SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:
-        # log & return a safe default
         print(f"Failed to fetch corp info [{corp_id}]: {e}")
-        info = {"name": f"Unknown Corp ({corp_id})"}
+        info = {"name": f"Unknown Corp ({corp_id})", "member_count": 0}
 
-    # 3) Store in cache
-    corp_cache[corp_id] = {
-        "value": info,
-        "stored": datetime.utcnow()
-    }
+    # 3) Store/update DB cache
+    CorporationInfoCache.objects.update_or_create(
+        corp_id=corp_id,
+        defaults=info
+    )
 
     return info
 
-def_cache = {}
 
 def ensure_datetime(value):
     if isinstance(value, str):
@@ -457,15 +452,25 @@ def _fetch_alliance_history(corp_id):
         logger.warning(f"Failed to fetch alliance history for corp {corp_id}: {e}")
         return []
 
-def get_alliance_history_for_corp(corp_id):
-    if corp_id in def_cache:
-        return def_cache[corp_id]
+ALLIANCE_TTL = timedelta(hours=24)
 
+def get_alliance_history_for_corp(corp_id):
+    # 1) Try DB cache first
+    try:
+        entry = AllianceHistoryCache.objects.get(pk=corp_id)
+        if entry.is_fresh:
+            return entry.history
+        else:
+            entry.delete()
+    except AllianceHistoryCache.DoesNotExist:
+        pass
+
+    # 2) Fetch fresh
     history = []
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_fetch_alliance_history, corp_id)
         try:
-            response = future.result(timeout=5)   # give it 5s max
+            response = future.result(timeout=5)
             history = [
                 {
                     "alliance_id": h.get("alliance_id"),
@@ -480,25 +485,36 @@ def get_alliance_history_for_corp(corp_id):
         except Exception as e:
             logger.info(f"Error fetching alliance history for corp {corp_id}: {e}")
 
-    def_cache[corp_id] = history
+    # 3) Store in DB
+    AllianceHistoryCache.objects.update_or_create(
+        corp_id=corp_id,
+        defaults={"history": history}
+    )
+
     return history
 
 def _get_sov_map() -> list:
-    """
-    Return the full sovereignty map, fetching from ESI if missing or stale.
-    """
-    global _sov_map_cache, _sov_map_cache_time
-    now = datetime.utcnow()
-    if not _sov_map_cache or not _sov_map_cache_time or (now - _sov_map_cache_time) > _CACHE_TTL:
-        resp = requests.get(
-            f"{ESI_BASE}/sovereignty/map/",
-            params={"datasource": DATASOURCE},
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        _sov_map_cache = resp.json()
-        _sov_map_cache_time = now
-    return _sov_map_cache
+    try:
+        entry = SovereigntyMapCache.objects.get(pk=1)
+        if entry.is_fresh:
+            return entry.data
+    except SovereigntyMapCache.DoesNotExist:
+        pass
+
+    resp = requests.get(
+        f"{ESI_BASE}/sovereignty/map/",
+        params={"datasource": DATASOURCE},
+        headers=HEADERS,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    SovereigntyMapCache.objects.update_or_create(
+        pk=1,
+        defaults={"data": data}
+    )
+
+    return data
 
 ESI_BASE    = "https://esi.evetech.net/latest"
 DATASOURCE  = "tranquility"

@@ -10,6 +10,8 @@ from solo.models import SingletonModel
 from django.contrib.auth.models import User
 from django.db.models import JSONField
 from django_celery_beat.models import CrontabSchedule
+from django.utils import timezone
+from datetime import timedelta
 
 
 
@@ -745,3 +747,51 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f"{self.user.username}: {self.start_date} → {self.end_date} ({self.status})"
+    
+
+class CorporationInfoCache(models.Model):
+    corp_id = models.BigIntegerField(primary_key=True)
+    name = models.CharField(max_length=255)
+    member_count = models.IntegerField(default=0)
+    updated = models.DateTimeField(auto_now=True)  # auto-updated on save
+
+    class Meta:
+        db_table = "corporation_info_cache"
+        indexes = [
+            models.Index(fields=["updated"]),
+        ]
+
+    @property
+    def is_fresh(self):
+        """Check if cache entry is still valid (24h TTL)."""
+        return timezone.now() - self.updated < timedelta(hours=24)
+    
+
+class AllianceHistoryCache(models.Model):
+    corp_id = models.BigIntegerField(primary_key=True)
+    history = JSONField()  # store list of {alliance_id, start_date}
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "alliance_history_cache"
+        indexes = [
+            models.Index(fields=["updated"]),
+        ]
+
+    @property
+    def is_fresh(self):
+        """Check if data is still within TTL."""
+        return timezone.now() - self.updated < timedelta(hours=24)
+    
+
+class SovereigntyMapCache(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)  # single row
+    data = models.JSONField()
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "sovereignty_map_cache"
+
+    @property
+    def is_fresh(self):
+        return timezone.now() - self.updated < timedelta(hours=24)
