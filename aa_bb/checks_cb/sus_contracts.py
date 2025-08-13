@@ -271,10 +271,9 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
     processed =0
     if new_ids:
         processed + 1
-        logger.info(f"Processing {processed}/{len(new_ids)} contracts for {user_id}, total was {len(all_ids)}")
         # 3) Hydrate only new contracts
         new_qs = all_qs.filter(contract_id__in=new_ids)
-        del qs_all
+        del all_qs
         new_rows = get_user_contracts(new_qs)
 
         for cid, c in new_rows.items():

@@ -226,7 +226,6 @@ def get_corp_hostile_transactions(user_id: int) -> Dict[int, str]:
     processed = 0
     if new:
         processed + 1
-        logger.info(f"Processing {processed}/{len(new)} transactions for {user_id}, total was {len(all_ids)}")
         new_qs = qs_all.filter(entry_id__in=new)
         del qs_all
         rows = get_user_transactions(new_qs)
