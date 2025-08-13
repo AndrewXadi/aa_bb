@@ -217,7 +217,6 @@ def get_corp_hostile_transactions(user_id: int) -> Dict[int, str]:
     """
     qs_all = gather_user_transactions(user_id)
     all_ids = list(qs_all.values_list('entry_id', flat=True))
-    del qs_all
     seen = set(ProcessedTransaction.objects.filter(entry_id__in=all_ids)
                                               .values_list('entry_id', flat=True))
     notes: Dict[int, str] = {}
@@ -229,6 +228,7 @@ def get_corp_hostile_transactions(user_id: int) -> Dict[int, str]:
         processed + 1
         logger.info(f"Processing {processed}/{len(new)} transactions for {user_id}, total was {len(all_ids)}")
         new_qs = qs_all.filter(entry_id__in=new)
+        del qs_all
         rows = get_user_transactions(new_qs)
         for eid, tx in rows.items():
             pt, created = ProcessedTransaction.objects.get_or_create(entry_id=eid)

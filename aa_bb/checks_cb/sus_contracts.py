@@ -259,7 +259,6 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
     # 1) Gather all raw contracts
     all_qs = gather_user_contracts(user_id)
     all_ids = list(all_qs.values_list('contract_id', flat=True))
-    del all_qs
 
     # 2) Which are already processed?
     seen_ids = set(ProcessedContract.objects.filter(contract_id__in=all_ids)
@@ -275,6 +274,7 @@ def get_corp_hostile_contracts(user_id: int) -> Dict[int, str]:
         logger.info(f"Processing {processed}/{len(new_ids)} contracts for {user_id}, total was {len(all_ids)}")
         # 3) Hydrate only new contracts
         new_qs = all_qs.filter(contract_id__in=new_ids)
+        del qs_all
         new_rows = get_user_contracts(new_qs)
 
         for cid, c in new_rows.items():
