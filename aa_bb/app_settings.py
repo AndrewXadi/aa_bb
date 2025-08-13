@@ -468,57 +468,50 @@ def _parse_datetime(value):
     return None
 
 def _serialize_datetime(value):
-    """Convert datetime to ISO8601 string for JSONField."""
+    """Recursively convert datetime objects to ISO8601 strings."""
     if isinstance(value, datetime):
         return value.isoformat()
-    return value  # Leave non-datetimes untouched
+    if isinstance(value, list):
+        return [_serialize_datetime(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _serialize_datetime(v) for k, v in value.items()}
+    return value
 
 def get_alliance_history_for_corp(corp_id):
     # 1) Try DB cache first
     try:
         entry = AllianceHistoryCache.objects.get(pk=corp_id)
         if entry.is_fresh:
-            # Convert any string dates back into datetime
-            history = []
-            for h in entry.history:
-                history.append({
+            return [
+                {
                     "alliance_id": h.get("alliance_id"),
                     "start_date": _parse_datetime(h.get("start_date")),
-                })
-            return history
+                }
+                for h in entry.history
+            ]
         else:
             entry.delete()
     except AllianceHistoryCache.DoesNotExist:
         pass
 
-    # 2) Fetch fresh
+    # 2) Fetch fresh directly
     history = []
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_fetch_alliance_history, corp_id)
-        try:
-            response = future.result(timeout=5)
-            history = [
-                {
-                    "alliance_id": h.get("alliance_id"),
-                    "start_date": _parse_datetime(h.get("start_date")),
-                }
-                for h in response
-            ]
-            history.sort(key=lambda x: x["start_date"] or datetime.min)
-        except FuturesTimeout:
-            logger.info(f"Timeout fetching alliance history for corp {corp_id}")
-            return []
-        except Exception as e:
-            logger.info(f"Error fetching alliance history for corp {corp_id}: {e}")
+    try:
+        response = _fetch_alliance_history(corp_id)
+        history = [
+            {
+                "alliance_id": h.get("alliance_id"),
+                "start_date": _parse_datetime(h.get("start_date")),
+            }
+            for h in response
+        ]
+        history.sort(key=lambda x: x["start_date"] or datetime.min)
+    except Exception as e:
+        logger.info(f"Error fetching alliance history for corp {corp_id}: {e}")
+        return []
 
     # 3) Store in DB (serialize datetimes as strings)
-    serialized_history = [
-        {
-            "alliance_id": h["alliance_id"],
-            "start_date": _serialize_datetime(h["start_date"]),
-        }
-        for h in history
-    ]
+    serialized_history = _serialize_datetime(history)
     AllianceHistoryCache.objects.update_or_create(
         corp_id=corp_id,
         defaults={"history": serialized_history}
