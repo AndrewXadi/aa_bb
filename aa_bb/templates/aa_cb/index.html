@@ -189,7 +189,7 @@ async function loadSuspiciousContracts(option, idx) {
     source.onerror = err => {
       source.close();
       const errorMessages = document.getElementById('errorMessages');
-      errorMessages.innerHTML = '<div class="alert alert-warning">Contract stream failed, please wait for the cache to warm up and try again.</div>';
+      errorMessages.innerHTML = '<div class="alert alert-warning">Contract stream failed, please wait for the cache to warm up and try again or get your IT to increase(or set to 0) your gunicorn timeout in supervisor.conf.</div>';
       updateCardStatus(idx, true);
       reject(err);
     };
@@ -259,7 +259,7 @@ async function loadSuspiciousTransactions(option, idx) {
     source.onerror = err => {
       source.close();
       document.getElementById('errorMessages').innerHTML =
-        '<div class="alert alert-warning">Transaction stream failed, please wait for the cache to warm up and try again.</div>';
+        '<div class="alert alert-warning">Transaction stream failed, please wait for the cache to warm up and try again or get your IT to increase(or set to 0) your gunicorn timeout in supervisor.conf</div>';
       updateCardStatus(idx, true);
       reject(err);
     };
@@ -372,7 +372,7 @@ async function fetchProgress() {
       if (data.queued.count > 0) {
         msg += `<br><strong>${data.queued.count} still queued:</strong> ${data.queued.names.join(', ')}`;
       }
-      msg += `<br>Your browser is likely to kill the streams for contracts, mails and transactions if the cache isn't warm for the selected user(it starts warming up the 1st time you select it so try and if it falls, go touch grass or something until this is done)`;
+      msg += `<br>Your gunicorn is likely to kill the streams for contracts and transactions if the cache isn't warm for the selected user(it starts warming up the 1st time you select it so try and if it falls, go touch grass or something until this is done or get your IT to increase(or set to 0) your gunicorn timeout in supervisor.conf)`;
       warmerBox.innerHTML = msg;
       warmerBox.style.display = 'block';
     } else {

@@ -58,8 +58,6 @@ from celery import shared_task
 from celery.exceptions import Ignore
 from aa_bb.checks.skills import render_user_skills_html
 import sys
-import tracemalloc
-tracemalloc.start()
 
 
 logger = logging.getLogger(__name__)
@@ -298,6 +296,8 @@ def warm_cache(request):
     Endpoint to kick off warming for a given character name (option).
     Immediately registers a WarmProgress row so queued tasks also appear.
     """
+    if not BigBrotherConfig.get_solo().is_warmer_active:
+        return
     logger.warning(f"warm triggered")
     option  = request.GET.get("option", "")
     user_id = option
@@ -505,24 +505,17 @@ def stream_contracts_sse(request: WSGIRequest):
                     }
                     yield ": ping\n\n"
                     row['cell_styles'] = style_map
-                    logger.info(f"Size of row dict: {sys.getsizeof(row)} bytes")
 
                     if is_contract_row_hostile(row):
                         hostile_count += 1
                         tr_html = _render_contract_row_html(row)
                         yield f"event: contract\ndata:{json.dumps(tr_html)}\n\n"
-                        logger.info(f"Size of row dict: {sys.getsizeof(tr_html)} bytes")
 
                     # Progress update
                     yield (
                         "event: progress\n"
                         f"data:{processed},{total},{hostile_count}\n\n"
                     )
-                    snapshot = tracemalloc.take_snapshot()
-                    top_stats = snapshot.statistics('lineno')
-                    logger.info(f"Top memory usage after {processed} iterations:")
-                    for stat in top_stats[:5]:
-                        logger.info(stat)
                     connection.close()
                 except (ConnectionResetError, BrokenPipeError):
                     # client disconnected — stop quietly

@@ -256,6 +256,8 @@ def warm_cache(request):
     Endpoint to kick off warming for a given character name (option).
     Immediately registers a WarmProgress row so queued tasks also appear.
     """
+    if not BigBrotherConfig.get_solo().is_warmer_active:
+        return
     option  = request.GET.get("option", "")
     user_id = get_user_id(option)
     if not user_id:

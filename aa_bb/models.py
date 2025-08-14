@@ -363,6 +363,12 @@ class BigBrotherConfig(SingletonModel):
         editable=True,
         help_text="has the Leave of Absence module been activated/deactivated? (You will need to restart AA for this to take effect)"
     )
+    
+    is_warmer_active = models.BooleanField(
+        default=True,
+        editable=True,
+        help_text="has the Cache warmer feature been activated/deactivated? (You need it if you have a gunicorn timeout set in your supervisor.conf, if you want to disable it, set the timeout to 0 first)"
+    )
 
     loa_max_logoff_days = models.IntegerField(
         default=30,

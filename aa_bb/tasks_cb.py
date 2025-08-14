@@ -178,7 +178,7 @@ def CB_run_regular_updates():
         instance.is_active = False
         instance.save()
         send_message(
-            f"#{get_pings('Error')} Big Brother encountered an unexpected error and disabled itself, "
+            f"#{get_pings('Error')} Corp Brother encountered an unexpected error and disabled itself, "
             "please forward your aa worker.log and the error below to Andrew Xadi"
         )
 
