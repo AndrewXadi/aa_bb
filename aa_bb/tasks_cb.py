@@ -229,7 +229,7 @@ def check_member_compliance():
                     details.append("      - missing character token\n")
                 if has_roles and not has_corp_token:
                     details.append("      - has corp roles but missing corp token\n")
-                flags += f"  - {character}:\n{', '.join(details)}"
+                flags += f"  - {character}:\n{''.join(details)}"
 
         if flags:
             messages += f"-  {char_name}:\n{flags}"
