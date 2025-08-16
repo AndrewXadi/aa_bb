@@ -176,13 +176,13 @@ def BB_run_regular_updates():
                 sus_trans_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_transactions(user_id).items() }
                 sp_age_ratio_result: dict[str, dict] = {}
 
-                for char_name, data in skills_result.items():
-                    char_id = get_character_id(char_name)
+                for char_nameeee, data in skills_result.items():
+                    char_id = get_character_id(char_nameeee)
                     char_age = get_char_age(char_id)
                     total_sp = data["total_sp"]
                     sp_days = total_sp / 64800 if total_sp else 0
 
-                    sp_age_ratio_result[char_name] = {
+                    sp_age_ratio_result[char_nameeee] = {
                         **data,  # keep original skill info
                         "sp_days": sp_days,
                         "char_age": char_age,
@@ -232,17 +232,17 @@ def BB_run_regular_updates():
                 if set(sp_age_ratio_result) != set(status.sp_age_ratio_result or []):
                         flaggs = []
 
-                        for char_name, new_info in sp_age_ratio_result.items():
-                            if char_name not in sp_age_ratio_result:
+                        for char_nameee, new_info in sp_age_ratio_result.items():
+                            if char_nameee not in sp_age_ratio_result:
                                 continue
 
-                            old_info = status.sp_age_ratio_result.get(char_name, {})
+                            old_info = status.sp_age_ratio_result.get(char_nameee, {})
                             old_ratio = old_info.get("sp_days", 0) / max(old_info.get("char_age", 1), 1)
                             new_ratio = new_info.get("sp_days", 0) / max(new_info.get("char_age", 1), 1)
 
                             if new_ratio > old_ratio:
                                 flaggs.append(
-                                    f"- **{char_name}'s** SP to age ratio went up from **{old_ratio}** to **{new_ratio}**\n"
+                                    f"- **{char_nameee}'s** SP to age ratio went up from **{old_ratio}** to **{new_ratio}**\n"
                                 )
 
                         if flaggs:
