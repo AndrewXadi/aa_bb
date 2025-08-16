@@ -6,7 +6,7 @@ import logging
 from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name, get_pings, resolve_corporation_name
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info
-from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids
+from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
 from aa_bb.checks.hostile_assets import get_hostile_asset_locations
 from aa_bb.checks.hostile_clones import get_hostile_clone_locations
 from aa_bb.checks.imp_blacklist import imp_bl
@@ -174,6 +174,20 @@ def BB_run_regular_updates():
                 sus_contracts_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_contracts(user_id).items() }
                 sus_mails_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_mails(user_id).items() }
                 sus_trans_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_transactions(user_id).items() }
+                sp_age_ratio_result: dict[str, dict] = {}
+
+                for char_name, data in skills_result.items():
+                    char_id = get_character_id(char_name)
+                    char_age = get_char_age(char_id)
+                    total_sp = data["total_sp"]
+                    sp_days = total_sp / 64800 if total_sp else 0
+
+                    sp_age_ratio_result[char_name] = {
+                        **data,  # keep original skill info
+                        "sp_days": sp_days,
+                        "char_age": char_age,
+                    }
+
 
                 has_imp_blacklist = imp_blacklist_result != None
                 has_lawn_blacklist = lawn_blacklist_result != None
@@ -214,6 +228,29 @@ def BB_run_regular_updates():
                 #status.cyno = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
+                
+                if set(sp_age_ratio_result) != set(status.sp_age_ratio_result or []):
+                        flaggs = []
+
+                        for char_name, new_info in sp_age_ratio_result.items():
+                            if char_name not in sp_age_ratio_result:
+                                continue
+
+                            old_info = status.sp_age_ratio_result.get(char_name, {})
+                            old_ratio = old_info.get("sp_days", 0) / max(old_info.get("char_age", 1), 1)
+                            new_ratio = new_info.get("sp_days", 0) / max(new_info.get("char_age", 1), 1)
+
+                            if new_ratio > old_ratio:
+                                flaggs.append(
+                                    f"- **{char_name}'s** SP to age ratio went up from **{old_ratio}** to **{new_ratio}**\n"
+                                )
+
+                        if flaggs:
+                            sp_list = "".join(flaggs)
+                            changes.append(f"## {get_pings('SP Injected')} Skill Injection detected:\n{sp_list}")
+
+                status.sp_age_ratio_result = sp_age_ratio_result
+                status.save()
 
                 if status.has_awox_kills != has_awox or set(awox_links) != set(status.awox_kill_links or []):
                     # Compare and find new links

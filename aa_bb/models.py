@@ -116,6 +116,7 @@ class UserStatus(models.Model):
     sus_mails = JSONField(default=dict, blank=True)
     has_sus_trans = models.BooleanField(default=False)
     sus_trans = JSONField(default=dict, blank=True)
+    sp_age_ratio_result = JSONField(default=dict, blank=True)
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:

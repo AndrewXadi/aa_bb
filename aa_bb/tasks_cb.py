@@ -235,5 +235,5 @@ def check_member_compliance():
             messages += f"-  {char_name}:\n{flags}"
 
     if messages:
-        messages = f"#{get_pings('New Sus Transactions')} Non Compliant users found:\n" + messages
+        messages = f"#{get_pings('Compliance')} Non Compliant users found:\n" + messages
         send_message(messages)
