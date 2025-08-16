@@ -97,10 +97,11 @@ def index(request: WSGIRequest):
 
     elif request.user.has_perm("aa_bb.recruiter_access_cb"):
         # Recruiter: corps with tokens added by guest-state users
+        guest_states = BigBrotherConfig.get_solo().bb_guest_states.all()
         qs = EveCorporationInfo.objects.filter(
             corporation_id__in=Token.objects.filter(
                 token_type=Token.TOKEN_TYPE_CORPORATION,
-                user__state=1
+                user__state__in=guest_states
             ).values_list("character__corporation_id", flat=True)  # adjust if no FK to character
         ).distinct()
 
@@ -109,9 +110,6 @@ def index(request: WSGIRequest):
 
     if qs is not None:
         qsa = qs.exclude(corporation_id__in=ignored_corps.values_list("corporation_id", flat=True))
-        logger.info(f"qs len: {len(qs)}, qsa {len(qsa)}, ignored {len(ignored_corps)}")
-        logger.info(f"qs first corp id: {repr(qs[0].corporation_id)} type: {type(qs[0].corporation_id)}")
-        logger.info(f"ignored corps: {[ (repr(corp), type(corp)) for corp in ignored_corps ]}")
         qsa = qsa.filter(
             corporationaudit__isnull=False,
         )

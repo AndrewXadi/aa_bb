@@ -741,8 +741,9 @@ def get_system_owner(system: str) -> Dict[str, str]:
 
 
 def get_users():
+    member_states = BigBrotherConfig.get_solo().bb_member_states.all()
     users = list(
-        UserProfile.objects.filter(state=2)
+        UserProfile.objects.filter(state__in=member_states)
         .exclude(main_character=None)
         .values_list("main_character__character_name", flat=True)
         .order_by("main_character__character_name")

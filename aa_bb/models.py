@@ -12,6 +12,7 @@ from django.db.models import JSONField
 from django_celery_beat.models import CrontabSchedule
 from django.utils import timezone
 from datetime import timedelta
+from allianceauth.authentication.models import State
 
 
 
@@ -24,12 +25,12 @@ class General(models.Model):
         managed = False
         default_permissions = ()
         permissions = (
-            ("basic_access", "Can access this app"),
-            ("full_access", "Can view all main characters"),
-            ("recruiter_access", "Can view guest main characters only"),
-            ("basic_access_cb", "Can access this app"),
-            ("full_access_cb", "Can view all corps"),
-            ("recruiter_access_cb", "Can view guest's corps only"),
+            ("basic_access", "Can access Big Brother"),
+            ("full_access", "Can view all main characters in Big Brother"),
+            ("recruiter_access", "Can view main characters in Guest state only in Big Brother"),
+            ("basic_access_cb", "Can access Corp Brother"),
+            ("full_access_cb", "Can view all corps in Corp Brother"),
+            ("recruiter_access_cb", "Can view guest's corps only in Corp Brother"),
             ("can_blacklist_characters", "Can add characters to blacklist"),
             ("can_access_loa", "Can access and submit a Leave Of Absence request"),
             ("can_view_all_loa", "Can view all Leave Of Absence requests"),
@@ -164,6 +165,20 @@ class BigBrotherConfig(SingletonModel):
         blank=False,
         default=0,
         help_text="Input the 2nd role ID you want pinged when people need to investigate"
+    )
+
+    bb_guest_states = models.ManyToManyField(
+        State,
+        related_name="bb_guest_states_configs",
+        blank=True,
+        help_text="List of states to be considered guests"
+    )
+
+    bb_member_states = models.ManyToManyField(
+        State,
+        related_name="bb_member_states_configs",
+        blank=True,
+        help_text="List of states to be considered members"
     )
 
     pingrole1_messages = models.ManyToManyField(

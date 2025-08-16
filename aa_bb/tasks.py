@@ -17,9 +17,6 @@ from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
-from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
-from aa_bb.checks_cb.sus_contracts import get_corp_hostile_contracts
-from aa_bb.checks_cb.sus_trans import get_corp_hostile_transactions
 from datetime import datetime, timedelta, timezone as dt_timezone, date
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -987,10 +984,10 @@ def BB_run_regular_loa_updates():
     if not cfg.is_loa_active:
         logger.info("LoA feature disabled; skipping updates.")
         return
-
+    member_states = BigBrotherConfig.get_solo().bb_member_states.all()
     qs_profiles = (
         UserProfile.objects
-        .filter(state=2)
+        .filter(state__in=member_states)
         .exclude(main_character=None)
         .select_related("user", "main_character")
     )
@@ -1076,9 +1073,9 @@ def BB_daily_DB_cleanup():
         (Corporation_names, "corporation"),
         (UserStatus, "User Status"),
         (EntityInfoCache, "Entity Info Cache"),
-        (CorporationInfoCache, "Corporation Info Cache")
-        (AllianceHistoryCache, "Alliance History Cache")
-        (SovereigntyMapCache, "Sovereignty Map Cache")
+        (CorporationInfoCache, "Corporation Info Cache"),
+        (AllianceHistoryCache, "Alliance History Cache"),
+        (SovereigntyMapCache, "Sovereignty Map Cache"),
     ]
 
     for model, name in models_to_cleanup:

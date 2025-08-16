@@ -40,23 +40,23 @@ def get_frequent_corp_changes(user_id):
         char_links = (
             f'<a href="https://zkillboard.com/character/{char_id}/" target="_blank">'
             f'<img src="{ZKILL_ICON}" width="16" height="16" '
-            f'style="margin-left:4px;vertical-align:middle;"/></a>'
+            f'style="margin-left:4px;vertical-align:middle;"/></a> '
             f'<a href="https://evewho.com/character/{char_id}" target="_blank">'
             f'<img src="{EVEWHO_ICON}" width="16" height="16" '
-            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            f'style="margin-left:2px;vertical-align:middle;"/></a> '
             f'<a href="https://www.eve411.com/character/{char_id}" target="_blank">'
             f'<img src="{EVE411_ICON}" width="16" height="16" '
-            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            f'style="margin-left:2px;vertical-align:middle;"/></a> '
             # Eve-Online forums user pages use the character name slug:
             f'<a href="https://forums.eveonline.com/u/{char_name.replace(" ", "_")}/summary" '
             f'target="_blank">'
             f'<img src="{FORUMS_ICON}" width="16" height="16" '
-            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            f'style="margin-left:2px;vertical-align:middle;"/></a> '
             # and eve-search needs URL‐encoded name:
             f'<a href="https://eve-search.com/search/author/{char_name.replace(" ", "%20")}" '
             f'target="_blank">'
             f'<img src="{EVESEARCH_ICON}" width="16" height="16" '
-            f'style="margin-left:2px;vertical-align:middle;"/></a>'
+            f'style="margin-left:2px;vertical-align:middle;"/></a> '
         )
 
         history = list(reversed(response))
@@ -80,11 +80,11 @@ def get_frequent_corp_changes(user_id):
             corp_cell = (
                 f'<span style="color:{corp_color};">{corp_name}</span>'
                 f'<a href="https://zkillboard.com/corporation/{corp_id}/" target="_blank">'
-                f'<img src="{ZKILL_ICON}" width="16" height="16" style="margin-left:4px;vertical-align:middle;"/></a>'
+                f'<img src="{ZKILL_ICON}" width="16" height="16" style="margin-left:4px;vertical-align:middle;"/></a> '
                 f'<a href="https://evewho.com/corp/{corp_id}" target="_blank">'
-                f'<img src="{EVEWHO_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a>'
+                f'<img src="{EVEWHO_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '
                 f'<a href="https://evemaps.dotlan.net/corp/{corp_id}" target="_blank">'
-                f'<img src="{DOTLAN_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a>'
+                f'<img src="{DOTLAN_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '
             )
 
             # Alliance segments
@@ -106,11 +106,11 @@ def get_frequent_corp_changes(user_id):
                         name_cell = f'<span style="color:{alliance_color};">{aname}</span>'
                         icons = (
                             f'<a href="https://zkillboard.com/alliance/{aid}/" target="_blank">'
-                            f'<img src="{ZKILL_ICON}" width="16" height="16" style="margin-left:4px;vertical-align:middle;"/></a>'
+                            f'<img src="{ZKILL_ICON}" width="16" height="16" style="margin-left:4px;vertical-align:middle;"/></a> '
                             f'<a href="https://evewho.com/alliance/{aid}" target="_blank">'
-                            f'<img src="{EVEWHO_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a>'
+                            f'<img src="{EVEWHO_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '
                             f'<a href="https://evemaps.dotlan.net/alliance/{aid}" target="_blank">'
-                            f'<img src="{DOTLAN_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a>'
+                            f'<img src="{DOTLAN_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '
                         )
                     else:
                         name_cell = '-'

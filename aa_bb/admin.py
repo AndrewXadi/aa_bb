@@ -18,6 +18,8 @@ class BB_ConfigAdmin(SingletonModelAdmin):
         "pingrole2_messages",
         "here_messages",
         "everyone_messages",
+        "bb_guest_states",
+        "bb_member_states",
     )
     
     def has_add_permission(self, request):

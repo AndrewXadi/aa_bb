@@ -2,10 +2,11 @@ from celery import shared_task
 from allianceauth.eveonline.models import EveCorporationInfo
 from .models import BigBrotherConfig, CorpStatus
 import logging
-from .app_settings import send_message, get_pings, resolve_corporation_name
+from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id
 from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
 from aa_bb.checks_cb.sus_contracts import get_corp_hostile_contracts
 from aa_bb.checks_cb.sus_trans import get_corp_hostile_transactions
+from aa_bb.checks.roles_and_tokens import get_user_roles_and_tokens
 from datetime import timedelta, timezone as dt_timezone
 from django.utils import timezone
 import time
@@ -21,7 +22,6 @@ logger = logging.getLogger(__name__)
 def CB_run_regular_updates():
     global update_check_time
     instance = BigBrotherConfig.get_solo()
-    instance.is_active = True
 
 
     try:
@@ -202,3 +202,38 @@ def CB_run_regular_updates():
     task = PeriodicTask.objects.filter(name=task_name).first()
     if not task.enabled:
         send_message("Corp Brother task has finished, you can now enable the task")
+
+
+@shared_task
+def check_member_compliance():
+    instance = BigBrotherConfig.get_solo()
+    if not instance.is_active:
+        return
+    users = get_users()
+    messages = ""
+
+    for char_name in users:
+        user_id = get_user_id(char_name)
+        data = get_user_roles_and_tokens(user_id)
+        flags = ""
+
+        for character, info in data.items():
+            has_roles = any(info.get(role, False) for role in ("director", "accountant", "station_manager", "personnel_manager"))
+            has_char_token = info.get("character_token", False)
+            has_corp_token = info.get("corporation_token", False)
+
+            # Non-compliant if character has roles but no corporation token or missing character token
+            if not has_char_token or (has_roles and not has_corp_token):
+                details = []
+                if not has_char_token:
+                    details.append("      - missing character token\n")
+                if has_roles and not has_corp_token:
+                    details.append("      - has corp roles but missing corp token\n")
+                flags += f"  - {character}:\n{', '.join(details)}"
+
+        if flags:
+            messages += f"-  {char_name}:\n{flags}"
+
+    if messages:
+        messages = f"#{get_pings('New Sus Transactions')} Non Compliant users found:\n" + messages
+        send_message(messages)

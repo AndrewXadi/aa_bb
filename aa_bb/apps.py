@@ -11,6 +11,7 @@ class AaBbConfig(AppConfig):
         import logging
         logger = logging.getLogger(__name__)
         from .models import MessageType
+        from allianceauth.authentication.models import State
 
         PREDEFINED_MESSAGE_TYPES = [
             "LoA Request",
@@ -30,7 +31,11 @@ class AaBbConfig(AppConfig):
             "New Blacklist Entry",
             "skills",
             "All Cyno Changes",
+            "Compliance",
+            "SP Injected",
         ]
+
+        state_names = list(State.objects.values_list("name", flat=True))
 
         try:
             for msg_name in PREDEFINED_MESSAGE_TYPES:
@@ -130,6 +135,33 @@ class AaBbConfig(AppConfig):
                     logger.info("ℹ️ ‘BB run regular LoA updates’ periodic task already exists and is up to date")
             else:
                 logger.info("✅ Created ‘BB run regular LoA updates’ periodic task with enabled=False")
+
+            task_comp, created_comp = PeriodicTask.objects.get_or_create(
+                name="BB check member compliance",
+                defaults={
+                    "crontab": scheduleloa,
+                    "task": "aa_bb.tasks_cb.check_member_compliance",
+                    "enabled": False,  # only on creation
+                },
+            )
+
+            if not created_comp:
+                updated_comp = False
+                # Clear interval if set
+                if task_comp.interval is not None:
+                    task_comp.interval = None
+                    updated_comp = True
+                if task_comp.crontab != scheduleloa or task_comp.task != "aa_bb.tasks_cb.check_member_compliance":
+                    task_comp.crontab = scheduleloa
+                    task_comp.task = "aa_bb.tasks_cb.check_member_compliance"
+                    task_comp.save()
+                    updated_comp = True
+                if updated_comp:
+                    logger.info("✅ Updated ‘BB check member compliance’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB check member compliance’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB check member compliance’ periodic task with enabled=False")
 
 
 

@@ -54,6 +54,7 @@ from aa_bb.checks.sus_contracts import (
     get_cell_style_for_contract_row,
     gather_user_contracts,
 )
+from aa_bb.checks.roles_and_tokens import render_user_roles_tokens_html
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message, get_pings
 from .models import BigBrotherConfig, WarmProgress, LeaveRequest
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
@@ -67,6 +68,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 CARD_DEFINITIONS = [
+    {"title": 'Compliance', "key": "compliance"},
     {"title": 'IMP Blacklist', "key": "imp_bl"},
     {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
     {"title": 'Corp Blacklist', "key": "corp_bl"},
@@ -320,7 +322,8 @@ def index(request: WSGIRequest):
     if request.user.has_perm("aa_bb.full_access"):
         qs = UserProfile.objects.exclude(main_character=None)
     elif request.user.has_perm("aa_bb.recruiter_access"):
-        qs = UserProfile.objects.filter(state=1).exclude(main_character=None)
+        guest_states = BigBrotherConfig.get_solo().bb_guest_states.all()
+        qs = UserProfile.objects.filter(state__in=guest_states).exclude(main_character=None)
     else:
         qs = None
 
@@ -870,6 +873,10 @@ def get_card_data(request, target_user_id: int, key: str):
 
     elif key == "skills":
         content = render_user_skills_html(target_user_id)
+        status  = not (content and "red" in content)
+
+    elif key == "compliance":
+        content = render_user_roles_tokens_html(target_user_id)
         status  = not (content and "red" in content)
 
     else:
