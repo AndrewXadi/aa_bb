@@ -4,6 +4,7 @@ from allianceauth.eveonline.models import EveCharacter
 from esi.models import Token
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from aa_bb.models import BigBrotherConfig
 
 def get_user_roles(user_id):
     characters = CharacterOwnership.objects.filter(user__id=user_id).select_related("character")
@@ -38,60 +39,10 @@ def get_user_roles(user_id):
 
 def get_user_tokens(user_id):
     from esi.models import Token, Scope
+    
+    CHARACTER_SCOPES = BigBrotherConfig.get_solo().character_scopes.split(",")
 
-    CHARACTER_SCOPES = [
-        "publicData",
-        "esi-calendar.read_calendar_events.v1",
-        "esi-location.read_location.v1",
-        "esi-location.read_ship_type.v1",
-        "esi-mail.read_mail.v1",
-        "esi-skills.read_skills.v1",
-        "esi-skills.read_skillqueue.v1",
-        "esi-wallet.read_character_wallet.v1",
-        "esi-search.search_structures.v1",
-        "esi-clones.read_clones.v1",
-        "esi-characters.read_contacts.v1",
-        "esi-universe.read_structures.v1",
-        "esi-killmails.read_killmails.v1",
-        "esi-assets.read_assets.v1",
-        "esi-fleets.read_fleet.v1",
-        "esi-fleets.write_fleet.v1",
-        "esi-ui.open_window.v1",
-        "esi-ui.write_waypoint.v1",
-        "esi-fittings.read_fittings.v1",
-        "esi-characters.read_loyalty.v1",
-        "esi-characters.read_standings.v1",
-        "esi-industry.read_character_jobs.v1",
-        "esi-markets.read_character_orders.v1",
-        "esi-characters.read_corporation_roles.v1",
-        "esi-location.read_online.v1",
-        "esi-contracts.read_character_contracts.v1",
-        "esi-clones.read_implants.v1",
-        "esi-characters.read_fatigue.v1",
-        "esi-characters.read_notifications.v1",
-        "esi-industry.read_character_mining.v1",
-        "esi-characters.read_titles.v1",
-    ]
-
-    CORPORATION_SCOPES = [
-        "esi-corporations.read_corporation_membership.v1",
-        "esi-corporations.read_structures.v1",
-        "esi-killmails.read_corporation_killmails.v1",
-        "esi-corporations.track_members.v1",
-        "esi-wallet.read_corporation_wallets.v1",
-        "esi-corporations.read_divisions.v1",
-        "esi-assets.read_corporation_assets.v1",
-        "esi-corporations.read_titles.v1",
-        "esi-contracts.read_corporation_contracts.v1",
-        "esi-corporations.read_starbases.v1",
-        "esi-industry.read_corporation_jobs.v1",
-        "esi-markets.read_corporation_orders.v1",
-        "esi-industry.read_corporation_mining.v1",
-        "esi-planets.read_customs_offices.v1",
-        "esi-search.search_structures.v1",
-        "esi-universe.read_structures.v1",
-        "esi-characters.read_corporation_roles.v1",
-    ]
+    CORPORATION_SCOPES = BigBrotherConfig.get_solo().corporation_scopes.split(",")
 
     characters = CharacterOwnership.objects.filter(user__id=user_id).select_related("character")
     tokens_dict = {}
