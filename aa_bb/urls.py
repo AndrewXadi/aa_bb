@@ -1,7 +1,7 @@
 """App URLs"""
 
 from django.urls import path
-from aa_bb import views
+from aa_bb import views, views_cb
 
 app_name = "aa_bb"
 

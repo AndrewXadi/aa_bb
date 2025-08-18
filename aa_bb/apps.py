@@ -114,7 +114,7 @@ class AaBbConfig(AppConfig):
                 name="BB run regular LoA updates",
                 defaults={
                     "crontab": scheduleloa,
-                    "task": "aa_bb.tasks.BB_run_regular_loa_updates",
+                    "task": "aa_bb.tasks_cb.BB_run_regular_loa_updates",
                     "enabled": True,  # only on creation
                 },
             )
@@ -125,9 +125,9 @@ class AaBbConfig(AppConfig):
                 if task_loa.interval is not None:
                     task_loa.interval = None
                     updated_loa = True
-                if task_loa.crontab != scheduleloa or task_loa.task != "aa_bb.tasks.BB_run_regular_loa_updates":
+                if task_loa.crontab != scheduleloa or task_loa.task != "aa_bb.tasks_cb.BB_run_regular_loa_updates":
                     task_loa.crontab = scheduleloa
-                    task_loa.task = "aa_bb.tasks.BB_run_regular_loa_updates"
+                    task_loa.task = "aa_bb.tasks_cb.BB_run_regular_loa_updates"
                     task_loa.save()
                     updated_loa = True
                 if updated_loa:
@@ -180,7 +180,7 @@ class AaBbConfig(AppConfig):
                 name="BB run regular DB cleanup",
                 defaults={
                     "crontab": scheduleDB,
-                    "task": "aa_bb.tasks.BB_daily_DB_cleanup",
+                    "task": "aa_bb.tasks_cb.BB_daily_DB_cleanup",
                     "enabled": True,  # only on creation
                 },
             )
@@ -191,9 +191,9 @@ class AaBbConfig(AppConfig):
                 if task_DB.interval is not None:
                     task_DB.interval = None
                     updated_DB = True
-                if task_DB.crontab != scheduleDB or task_DB.task != "aa_bb.tasks.BB_daily_DB_cleanup":
+                if task_DB.crontab != scheduleDB or task_DB.task != "aa_bb.tasks_cb.BB_daily_DB_cleanup":
                     task_DB.crontab = scheduleDB
-                    task_DB.task = "aa_bb.tasks.BB_daily_DB_cleanup"
+                    task_DB.task = "aa_bb.tasks_cb.BB_daily_DB_cleanup"
                     task_DB.save()
                     updated_DB = True
                 if updated_DB:
@@ -224,37 +224,37 @@ class AaBbConfig(AppConfig):
             tasks = [
                 {
                     "name": "BB send daily message",
-                    "task_path": "aa_bb.tasks.BB_send_daily_messages",
+                    "task_path": "aa_bb.tasks_cb.BB_send_daily_messages",
                     "schedule_attr": "dailyschedule",
                     "active_attr": "are_daily_messages_active",
                 },
                 {
                     "name": "BB send optional message 1",
-                    "task_path": "aa_bb.tasks.BB_send_opt_message1",
+                    "task_path": "aa_bb.tasks_cb.BB_send_opt_message1",
                     "schedule_attr": "optschedule1",
                     "active_attr": "are_opt_messages1_active",
                 },
                 {
                     "name": "BB send optional message 2",
-                    "task_path": "aa_bb.tasks.BB_send_opt_message2",
+                    "task_path": "aa_bb.tasks_cb.BB_send_opt_message2",
                     "schedule_attr": "optschedule2",
                     "active_attr": "are_opt_messages2_active",
                 },
                 {
                     "name": "BB send optional message 3",
-                    "task_path": "aa_bb.tasks.BB_send_opt_message3",
+                    "task_path": "aa_bb.tasks_cb.BB_send_opt_message3",
                     "schedule_attr": "optschedule3",
                     "active_attr": "are_opt_messages3_active",
                 },
                 {
                     "name": "BB send optional message 4",
-                    "task_path": "aa_bb.tasks.BB_send_opt_message4",
+                    "task_path": "aa_bb.tasks_cb.BB_send_opt_message4",
                     "schedule_attr": "optschedule4",
                     "active_attr": "are_opt_messages4_active",
                 },
                 {
                     "name": "BB send optional message 5",
-                    "task_path": "aa_bb.tasks.BB_send_opt_message5",
+                    "task_path": "aa_bb.tasks_cb.BB_send_opt_message5",
                     "schedule_attr": "optschedule5",
                     "active_attr": "are_opt_messages5_active",
                 },

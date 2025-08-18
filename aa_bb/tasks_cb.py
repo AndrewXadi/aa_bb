@@ -1,17 +1,22 @@
 from celery import shared_task
-from allianceauth.eveonline.models import EveCorporationInfo
-from .models import BigBrotherConfig, CorpStatus
+from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
+from allianceauth.authentication.models import UserProfile
+from django_celery_beat.models import PeriodicTask, CrontabSchedule
+from .models import BigBrotherConfig, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
 import logging
-from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id
+from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id, get_character_id
 from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
 from aa_bb.checks_cb.sus_contracts import get_corp_hostile_contracts
 from aa_bb.checks_cb.sus_trans import get_corp_hostile_transactions
 from aa_bb.checks.roles_and_tokens import get_user_roles_and_tokens
-from datetime import timedelta, timezone as dt_timezone
+from corptools.api.helpers import get_alts_queryset
+from datetime import timedelta, date
 from django.utils import timezone
 import time
 import traceback
+import random
 from . import __version__
+
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
 timer_duration = timedelta(days=7)
@@ -321,3 +326,431 @@ def get_ali_character_names(ali_id: int) -> str:
     data = resp.json()
 
     return [char["name"] for char in data.get("characters", [])]
+
+
+@shared_task
+def BB_send_daily_messages():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.dailywebhook
+    enabled = config.are_daily_messages_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = Messages.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        Messages.objects.update(sent_in_cycle=False)
+        unsent_messages = Messages.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message1():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook1
+    enabled = config.are_opt_messages1_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages1.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages1.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages1.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message2():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook2
+    enabled = config.are_opt_messages2_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages2.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages2.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages2.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message3():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook3
+    enabled = config.are_opt_messages3_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages3.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages3.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages3.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message4():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook4
+    enabled = config.are_opt_messages4_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages4.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages4.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages4.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+@shared_task
+def BB_send_opt_message5():
+    config = BigBrotherConfig.get_solo()
+    webhook = config.optwebhook5
+    enabled = config.are_opt_messages5_active
+
+    if not enabled:
+        return
+
+    # Get only messages not sent in this cycle
+    unsent_messages = OptMessages5.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        # Reset all messages if cycle is complete
+        OptMessages5.objects.update(sent_in_cycle=False)
+        unsent_messages = OptMessages5.objects.filter(sent_in_cycle=False)
+
+    if not unsent_messages.exists():
+        return  # Still nothing to send
+
+    message = random.choice(list(unsent_messages))
+    send_message(message.text, webhook)
+
+    # Mark as sent
+    message.sent_in_cycle = True
+    message.save()
+
+
+@shared_task
+def BB_register_message_tasks():
+    logger.info("🔄 Running BB_register_message_tasks...")
+
+    config = BigBrotherConfig.get_solo()
+
+    # Default fallback schedule (12:00 UTC daily)
+    default_schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute='0',
+        hour='12',
+        day_of_week='*',
+        day_of_month='*',
+        month_of_year='*',
+        timezone='UTC',
+    )
+
+    # Tasks info: name, task path, config schedule attr, active flag attr
+    tasks = [
+        {
+            "name": "BB send daily message",
+            "task_path": "aa_bb.tasks.BB_send_daily_messages",
+            "schedule_attr": "dailyschedule",
+            "active_attr": "are_daily_messages_active",
+        },
+        {
+            "name": "BB send optional message 1",
+            "task_path": "aa_bb.tasks.BB_send_opt_message1",
+            "schedule_attr": "optschedule1",
+            "active_attr": "are_opt_messages1_active",
+        },
+        {
+            "name": "BB send optional message 2",
+            "task_path": "aa_bb.tasks.BB_send_opt_message2",
+            "schedule_attr": "optschedule2",
+            "active_attr": "are_opt_messages2_active",
+        },
+        {
+            "name": "BB send optional message 3",
+            "task_path": "aa_bb.tasks.BB_send_opt_message3",
+            "schedule_attr": "optschedule3",
+            "active_attr": "are_opt_messages3_active",
+        },
+        {
+            "name": "BB send optional message 4",
+            "task_path": "aa_bb.tasks.BB_send_opt_message4",
+            "schedule_attr": "optschedule4",
+            "active_attr": "are_opt_messages4_active",
+        },
+        {
+            "name": "BB send optional message 5",
+            "task_path": "aa_bb.tasks.BB_send_opt_message5",
+            "schedule_attr": "optschedule5",
+            "active_attr": "are_opt_messages5_active",
+        },
+    ]
+
+    for task_info in tasks:
+        name = task_info["name"]
+        task_path = task_info["task_path"]
+        schedule = getattr(config, task_info["schedule_attr"], None) or default_schedule
+        is_active = getattr(config, task_info["active_attr"], False)
+
+        existing_task = PeriodicTask.objects.filter(name=name).first()
+
+        if is_active:
+            if existing_task is None:
+                PeriodicTask.objects.create(
+                    name=name,
+                    task=task_path,
+                    crontab=schedule,
+                    enabled=True,
+                )
+                logger.info(f"✅ Created '{name}' periodic task with enabled=True")
+            else:
+                updated = False
+                if existing_task.crontab != schedule:
+                    existing_task.crontab = schedule
+                    updated = True
+                if existing_task.task != task_path:
+                    existing_task.task = task_path
+                    updated = True
+                if not existing_task.enabled:
+                    existing_task.enabled = True
+                    updated = True
+                if updated:
+                    existing_task.save()
+                    logger.info(f"✅ Updated '{name}' periodic task")
+                else:
+                    logger.info(f"ℹ️ '{name}' periodic task already exists and is up to date")
+        else:
+            if existing_task:
+                existing_task.delete()
+                logger.info(f"🗑️ Deleted '{name}' periodic task because messages are disabled")
+
+
+
+@shared_task
+def BB_run_regular_loa_updates():
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.is_loa_active:
+        logger.info("LoA feature disabled; skipping updates.")
+        return
+    member_states = BigBrotherConfig.get_solo().bb_member_states.all()
+    qs_profiles = (
+        UserProfile.objects
+        .filter(state__in=member_states)
+        .exclude(main_character=None)
+        .select_related("user", "main_character")
+    )
+    if not qs_profiles.exists():
+        logger.info("No member mains found.")
+        return
+    
+    flags = []
+
+    for profile in qs_profiles:
+        user = profile.user
+        # Determine main_character_id
+        try:
+            main_id = profile.main_character.character_id
+        except Exception:
+            main_id = get_character_id(profile)
+
+        # Load main character
+        ec = EveCharacter.objects.filter(character_id=main_id).first()
+        if not ec:
+            continue
+
+        # Find the most recent logoff among all alts
+        latest_logoff = None
+        for char in get_alts_queryset(ec):
+            audit = getattr(char, "characteraudit", None)
+            ts = getattr(audit, "last_known_logoff", None) if audit else None
+            if ts and (latest_logoff is None or ts > latest_logoff):
+                latest_logoff = ts
+
+        if not latest_logoff:
+            continue
+
+         # 1) Check and update any existing approved requests for this user
+        lr_qs = LeaveRequest.objects.filter(
+            user=user,
+            status="approved",
+        )
+        today = date.today()
+        in_progress = False
+        for lr in lr_qs:
+            if lr.start_date <= today <= lr.end_date:
+                # it’s now in progress
+                if lr.status != "in_progress":
+                    lr.status = "in_progress"
+                    lr.save(update_fields=["status"])
+                    logger.info(
+                        "   → Marked LOA %s as in_progress for %s",
+                        lr, user.username,
+                    )
+            elif today > lr.end_date:
+                # the approved window has passed
+                if lr.status != "finished":
+                    lr.status = "finished"
+                    lr.save(update_fields=["status"])
+                    logger.info(
+                        "   → Marked LOA %s as finished for %s",
+                        lr, user.username,
+                    )
+                    send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
+            if lr.status == "in_progress":
+                in_progress = True
+
+        # Compute days since that logoff
+        days_since = (timezone.now() - latest_logoff).days
+        if days_since > cfg.loa_max_logoff_days:
+            if in_progress == False:
+                flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
+    if flags:
+        flags_text = "\n".join(flags)
+        send_message(f"##{get_pings('LoA Inactivity')} Inactive Members Found:\n{flags_text}")
+
+
+@shared_task
+def BB_daily_DB_cleanup():
+    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache, CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache
+    two_months_ago = timezone.now() - timedelta(days=60)
+    flags = []
+    #Delete old model entries
+    models_to_cleanup = [
+        (Alliance_names, "alliance"),
+        (Character_names, "character"),
+        (Corporation_names, "corporation"),
+        (UserStatus, "User Status"),
+        (EntityInfoCache, "Entity Info Cache"),
+        (CorporationInfoCache, "Corporation Info Cache"),
+        (AllianceHistoryCache, "Alliance History Cache"),
+        (SovereigntyMapCache, "Sovereignty Map Cache"),
+    ]
+
+    for model, name in models_to_cleanup:
+        old_entries = model.objects.filter(updated__lt=two_months_ago)
+        count, _ = old_entries.delete()
+        flags.append(f"- Deleted {count} old {name} records.")
+
+
+    from .models import (
+    ProcessedContract, SusContractNote,
+    ProcessedMail, SusMailNote,
+    ProcessedTransaction, SusTransactionNote,
+    )
+    from corptools.models import Contract, MailMessage, CharacterWalletJournalEntry as WalletJournalEntry
+    from django.db import transaction
+    # -- CONTRACTS --
+    # Get all contract_ids that exist in Contract
+    existing_contract_ids = set(
+        Contract.objects.values_list('contract_id', flat=True)
+    )
+    
+    # Find ProcessedContract entries not in Contract
+    orphaned_processed_contracts = ProcessedContract.objects.exclude(contract_id__in=existing_contract_ids)
+    orphaned_contract_ids = list(orphaned_processed_contracts.values_list('contract_id', flat=True))
+    
+    # Delete orphans in SusContractNote (OneToOneField links to ProcessedContract)
+    sus_contracts_to_delete = SusContractNote.objects.filter(contract_id__in=orphaned_contract_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_contracts_to_delete.delete()[0]
+        count_proc = orphaned_processed_contracts.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedContract and {count_sus} SusContractNote records.")
+    
+    # -- MAILS --
+    existing_mail_ids = set(
+        MailMessage.objects.values_list('id_key', flat=True)
+    )
+    
+    orphaned_processed_mails = ProcessedMail.objects.exclude(mail_id__in=existing_mail_ids)
+    orphaned_mail_ids = list(orphaned_processed_mails.values_list('mail_id', flat=True))
+    
+    sus_mails_to_delete = SusMailNote.objects.filter(mail_id__in=orphaned_mail_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_mails_to_delete.delete()[0]
+        count_proc = orphaned_processed_mails.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedMail and {count_sus} SusMailNote records.")
+    
+    # -- TRANSACTIONS --
+    existing_entry_ids = set(
+        WalletJournalEntry.objects.values_list('entry_id', flat=True)
+    )
+    
+    orphaned_processed_transactions = ProcessedTransaction.objects.exclude(entry_id__in=existing_entry_ids)
+    orphaned_entry_ids = list(orphaned_processed_transactions.values_list('entry_id', flat=True))
+    
+    sus_transactions_to_delete = SusTransactionNote.objects.filter(transaction_id__in=orphaned_entry_ids)
+    
+    with transaction.atomic():
+        count_sus = sus_transactions_to_delete.delete()[0]
+        count_proc = orphaned_processed_transactions.delete()[0]
+    
+    flags.append(f"- Deleted {count_proc} old ProcessedTransaction and {count_sus} SusTransactionNote records.")
+
+    if flags:
+        flags_text = "\n".join(flags)
+        send_message(f"### DB Cleanup Complete:\n{flags_text}")
