@@ -70,12 +70,12 @@ logging.basicConfig(level=logging.DEBUG)
 
 CARD_DEFINITIONS = [
     {"title": 'Compliance', "key": "compliance"},
-    {"title": 'Clone States', "key": "clone_states"},
     {"title": 'IMP Blacklist', "key": "imp_bl"},
     {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
     {"title": 'Corp Blacklist', "key": "corp_bl"},
     {"title": 'Player Corp History', "key": "freq_corp"},
     {"title": 'AWOX Kills', "key": "awox"},
+    {"title": 'Clone States', "key": "clone_states"},
     {"title": 'Clones in hostile space', "key": "sus_clones"},
     {"title": 'Assets in hostile space', "key": "sus_asset"},
     {"title": 'Suspicious Contacts', "key": "sus_conta"},
