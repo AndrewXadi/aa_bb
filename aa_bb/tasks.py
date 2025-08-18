@@ -1,9 +1,8 @@
 from celery import shared_task
-from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
-from allianceauth.authentication.models import UserProfile, CharacterOwnership
-from .models import BigBrotherConfig, UserStatus, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
+from allianceauth.eveonline.models import EveCharacter
+from .models import BigBrotherConfig, UserStatus
 import logging
-from .app_settings import get_corp_info, resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name, get_pings, resolve_corporation_name
+from .app_settings import resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_pings
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
@@ -18,16 +17,11 @@ from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from aa_bb.checks.clone_state import determine_character_state
-from datetime import datetime, timedelta, timezone as dt_timezone, date
+from datetime import datetime, timedelta
 from django.utils import timezone
-from django.contrib.auth import get_user_model
-from corptools.models import LastLoginfilter
-from corptools.api.helpers import get_alts_queryset
 import time
 import traceback
-import random
 from . import __version__
-from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from .tasks_cb import *
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
@@ -260,6 +254,8 @@ def BB_run_regular_updates():
                     # final summary message
                     if flagggs:
                         changes.append(f"##{pinggg} Clone state change detected:{''.join(flagggs)}")
+                        status.clone_status = state_result
+                        status.save()
                 
                 if set(sp_age_ratio_result) != set(status.sp_age_ratio_result or []):
                         flaggs = []
