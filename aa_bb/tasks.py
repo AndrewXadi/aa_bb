@@ -241,9 +241,9 @@ def BB_run_regular_updates():
 
                     # add messages to flags
                     for char_idddd, change in diff.items():
-                        char_name = resolve_character_name(char_idddd)
+                        char_nameeeee = resolve_character_name(char_idddd)
                         flagggs.append(
-                            f"\n- **{char_name}**: {change['old']} → **{change['new']}**"
+                            f"\n- **{char_nameeeee}**: {change['old']} → **{change['new']}**"
                         )
 
                     pinggg = ""
