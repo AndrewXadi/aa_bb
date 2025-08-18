@@ -231,17 +231,17 @@ def BB_run_regular_updates():
                     flagggs = []
 
                     # build dict of changes
-                    for char_id, new_data in state_result.items():
-                        old_data = old_states.get(str(char_id)) or old_states.get(char_id)  # handle str/int keys
+                    for char_idddd, new_data in state_result.items():
+                        old_data = old_states.get(str(char_idddd)) or old_states.get(char_idddd)  # handle str/int keys
                         if not old_data or old_data.get("state") != new_data.get("state"):
-                            diff[char_id] = {
+                            diff[char_idddd] = {
                                 "old": old_data.get("state") if old_data else None,
                                 "new": new_data.get("state"),
                             }
 
                     # add messages to flags
-                    for char_id, change in diff.items():
-                        char_name = resolve_character_name(char_id)
+                    for char_idddd, change in diff.items():
+                        char_name = resolve_character_name(char_idddd)
                         flagggs.append(
                             f"\n- **{char_name}**: {change['old']} → **{change['new']}**"
                         )
