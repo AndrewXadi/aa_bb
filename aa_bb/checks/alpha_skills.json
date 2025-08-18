@@ -1,0 +1,757 @@
+[
+  {
+    "id": 22806,
+    "skill": "EM Armor Compensation",
+    "cap": 2
+  },
+  {
+    "id": 22807,
+    "skill": "Explosive Armor Compensation",
+    "cap": 2
+  },
+  {
+    "id": 3394,
+    "skill": "Hull Upgrades",
+    "cap": 5
+  },
+  {
+    "id": 22808,
+    "skill": "Kinetic Armor Compensation",
+    "cap": 2
+  },
+  {
+    "id": 3392,
+    "skill": "Mechanics",
+    "cap": 5
+  },
+  {
+    "id": 16069,
+    "skill": "Remote Armor Repair Systems",
+    "cap": 3
+  },
+  {
+    "id": 27902,
+    "skill": "Remote Hull Repair Systems",
+    "cap": 2
+  },
+  {
+    "id": 3393,
+    "skill": "Repair Systems",
+    "cap": 5
+  },
+  {
+    "id": 22809,
+    "skill": "Thermal Armor Compensation",
+    "cap": 2
+  },
+  {
+    "id": 12487,
+    "skill": "Caldari Drone Specialization",
+    "cap": 2
+  },
+  {
+    "id": 3437,
+    "skill": "Drone Avionics",
+    "cap": 4
+  },
+  {
+    "id": 23618,
+    "skill": "Drone Durability",
+    "cap": 4
+  },
+  {
+    "id": 3442,
+    "skill": "Drone Interfacing",
+    "cap": 3
+  },
+  {
+    "id": 12305,
+    "skill": "Drone Navigation",
+    "cap": 4
+  },
+  {
+    "id": 23606,
+    "skill": "Drone Sharpshooting",
+    "cap": 4
+  },
+  {
+    "id": 3436,
+    "skill": "Drones",
+    "cap": 5
+  },
+  {
+    "id": 12486,
+    "skill": "Gallente Drone Specialization",
+    "cap": 2
+  },
+  {
+    "id": 3441,
+    "skill": "Heavy Drone Operation",
+    "cap": 3
+  },
+  {
+    "id": 24241,
+    "skill": "Light Drone Operation",
+    "cap": 5
+  },
+  {
+    "id": 33699,
+    "skill": "Medium Drone Operation",
+    "cap": 4
+  },
+  {
+    "id": 12485,
+    "skill": "Minmatar Drone Specialization",
+    "cap": 2
+  },
+  {
+    "id": 3439,
+    "skill": "Repair Drone Operation",
+    "cap": 2
+  },
+  {
+    "id": 3435,
+    "skill": "Propulsion Jamming",
+    "cap": 4
+  },
+  {
+    "id": 3433,
+    "skill": "Sensor Linking",
+    "cap": 3
+  },
+  {
+    "id": 19921,
+    "skill": "Target Painting",
+    "cap": 3
+  },
+  {
+    "id": 3434,
+    "skill": "Weapon Disruption",
+    "cap": 4
+  },
+  {
+    "id": 3426,
+    "skill": "CPU Management",
+    "cap": 5
+  },
+  {
+    "id": 3423,
+    "skill": "Capacitor Emission Systems",
+    "cap": 4
+  },
+  {
+    "id": 3418,
+    "skill": "Capacitor Management",
+    "cap": 4
+  },
+  {
+    "id": 3417,
+    "skill": "Capacitor Systems Operation",
+    "cap": 3
+  },
+  {
+    "id": 3432,
+    "skill": "Electronics Upgrades",
+    "cap": 5
+  },
+  {
+    "id": 3424,
+    "skill": "Energy Grid Upgrades",
+    "cap": 5
+  },
+  {
+    "id": 3421,
+    "skill": "Energy Pulse Weapons",
+    "cap": 2
+  },
+  {
+    "id": 3413,
+    "skill": "Power Grid Management",
+    "cap": 5
+  },
+  {
+    "id": 28164,
+    "skill": "Thermodynamics",
+    "cap": 4
+  },
+  {
+    "id": 3318,
+    "skill": "Weapon Upgrades",
+    "cap": 5
+  },
+  {
+    "id": 3300,
+    "skill": "Gunnery",
+    "cap": 5
+  },
+  {
+    "id": 3309,
+    "skill": "Large Energy Turret",
+    "cap": 4
+  },
+  {
+    "id": 3307,
+    "skill": "Large Hybrid Turret",
+    "cap": 4
+  },
+  {
+    "id": 3308,
+    "skill": "Large Projectile Turret",
+    "cap": 4
+  },
+  {
+    "id": 12202,
+    "skill": "Medium Artillery Specialization",
+    "cap": 3
+  },
+  {
+    "id": 12208,
+    "skill": "Medium Autocannon Specialization",
+    "cap": 3
+  },
+  {
+    "id": 12204,
+    "skill": "Medium Beam Laser Specialization",
+    "cap": 3
+  },
+  {
+    "id": 12211,
+    "skill": "Medium Blaster Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3306,
+    "skill": "Medium Energy Turret",
+    "cap": 5
+  },
+  {
+    "id": 3304,
+    "skill": "Medium Hybrid Turret",
+    "cap": 5
+  },
+  {
+    "id": 3305,
+    "skill": "Medium Projectile Turret",
+    "cap": 5
+  },
+  {
+    "id": 12214,
+    "skill": "Medium Pulse Laser Specialization",
+    "cap": 3
+  },
+  {
+    "id": 12206,
+    "skill": "Medium Railgun Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3312,
+    "skill": "Motion Prediction",
+    "cap": 4
+  },
+  {
+    "id": 3310,
+    "skill": "Rapid Firing",
+    "cap": 4
+  },
+  {
+    "id": 3311,
+    "skill": "Sharpshooter",
+    "cap": 4
+  },
+  {
+    "id": 12201,
+    "skill": "Small Artillery Specialization",
+    "cap": 3
+  },
+  {
+    "id": 11084,
+    "skill": "Small Autocannon Specialization",
+    "cap": 3
+  },
+  {
+    "id": 11083,
+    "skill": "Small Beam Laser Specialization",
+    "cap": 3
+  },
+  {
+    "id": 12210,
+    "skill": "Small Blaster Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3303,
+    "skill": "Small Energy Turret",
+    "cap": 5
+  },
+  {
+    "id": 3301,
+    "skill": "Small Hybrid Turret",
+    "cap": 5
+  },
+  {
+    "id": 3302,
+    "skill": "Small Projectile Turret",
+    "cap": 5
+  },
+  {
+    "id": 12213,
+    "skill": "Small Pulse Laser Specialization",
+    "cap": 3
+  },
+  {
+    "id": 11082,
+    "skill": "Small Railgun Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3315,
+    "skill": "Surgical Strike",
+    "cap": 4
+  },
+  {
+    "id": 3317,
+    "skill": "Trajectory Analysis",
+    "cap": 4
+  },
+  {
+    "id": 20312,
+    "skill": "Guided Missile Precision",
+    "cap": 3
+  },
+  {
+    "id": 25718,
+    "skill": "Heavy Assault Missile Specialization",
+    "cap": 3
+  },
+  {
+    "id": 25719,
+    "skill": "Heavy Assault Missiles",
+    "cap": 5
+  },
+  {
+    "id": 20211,
+    "skill": "Heavy Missile Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3324,
+    "skill": "Heavy Missiles",
+    "cap": 5
+  },
+  {
+    "id": 20210,
+    "skill": "Light Missile Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3321,
+    "skill": "Light Missiles",
+    "cap": 5
+  },
+  {
+    "id": 12441,
+    "skill": "Missile Bombardment",
+    "cap": 4
+  },
+  {
+    "id": 3319,
+    "skill": "Missile Launcher Operation",
+    "cap": 5
+  },
+  {
+    "id": 12442,
+    "skill": "Missile Projection",
+    "cap": 2
+  },
+  {
+    "id": 21071,
+    "skill": "Rapid Launch",
+    "cap": 4
+  },
+  {
+    "id": 20209,
+    "skill": "Rocket Specialization",
+    "cap": 3
+  },
+  {
+    "id": 3320,
+    "skill": "Rockets",
+    "cap": 5
+  },
+  {
+    "id": 20314,
+    "skill": "Target Navigation Prediction",
+    "cap": 3
+  },
+  {
+    "id": 3325,
+    "skill": "Torpedoes",
+    "cap": 4
+  },
+  {
+    "id": 20315,
+    "skill": "Warhead Upgrades",
+    "cap": 3
+  },
+  {
+    "id": 3450,
+    "skill": "Afterburner",
+    "cap": 3
+  },
+  {
+    "id": 3453,
+    "skill": "Evasive Maneuvering",
+    "cap": 3
+  },
+  {
+    "id": 3454,
+    "skill": "High Speed Maneuvering",
+    "cap": 3
+  },
+  {
+    "id": 3449,
+    "skill": "Navigation",
+    "cap": 4
+  },
+  {
+    "id": 3455,
+    "skill": "Warp Drive Operation",
+    "cap": 3
+  },
+  {
+    "id": 3411,
+    "skill": "Cybernetics",
+    "cap": 3
+  },
+  {
+    "id": 24242,
+    "skill": "Infomorph Psychology",
+    "cap": 1
+  },
+  {
+    "id": 3387,
+    "skill": "Mass Production",
+    "cap": 3
+  },
+  {
+    "id": 3386,
+    "skill": "Mining",
+    "cap": 4
+  },
+  {
+    "id": 22578,
+    "skill": "Mining Upgrades",
+    "cap": 4
+  },
+  {
+    "id": 45746,
+    "skill": "Reactions",
+    "cap": 1
+  },
+  {
+    "id": 3385,
+    "skill": "Reprocessing",
+    "cap": 3
+  },
+  {
+    "id": 25863,
+    "skill": "Salvaging",
+    "cap": 3
+  },
+  {
+    "id": 26254,
+    "skill": "Astronautics Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26255,
+    "skill": "Drones Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26256,
+    "skill": "Electronic Superiority Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26258,
+    "skill": "Energy Weapon Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26259,
+    "skill": "Hybrid Weapon Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26252,
+    "skill": "Jury Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26260,
+    "skill": "Launcher Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26257,
+    "skill": "Projectile Weapon Rigging",
+    "cap": 3
+  },
+  {
+    "id": 26261,
+    "skill": "Shield Rigging",
+    "cap": 3
+  },
+  {
+    "id": 25811,
+    "skill": "Astrometric Acquisition",
+    "cap": 2
+  },
+  {
+    "id": 25739,
+    "skill": "Astrometric Rangefinding",
+    "cap": 2
+  },
+  {
+    "id": 3412,
+    "skill": "Astrometrics",
+    "cap": 3
+  },
+  {
+    "id": 21718,
+    "skill": "Hacking",
+    "cap": 3
+  },
+  {
+    "id": 3551,
+    "skill": "Survey",
+    "cap": 3
+  },
+  {
+    "id": 12367,
+    "skill": "Explosive Shield Compensation",
+    "cap": 2
+  },
+  {
+    "id": 12366,
+    "skill": "Kinetic Shield Compensation",
+    "cap": 2
+  },
+  {
+    "id": 21059,
+    "skill": "Shield Compensation",
+    "cap": 4
+  },
+  {
+    "id": 3422,
+    "skill": "Shield Emission Systems",
+    "cap": 3
+  },
+  {
+    "id": 3419,
+    "skill": "Shield Management",
+    "cap": 4
+  },
+  {
+    "id": 3416,
+    "skill": "Shield Operation",
+    "cap": 4
+  },
+  {
+    "id": 3425,
+    "skill": "Shield Upgrades",
+    "cap": 4
+  },
+  {
+    "id": 3420,
+    "skill": "Tactical Shield Manipulation",
+    "cap": 4
+  },
+  {
+    "id": 11566,
+    "skill": "Thermal Shield Compensation",
+    "cap": 2
+  },
+  {
+    "id": 3361,
+    "skill": "Criminal Connections",
+    "cap": 2
+  },
+  {
+    "id": 3357,
+    "skill": "Diplomacy",
+    "cap": 3
+  },
+  {
+    "id": 3894,
+    "skill": "Distribution Connections",
+    "cap": 2
+  },
+  {
+    "id": 3893,
+    "skill": "Mining Connections",
+    "cap": 2
+  },
+  {
+    "id": 3356,
+    "skill": "Negotiation",
+    "cap": 2
+  },
+  {
+    "id": 3895,
+    "skill": "Security Connections",
+    "cap": 2
+  },
+  {
+    "id": 3355,
+    "skill": "Social",
+    "cap": 3
+  },
+  {
+    "id": 3339,
+    "skill": "Amarr Battleship",
+    "cap": 4
+  },
+  {
+    "id": 3335,
+    "skill": "Amarr Cruiser",
+    "cap": 4
+  },
+  {
+    "id": 33091,
+    "skill": "Amarr Destroyer",
+    "cap": 4
+  },
+  {
+    "id": 3331,
+    "skill": "Amarr Frigate",
+    "cap": 4
+  },
+  {
+    "id": 3343,
+    "skill": "Amarr Industrial",
+    "cap": 1
+  },
+  {
+    "id": 33096,
+    "skill": "Caldari Battlecruiser",
+    "cap": 4
+  },
+  {
+    "id": 3338,
+    "skill": "Caldari Battleship",
+    "cap": 4
+  },
+  {
+    "id": 3334,
+    "skill": "Caldari Cruiser",
+    "cap": 4
+  },
+  {
+    "id": 33092,
+    "skill": "Caldari Destroyer",
+    "cap": 4
+  },
+  {
+    "id": 3330,
+    "skill": "Caldari Frigate",
+    "cap": 4
+  },
+  {
+    "id": 3342,
+    "skill": "Caldari Industrial",
+    "cap": 1
+  },
+  {
+    "id": 33097,
+    "skill": "Gallente Battlecruiser",
+    "cap": 4
+  },
+  {
+    "id": 3336,
+    "skill": "Gallente Battleship",
+    "cap": 4
+  },
+  {
+    "id": 3332,
+    "skill": "Gallente Cruiser",
+    "cap": 4
+  },
+  {
+    "id": 33093,
+    "skill": "Gallente Destroyer",
+    "cap": 4
+  },
+  {
+    "id": 3328,
+    "skill": "Gallente Frigate",
+    "cap": 4
+  },
+  {
+    "id": 3340,
+    "skill": "Gallente Industrial",
+    "cap": 1
+  },
+  {
+    "id": 32918,
+    "skill": "Mining Frigate",
+    "cap": 4
+  },
+  {
+    "id": 33098,
+    "skill": "Minmatar Battlecruiser",
+    "cap": 4
+  },
+  {
+    "id": 3337,
+    "skill": "Minmatar Battleship",
+    "cap": 4
+  },
+  {
+    "id": 3333,
+    "skill": "Minmatar Cruiser",
+    "cap": 4
+  },
+  {
+    "id": 33094,
+    "skill": "Minmatar Destroyer",
+    "cap": 4
+  },
+  {
+    "id": 3329,
+    "skill": "Minmatar Frigate",
+    "cap": 4
+  },
+  {
+    "id": 3341,
+    "skill": "Minmatar Industrial",
+    "cap": 1
+  },
+  {
+    "id": 3327,
+    "skill": "Spaceship Command",
+    "cap": 4
+  },
+  {
+    "id": 3431,
+    "skill": "Signature Analysis",
+    "cap": 3
+  },
+  {
+    "id": 3429,
+    "skill": "Target Management",
+    "cap": 4
+  },
+  {
+    "id": 16598,
+    "skill": "Marketing",
+    "cap": 2
+  },
+  {
+    "id": 3443,
+    "skill": "Trade",
+    "cap": 3
+  }
+]

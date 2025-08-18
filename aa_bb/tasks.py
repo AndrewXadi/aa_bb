@@ -3,7 +3,7 @@ from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from .models import BigBrotherConfig, UserStatus, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
 import logging
-from .app_settings import get_corp_info, get_alliance_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name, get_pings, resolve_corporation_name
+from .app_settings import get_corp_info, resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_main_character_name, get_pings, resolve_corporation_name
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
@@ -17,6 +17,7 @@ from aa_bb.checks.sus_contacts import get_user_hostile_notifications
 from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
+from aa_bb.checks.clone_state import determine_character_state
 from datetime import datetime, timedelta, timezone as dt_timezone, date
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -167,6 +168,7 @@ def BB_run_regular_updates():
 
                 cyno_result = get_user_cyno_info(user_id)
                 skills_result = get_multiple_user_skill_info(user_id, skill_ids)
+                state_result = determine_character_state(user_id, True)
                 awox_links = get_awox_kill_links(user_id)
                 hostile_clones_result = get_hostile_clone_locations(user_id)
                 hostile_assets_result = get_hostile_asset_locations(user_id)
@@ -228,6 +230,36 @@ def BB_run_regular_updates():
                 #status.cyno = {}
                 def as_dict(x):
                     return x if isinstance(x, dict) else {}
+                
+                if set(state_result) != set(status.clone_status or []):
+                    old_states = status.clone_status or {}
+                    diff = {}
+                    flagggs = []
+
+                    # build dict of changes
+                    for char_id, new_data in state_result.items():
+                        old_data = old_states.get(str(char_id)) or old_states.get(char_id)  # handle str/int keys
+                        if not old_data or old_data.get("state") != new_data.get("state"):
+                            diff[char_id] = {
+                                "old": old_data.get("state") if old_data else None,
+                                "new": new_data.get("state"),
+                            }
+
+                    # add messages to flags
+                    for char_id, change in diff.items():
+                        char_name = resolve_character_name(char_id)
+                        flagggs.append(
+                            f"\n- **{char_name}**: {change['old']} → **{change['new']}**"
+                        )
+
+                    pinggg = ""
+
+                    if "omega" in flagggs:
+                        pinggg = get_pings('Omega Detected')
+
+                    # final summary message
+                    if flagggs:
+                        changes.append(f"##{pinggg} Clone state change detected:{''.join(flagggs)}")
                 
                 if set(sp_age_ratio_result) != set(status.sp_age_ratio_result or []):
                         flaggs = []

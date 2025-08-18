@@ -289,7 +289,6 @@ async function loadAll(option) {
   hideGeneral();
   hideContract();
   showSpinner(true);
-  fetch("{% url 'aa_cb:warm_cache' %}?option=" + encodeURIComponent(option));
 
   for (let i = 0; i < CARD_DEFINITIONS.length; i++) {
     const { key, title } = CARD_DEFINITIONS[i];

@@ -117,6 +117,7 @@ class UserStatus(models.Model):
     has_sus_trans = models.BooleanField(default=False)
     sus_trans = JSONField(default=dict, blank=True)
     sp_age_ratio_result = JSONField(default=dict, blank=True)
+    clone_status = JSONField(default=dict, blank=True)
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -295,6 +296,18 @@ class BigBrotherConfig(SingletonModel):
         blank=True,
         null=True,
         help_text="List of corporation IDs to be ignored in the corp brother task and to not show up in Corp Brother tab, separated by ','"
+    )
+
+    member_corporations = models.TextField(
+        blank=True,
+        null=True,
+        help_text="List of corporation IDs to be considered members, separated by ','"
+    )
+
+    member_alliances = models.TextField(
+        blank=True,
+        null=True,
+        help_text="List of alliance IDs to be considered members, separated by ','"
     )
 
     character_scopes = models.TextField(
@@ -881,3 +894,21 @@ class SovereigntyMapCache(models.Model):
     @property
     def is_fresh(self):
         return timezone.now() - self.updated < timedelta(hours=24)
+    
+class CharacterAccountState(models.Model):
+    ALPHA = "alpha"
+    OMEGA = "omega"
+    UNKNOWN = "unknown"
+
+    STATE_CHOICES = [
+        (ALPHA, "Alpha"),
+        (OMEGA, "Omega"),
+        (UNKNOWN, "Unknown"),
+    ]
+
+    char_id = models.BigIntegerField(primary_key=True)
+    skill_used = models.BigIntegerField(blank=True, null=True)
+    state = models.CharField(max_length=10, choices=STATE_CHOICES)
+
+    def __str__(self):
+        return f"{self.char_id} - {self.state}"

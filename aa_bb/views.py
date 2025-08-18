@@ -55,6 +55,7 @@ from aa_bb.checks.sus_contracts import (
     gather_user_contracts,
 )
 from aa_bb.checks.roles_and_tokens import render_user_roles_tokens_html
+from aa_bb.checks.clone_state import render_character_states_html
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message, get_pings
 from .models import BigBrotherConfig, WarmProgress, LeaveRequest
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
@@ -69,6 +70,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 CARD_DEFINITIONS = [
     {"title": 'Compliance', "key": "compliance"},
+    {"title": 'Clone States', "key": "clone_states"},
     {"title": 'IMP Blacklist', "key": "imp_bl"},
     {"title": '<span style=\"color: Orange;\"><b>WiP </b></span>LAWN Blacklist', "key": "lawn_bl"},
     {"title": 'Corp Blacklist', "key": "corp_bl"},
@@ -877,6 +879,10 @@ def get_card_data(request, target_user_id: int, key: str):
 
     elif key == "compliance":
         content = render_user_roles_tokens_html(target_user_id)
+        status  = not (content and "red" in content)
+
+    elif key == "clone_states":
+        content = render_character_states_html(target_user_id)
         status  = not (content and "red" in content)
 
     else:

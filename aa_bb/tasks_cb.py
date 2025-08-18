@@ -234,6 +234,90 @@ def check_member_compliance():
         if flags:
             messages += f"-  {char_name}:\n{flags}"
 
+    from allianceauth.eveonline.models import EveCorporationInfo, EveCharacter
+    from .app_settings import get_corporation_info, get_alliance_name
+    missing_characters = []
+    corp_ids = instance.member_corporations
+    if corp_ids:
+        for corp_id in corp_ids.split(","):
+            corp_chars = []
+            corp_id = corp_id.strip()
+            if not corp_id:
+                continue
+
+            # Get characters linked in your DB
+            linked_chars = list(
+                EveCharacter.objects.filter(corporation_id=corp_id)
+                .values_list("character_name", flat=True)
+            )
+
+            corp_name = get_corporation_info(corp_id)["name"]
+            # Get characters from EveWho API
+            all_corp_members = get_corp_character_names(corp_id)
+            # Find missing characters
+            for char_name in all_corp_members:
+                if char_name not in linked_chars:
+                    corp_chars.append(f"  - {char_name}")
+            if corp_chars:
+                chars_str = "\n".join(corp_chars)
+                missing_characters.append(f"- {corp_name}\n{chars_str}")
+    ali_ids = instance.member_alliances
+    logger.info(f"ali_ids: {str(ali_ids)}")
+    if ali_ids:
+        for ali_id in ali_ids.split(","):
+            logger.info(f"ali_id: {str(ali_id)}")
+            ali_chars = []
+            ali_id = ali_id.strip()
+            logger.info(f"ali_id: {str(ali_id)}")
+            if not ali_id:
+                continue
+
+            # Get characters linked in your DB
+            linked_chars = list(
+                EveCharacter.objects.filter(alliance_id=ali_id)
+                .values_list("character_name", flat=True)
+            )
+            logger.info(f"linked_chars: {str(linked_chars)}")
+
+            ali_name = get_alliance_name(ali_id)
+            logger.info(f"ali_name: {str(ali_name)}")
+            # Get characters from EveWho API
+            all_ali_members = get_ali_character_names(ali_id)
+            logger.info(f"all_ali_members: {str(all_ali_members)}")
+            # Find missing characters
+            for char_name in all_ali_members:
+                if char_name not in linked_chars:
+                    ali_chars.append(f"  - {char_name}")
+            if ali_chars:
+                chars_str = "\n".join(ali_chars)
+                missing_characters.append(f"- {ali_name}\n{chars_str}")
+    compliance_msg = ""
+    if missing_characters:
+        logger.info(f"missing_characters: {str(missing_characters)}")
+        joined_msg = '\n'.join(missing_characters)
+        compliance_msg += f"\n## Missing tokens for member characters:\n{joined_msg}"
+
     if messages:
-        messages = f"#{get_pings('Compliance')} Non Compliant users found:\n" + messages
-        send_message(messages)
+        compliance_msg += f"\n## Non Compliant users found:\n" + messages
+
+    if compliance_msg: 
+        compliance_msg = f"#{get_pings('Compliance')} Compliance Issues found:" + compliance_msg
+        send_message(compliance_msg)
+
+import requests
+
+def get_corp_character_names(corp_id: int) -> str:
+    url = f"https://evewho.com/api/corplist/{corp_id}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    data = resp.json()
+
+    return [char["name"] for char in data.get("characters", [])]
+
+def get_ali_character_names(ali_id: int) -> str:
+    url = f"https://evewho.com/api/allilist/{ali_id}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    data = resp.json()
+
+    return [char["name"] for char in data.get("characters", [])]

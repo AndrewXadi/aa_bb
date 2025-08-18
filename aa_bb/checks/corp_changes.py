@@ -81,7 +81,7 @@ def get_frequent_corp_changes(user_id):
                 f'<span style="color:{corp_color};">{corp_name}</span>'
                 f'<a href="https://zkillboard.com/corporation/{corp_id}/" target="_blank">'
                 f'<img src="{ZKILL_ICON}" width="16" height="16" style="margin-left:4px;vertical-align:middle;"/></a> '
-                f'<a href="https://evewho.com/corp/{corp_id}" target="_blank">'
+                f'<a href="https://evewho.com/corporation/{corp_id}" target="_blank">'
                 f'<img src="{EVEWHO_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '
                 f'<a href="https://evemaps.dotlan.net/corp/{corp_id}" target="_blank">'
                 f'<img src="{DOTLAN_ICON}" width="16" height="16" style="margin-left:2px;vertical-align:middle;"/></a> '

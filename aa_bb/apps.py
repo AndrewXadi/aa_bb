@@ -33,6 +33,7 @@ class AaBbConfig(AppConfig):
             "All Cyno Changes",
             "Compliance",
             "SP Injected",
+            "Omega Detected",
         ]
 
         state_names = list(State.objects.values_list("name", flat=True))

@@ -63,16 +63,14 @@ def get_user_tokens(user_id):
             char_scopes_owned.update(token_scopes & set(CHARACTER_SCOPES))
             corp_scopes_owned.update(token_scopes & set(CORPORATION_SCOPES))
 
-        missing_character_scopes = set(CHARACTER_SCOPES) - char_scopes_owned
         missing_corporation_scopes = set(CORPORATION_SCOPES) - corp_scopes_owned
 
-        has_char_token = len(missing_character_scopes) == 0
         has_corp_token = len(missing_corporation_scopes) == 0
+        char_audit = CharacterAudit.objects.get(character=eve_char).active
 
         tokens_dict[char_name] = {
-            "character_token": has_char_token,
+            "character_token": char_audit,
             "corporation_token": has_corp_token,
-            "missing_character_scopes": ", ".join(sorted(missing_character_scopes)),
             "missing_corporation_scopes": ", ".join(sorted(missing_corporation_scopes)),
         }
 
@@ -161,13 +159,12 @@ def render_user_roles_tokens_html(user_id: int) -> str:
 
         # scopes
         for key, label in (
-            ("missing_character_scopes", "Missing Character Scopes"),
             ("missing_corporation_scopes", "Missing Corporation Scopes"),
         ):
             val = info.get(key, "")
             if val:  # only add row if non-empty
                 html += format_html(
-                    "<tr><td>{}</td><td colspan='2'><span style='color:red;'>{}</span></td></tr>",
+                    "<tr><td>{}</td><td colspan='2'>{}</td></tr>",
                     label,
                     mark_safe(val)  # comma-separated string of missing scopes
                 )
