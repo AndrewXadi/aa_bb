@@ -145,7 +145,7 @@ def generate_pap_chart(request):
         })
 
     # Chart save path
-    app_static_dir = os.path.join(settings.STATIC_ROOT, "aa_bb", "paps")
+    app_static_dir = os.path.join(settings.BASE_DIR, "aa_bb", "templates", "paps", "charts")
     os.makedirs(app_static_dir, exist_ok=True)
     filename = f"pap_chart_{year}_{month}.png"
     filepath = os.path.join(app_static_dir, filename)
