@@ -90,6 +90,8 @@ class General(models.Model):
             ("can_access_loa", "Can access and submit a Leave Of Absence request"),
             ("can_view_all_loa", "Can view all Leave Of Absence requests"),
             ("can_manage_loa", "Can manage Leave Of Absence requests"),
+            ("can_access_paps", "Can access PAP Stats"),
+            ("can_generate_paps", "Can generate PAP Stats"),
             )
         
 class UserStatus(models.Model):
@@ -199,6 +201,33 @@ class MessageType(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class PapsConfig(SingletonModel):
+    required_paps = models.PositiveIntegerField(
+        default=1, 
+        help_text="How many PAPs per month should a user get?"
+    )
+
+    corp_modifier = models.PositiveIntegerField(
+        default=1, 
+        help_text="How many PAPs is a corp PAP worth?"
+    )
+
+    max_corp_paps = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many Corp PAPs will count?"
+    )
+
+    lawn_modifier = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs is a lawn PAP worth?"
+    )
+
+    imp_modifier = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs is an imp PAP worth?"
+    )
 
 
 class BigBrotherConfig(SingletonModel):
@@ -455,6 +484,12 @@ class BigBrotherConfig(SingletonModel):
         default=False,
         editable=True,
         help_text="has the Leave of Absence module been activated/deactivated? (You will need to restart AA for this to take effect)"
+    )
+
+    is_paps_active = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="has the PAP stats module been activated/deactivated? (You will need to restart AA for this to take effect)"
     )
     
     is_warmer_active = models.BooleanField(

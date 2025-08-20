@@ -8,7 +8,7 @@ from allianceauth import hooks
 from allianceauth.services.hooks import MenuItemHook, UrlHook
 
 # AA Example App
-from aa_bb import urls, urls_loa, urls_cb
+from aa_bb import urls, urls_loa, urls_cb, urls_paps
 
 
 class CorpBrotherMenuItem(MenuItemHook):
@@ -102,3 +102,25 @@ def register_loa_menu():
 @hooks.register("url_hook")
 def register_loa_urls():
     return UrlHook(urls_loa, "loa", r"^loa/")
+
+
+class PapsMenuItem(MenuItemHook):
+    def __init__(self):
+        super().__init__(
+            _("PAP Stats"),
+            "fas fa-plane",
+            "paps:index",
+            navactive=["paps:"],
+        )
+    def render(self, request):
+        if request.user.has_perm("aa_bb.can_access_paps"):
+            return super().render(request)
+        return ""
+
+@hooks.register("menu_item_hook")
+def register_paps_menu():
+    return PapsMenuItem()
+
+@hooks.register("url_hook")
+def register_paps_urls():
+    return UrlHook(urls_paps, "paps", r"^paps/")

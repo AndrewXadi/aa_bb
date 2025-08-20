@@ -1,0 +1,21 @@
+{% extends 'paps/base.html' %}
+{% load static %}
+
+{% block details %}
+  <!-- Month/Year selector form -->
+  <form method="get" class="mb-3">
+    <label for="month">Month:</label>
+    <input type="number" name="month" min="1" max="12" value="{{ month }}" step="1">
+    <label for="year">Year:</label>
+    <input type="number" name="year" value="{{ year }}" step="1">
+    <button type="submit">Go</button>
+  </form>
+
+  <div class="text-center">
+    {% if chart_exists %}
+      <img src="{% static chart_url %}" alt="PAP Chart {{ month }}/{{ year }}" class="img-fluid">
+    {% else %}
+      <p>No chart available for {{ month }}/{{ year }}.</p>
+    {% endif %}
+  </div>
+{% endblock %}

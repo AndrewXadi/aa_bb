@@ -41,6 +41,7 @@ dependencies = [
     "pyarmor>=9.0.0",
     "psycopg2-binary>=2.9.9",
     "allianceauth-corptools>=2.9.3",
+    "matplotlib>=3.7.2",
 ]
 urls.Changelog = "https://github.com/ppfeufer/aa-example-plugin/blob/master/CHANGELOG.md"
 urls."Issue / Bug Reports" = "https://github.com/ppfeufer/aa-example-plugin/issues"

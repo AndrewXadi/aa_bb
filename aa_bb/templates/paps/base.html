@@ -1,0 +1,17 @@
+{% extends 'allianceauth/base-bs5.html' %}
+
+{% load i18n %}
+
+{% block page_title %}
+    {% translate "Pap Stats" %}
+{% endblock %}
+
+{% block header_nav_collapse_left %}
+    {% include 'paps/menu.html' %}
+{% endblock %}
+
+{% block content %}
+    <div class="paps">
+        {% block details %}{% endblock %}
+    </div>
+{% endblock %}

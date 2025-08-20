@@ -750,6 +750,16 @@ def get_users():
     )
     return users
 
+def get_user_profiles():
+    member_states = BigBrotherConfig.get_solo().bb_member_states.all()
+    users = (
+        UserProfile.objects.filter(state__in=member_states)
+        .exclude(main_character=None)
+        .select_related("main_character", "user")  # optimization
+        .order_by("main_character__character_name")
+    )
+    return users
+
 def get_user_id(character_name):
     try:
         ownership = CharacterOwnership.objects.select_related('user').get(character__character_name=character_name)
@@ -978,3 +988,7 @@ def get_contact_email():  # regex sso url
 
 def aablacklist_active():
     return apps.is_installed("blacklist")
+
+
+def afat_active():
+    return apps.is_installed("afat")

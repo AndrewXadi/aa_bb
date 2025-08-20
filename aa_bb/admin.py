@@ -6,7 +6,7 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,WarmProgress,AllianceHistoryCache
+    UserStatus,LeaveRequest,WarmProgress,PapsConfig
 )
 
 @admin.register(BigBrotherConfig)
@@ -25,6 +25,19 @@ class BB_ConfigAdmin(SingletonModelAdmin):
     def has_add_permission(self, request):
         # Prevent adding new config if one already exists
         if BigBrotherConfig.objects.exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deleting the singleton instance
+        return True
+
+@admin.register(PapsConfig)
+class PapsConfigAdmin(SingletonModelAdmin):
+    
+    def has_add_permission(self, request):
+        # Prevent adding new config if one already exists
+        if PapsConfig.objects.exists():
             return False
         return super().has_add_permission(request)
 
@@ -73,7 +86,3 @@ class UserStatusConfig(admin.ModelAdmin):
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(admin.ModelAdmin):
     list_display = ['main_character', 'start_date', 'end_date', 'reason', 'status']
-
-@admin.register(AllianceHistoryCache)
-class AllianceHistoryCacheConfig(admin.ModelAdmin):
-    list_display = ['corp_id', 'updated']

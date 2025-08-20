@@ -1,0 +1,81 @@
+{% extends 'paps/base.html' %}
+{% load static %}
+
+{% block details %}
+<h1>Generate PAP stats</h1>
+
+{% if users_data %}
+  <!-- Month/year selector -->
+  <form method="get" class="mb-3">
+    <label for="month">Month:</label>
+    <input type="number" name="month" min="1" max="12" value="{{ month }}" step="1">
+    <label for="year">Year:</label>
+    <input type="number" name="year" value="{{ year }}" step="1">
+    <button type="submit">Go</button>
+  </form>
+
+  <!-- Bulk data processing form -->
+  <form method="post" action="{% url 'paps:index' %}">
+    {% csrf_token %}
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="year" value="{{ year }}">
+
+    <div class="mb-3">
+      <label for="bulk_data">Paste PAP data (Player LAWN IMP, tab/space-separated):</label>
+      <textarea name="bulk_data" rows="10" class="form-control">{{ bulk_data|default:'' }}</textarea>
+    </div>
+
+    <button type="submit" name="action" value="process_bulk" class="btn btn-secondary mb-3">
+      Process Bulk Data
+    </button>
+
+    {% if error_messages %}
+      <div class="alert alert-warning">
+        Unable to add data for users: {{ error_messages|join:", " }}
+      </div>
+    {% endif %}
+  </form>
+
+  <!-- PAP table + Generate Chart form -->
+  <form method="post" action="{% url 'paps:generate_pap_chart' %}">
+    {% csrf_token %}
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="year" value="{{ year }}">
+
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Member</th>
+          <th>Corp Paps</th>
+          <th>Lawn Paps</th>
+          <th>Imp Paps</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in users_data %}
+          <tr>
+            <td><strong>{{ entry.user.main_character.character_name }}</strong></td>
+            <td>
+              <input type="number" name="corp_paps_{{ entry.user.id }}" 
+                     value="{{ entry.corp_paps }}" class="form-control form-control-sm" step="1">
+            </td>
+            <td>
+              <input type="number" name="lawn_paps_{{ entry.user.id }}" 
+                     value="{{ entry.lawn_paps }}" class="form-control form-control-sm" step="1">
+            </td>
+            <td>
+              <input type="number" name="imperium_paps_{{ entry.user.id }}" 
+                     value="{{ entry.imperium_paps }}" class="form-control form-control-sm" step="1">
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="submit" class="btn btn-primary">Generate Chart</button>
+  </form>
+{% else %}
+  <p>No members found.</p>
+{% endif %}
+
+{% endblock %}
