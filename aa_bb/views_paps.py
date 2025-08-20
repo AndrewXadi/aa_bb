@@ -63,6 +63,9 @@ def index(request):
 
     # Build table data
     for profile in profiles:
+        excluded_users = PapsConfig.get_solo().excluded_users.all()
+        if profile.user in excluded_users:
+            continue
         user_id = profile.user.id
         characters = get_user_characters(user_id)
         corp_paps = 0
@@ -71,7 +74,6 @@ def index(request):
         user_groups = profile.user.groups.values_list("name", flat=True)
         auth_groups = PapsConfig.get_solo().group_paps.all()
         excluded_groups = PapsConfig.get_solo().excluded_groups.all()
-        excluded_users = PapsConfig.get_solo().excluded_users.all()
         group_names = [ag.group.name for ag in auth_groups]
         user_groups_set = set(user_groups)
         auth_groups_set = set(group_names)
@@ -81,9 +83,8 @@ def index(request):
         # Count how many overlap
         matching_count = len(user_groups_set & auth_groups_set)
         excluded = bool(user_groups_set & excluded_groups_set)
-        if profile.user not in excluded_users:
-            if not excluded:
-                corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
+        if not excluded:
+            corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
 
         if afat_active():
             for char in characters:
