@@ -112,13 +112,13 @@ def history(request):
     year = int(request.GET.get("year", today.year))
 
     # Runtime chart folder
-    runtime_dir = os.path.join(settings.BASE_DIR, "aa_bb")
+    runtime_dir = os.path.join(settings.MEDIA_ROOT, "paps")
     filename = f"pap_chart_{year}_{month}.png"
     chart_full_path = os.path.join(runtime_dir, filename)
     chart_exists = os.path.isfile(chart_full_path)
 
     # URL to serve in template
-    chart_url = f"/static_runtime/paps/{filename}"
+    chart_url = f"{settings.MEDIA_URL}paps/{filename}"
 
     return render(request, "paps/history.html", {
         "month": month,
@@ -152,7 +152,7 @@ def generate_pap_chart(request):
         })
 
     # Chart save path
-    app_static_dir = os.path.join(settings.BASE_DIR, "aa_bb")
+    app_static_dir = os.path.join(settings.MEDIA_ROOT, "paps")
     os.makedirs(app_static_dir, exist_ok=True)
     filename = f"pap_chart_{year}_{month}.png"
     filepath = os.path.join(app_static_dir, filename)
