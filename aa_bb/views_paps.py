@@ -12,6 +12,10 @@ from datetime import datetime
 import os
 import matplotlib.pyplot as plt
 import calendar
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 @login_required
 @permission_required("aa_bb.can_generate_paps")
@@ -64,6 +68,22 @@ def index(request):
         corp_paps = 0
         lawn_paps = 0
         imperium_paps = 0
+        user_groups = profile.user.groups.values_list("name", flat=True)
+        auth_groups = PapsConfig.get_solo().group_paps.all()
+        excluded_groups = PapsConfig.get_solo().excluded_groups.all()
+        excluded_users = PapsConfig.get_solo().excluded_users.all()
+        group_names = [ag.group.name for ag in auth_groups]
+        user_groups_set = set(user_groups)
+        auth_groups_set = set(group_names)
+        excluded_group_names = [eg.group.name for eg in excluded_groups]
+        excluded_groups_set = set(excluded_group_names)
+
+        # Count how many overlap
+        matching_count = len(user_groups_set & auth_groups_set)
+        excluded = bool(user_groups_set & excluded_groups_set)
+        if profile.user not in excluded_users:
+            if not excluded:
+                corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
 
         if afat_active():
             for char in characters:
@@ -140,13 +160,17 @@ def generate_pap_chart(request):
     for profile in get_user_profiles():
         user_id = profile.user.id
         conf = PapsConfig.get_solo()
-        corp_paps = min(int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier, conf.max_corp_paps)  # cap at 4
+        corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 
+        corp_paps = min(corp_raw, conf.max_corp_paps)  # cap at 4
         lawn_paps = int(request.POST.get(f"lawn_paps_{user_id}", 0)) * conf.lawn_modifier     # double lawn
         imperium_paps = int(request.POST.get(f"imperium_paps_{user_id}", 0)) * conf.imp_modifier
-
+        corp_ab = corp_raw - 4
+        if corp_ab < 0:
+            corp_ab = 0
         users_data.append({
             "name": profile.main_character.character_name,
             "corp": corp_paps,
+            "corp_ab": corp_ab,
             "lawn": lawn_paps,
             "imperium": imperium_paps,
         })
@@ -164,16 +188,32 @@ def generate_pap_chart(request):
 
     names = [u["name"] for u in users_data]
     corp = [u["corp"] for u in users_data]
+    corp_abo = [u["corp_ab"] for u in users_data]
     lawn = [u["lawn"] for u in users_data]
     imp  = [u["imperium"] for u in users_data]
 
     x = range(len(names))
+    corp_m = conf.corp_modifier
+    corp_max = conf.max_corp_paps
+    lawn_m = conf.lawn_modifier
+    imp_m = conf.imp_modifier
 
-    # Stacked bars: Lawn (bottom), Imperium (middle), Corp (top)
-    ax.bar(x, lawn, label="Lawn Paps", color="#58D68D")
-    ax.bar(x, imp, bottom=lawn, label="Imperium Paps", color="#F5B041")
+    
+
+
+    # Bottom: Lawn
+    ax.bar(x, lawn, label=f"Lawn Paps(x{lawn_m})", color="#58D68D")
+
+    # Next: Imperium
+    ax.bar(x, imp, bottom=lawn, label=f"Imperium Paps(x{imp_m})", color="#F5B041")
     bottom_stack = [l + im for l, im in zip(lawn, imp)]
-    ax.bar(x, corp, bottom=bottom_stack, label="Corp Paps", color="#5DADE2")
+
+    # Next: Corp (capped part)
+    ax.bar(x, corp, bottom=bottom_stack, label=f"Corp Paps(x{corp_m}, max {corp_max})", color="#5DADE2")
+    corp_stack = [b + c for b, c in zip(bottom_stack, corp)]
+
+    # Top: Corp above cap
+    ax.bar(x, corp_abo, bottom=corp_stack, label=f"Corp Paps above {corp_max}(x{corp_m})", color="#9EC5DF")
 
     # Horizontal red dashed line at y=6
     ax.axhline(y=conf.required_paps, color='red', linestyle='--', linewidth=2, label='PAP Requirement')
@@ -205,13 +245,18 @@ def generate_pap_chart(request):
             coll = 'white'
         ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
 
+    for i, (l, im, c, ca) in enumerate(zip(lawn, imp, corp, corp_abo)):
+        total = l + im + c + ca
+        coll = 'white'
+        ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
+
     # Determine the max total height of stacked bars
-    max_total = max([l + im + c for l, im, c in zip(lawn, imp, corp)])
+    max_total = max([l + im + c + ca for l, im, c, ca in zip(lawn, imp, corp, corp_abo)])
     if max_total < conf.required_paps:
         max_total = conf.required_paps
 
     # Add some padding (like 10% extra)
-    ax.set_ylim(0, max_total + 1)
+    ax.set_ylim(0, max_total *  1.1)
 
     plt.tight_layout()
     plt.savefig(filepath, dpi=150, facecolor=fig.get_facecolor())  # save with background

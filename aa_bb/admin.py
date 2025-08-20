@@ -34,7 +34,11 @@ class BB_ConfigAdmin(SingletonModelAdmin):
 
 @admin.register(PapsConfig)
 class PapsConfigAdmin(SingletonModelAdmin):
-    
+    filter_horizontal = (
+        "group_paps",
+        "excluded_groups",
+        "excluded_users",
+    )
     def has_add_permission(self, request):
         # Prevent adding new config if one already exists
         if PapsConfig.objects.exists():

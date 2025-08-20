@@ -13,6 +13,7 @@ from django_celery_beat.models import CrontabSchedule
 from django.utils import timezone
 from datetime import timedelta
 from allianceauth.authentication.models import State
+from allianceauth.groupmanagement.models import AuthGroup
 
 
 
@@ -227,6 +228,32 @@ class PapsConfig(SingletonModel):
     imp_modifier = models.PositiveIntegerField(
         default=1,  
         help_text="How many PAPs is an imp PAP worth?"
+    )
+
+    group_paps = models.ManyToManyField(
+        AuthGroup,
+        related_name="group_paps",
+        blank=True,
+        help_text="List of groups which give paps"
+    )
+
+    excluded_groups = models.ManyToManyField(
+        AuthGroup,
+        related_name="excluded_groups",
+        blank=True,
+        help_text="List of groups which prevent giving paps"
+    )
+
+    excluded_users = models.ManyToManyField(
+        User,
+        related_name="excluded_user",
+        blank=True,
+        help_text="List of user prevented from getting paps from groups"
+    )
+
+    group_paps_modifier = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs to add per group"
     )
 
 
