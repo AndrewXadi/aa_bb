@@ -109,7 +109,7 @@ class PapsMenuItem(MenuItemHook):
         super().__init__(
             _("PAP Stats"),
             "fas fa-plane",
-            "paps:index",
+            "paps:history",
             navactive=["paps:"],
         )
     def render(self, request):

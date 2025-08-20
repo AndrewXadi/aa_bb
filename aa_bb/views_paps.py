@@ -21,7 +21,7 @@ def index(request):
         return render(request, "paps/disabled.html")
 
     today = now()
-    month = int(request.GET.get("month", today.month))
+    month = int(request.GET.get("month", today.month-1))
     year = int(request.GET.get("year", today.year))
 
     users_data = []
@@ -106,18 +106,25 @@ def history(request):
     cfg = BigBrotherConfig.get_solo()
     if not cfg.is_paps_active:
         return render(request, "paps/disabled.html")
-    month = int(request.GET.get("month", 8))  # default to August
-    year = int(request.GET.get("year", 2025)) # default to 2025
+    
+    today = now()
+    month = int(request.GET.get("month", today.month-1))
+    year = int(request.GET.get("year", today.year))
 
-    chart_relative_path = f"aa_bb/paps/pap_chart_{year}_{month}.png"
-    chart_full_path = os.path.join(settings.STATIC_ROOT, chart_relative_path)
+    # Runtime chart folder
+    runtime_dir = os.path.join(settings.BASE_DIR, "aa_bb")
+    filename = f"pap_chart_{year}_{month}.png"
+    chart_full_path = os.path.join(runtime_dir, filename)
     chart_exists = os.path.isfile(chart_full_path)
+
+    # URL to serve in template
+    chart_url = f"/static_runtime/paps/{filename}"
 
     return render(request, "paps/history.html", {
         "month": month,
         "year": year,
         "chart_exists": chart_exists,
-        "chart_url": chart_relative_path,
+        "chart_url": chart_url,
     })
 
 
@@ -145,7 +152,7 @@ def generate_pap_chart(request):
         })
 
     # Chart save path
-    app_static_dir = os.path.join(settings.BASE_DIR, "aa_bb", "templates", "paps", "charts")
+    app_static_dir = os.path.join(settings.BASE_DIR, "aa_bb")
     os.makedirs(app_static_dir, exist_ok=True)
     filename = f"pap_chart_{year}_{month}.png"
     filepath = os.path.join(app_static_dir, filename)
@@ -193,7 +200,18 @@ def generate_pap_chart(request):
     # Add labels above the stacked bars
     for i, (l, im, c) in enumerate(zip(lawn, imp, corp)):
         total = l + im + c
-        ax.text(i, total + 0.5, str(total), ha='center', va='bottom', color='white', fontsize=10, fontweight='bold')
+        coll = 'red'
+        if total >= conf.required_paps:
+            coll = 'white'
+        ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
+
+    # Determine the max total height of stacked bars
+    max_total = max([l + im + c for l, im, c in zip(lawn, imp, corp)])
+    if max_total < conf.required_paps:
+        max_total = conf.required_paps
+
+    # Add some padding (like 10% extra)
+    ax.set_ylim(0, max_total + 1)
 
     plt.tight_layout()
     plt.savefig(filepath, dpi=150, facecolor=fig.get_facecolor())  # save with background
