@@ -244,9 +244,22 @@ class PapsConfig(SingletonModel):
         help_text="List of groups which prevent giving paps"
     )
 
+    excluded_groups_get_paps = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="if user is in a group which prevent other groups from giving paps, do they get 1x group paps modifier?"
+    )
+
     excluded_users = models.ManyToManyField(
         User,
         related_name="excluded_user",
+        blank=True,
+        help_text="List of user prevented from getting all paps"
+    )
+
+    excluded_users_paps = models.ManyToManyField(
+        User,
+        related_name="excluded_users_paps",
         blank=True,
         help_text="List of user prevented from getting paps from groups"
     )

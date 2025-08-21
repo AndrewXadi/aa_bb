@@ -38,6 +38,7 @@ class PapsConfigAdmin(SingletonModelAdmin):
         "group_paps",
         "excluded_groups",
         "excluded_users",
+        "excluded_users_paps",
     )
     def has_add_permission(self, request):
         # Prevent adding new config if one already exists

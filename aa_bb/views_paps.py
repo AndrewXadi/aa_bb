@@ -83,8 +83,13 @@ def index(request):
         # Count how many overlap
         matching_count = len(user_groups_set & auth_groups_set)
         excluded = bool(user_groups_set & excluded_groups_set)
-        if not excluded:
-            corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
+        excluded_users_paps = PapsConfig.get_solo().excluded_users_paps.all()
+        if profile.user not in excluded_users_paps:
+            if not excluded:
+                corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
+            else:
+                if PapsConfig.get_solo().excluded_groups_get_paps:
+                    corp_paps = corp_paps + PapsConfig.get_solo().group_paps_modifier
 
         if afat_active():
             for char in characters:
