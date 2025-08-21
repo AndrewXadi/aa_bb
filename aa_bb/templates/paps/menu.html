@@ -2,7 +2,7 @@
 {% if perms.aa_bb.can_access_paps %}
     <li class="nav-item">
         <a class="nav-link" href="{% url 'paps:history' %}">
-            <i class="fas fa-cog"></i>
+            <i class="fas fa-chart-bar"></i>
             <span class="d-md-inline m-2">{% translate "PAP Stats" %}</span>
         </a>
     </li>
@@ -10,7 +10,7 @@
 {% if perms.aa_bb.can_generate_paps %}
     <li class="nav-item">
         <a class="nav-link" href="{% url 'paps:index' %}">
-            <i class="fas fa-plane"></i>
+            <i class="fas fa-cogs"></i>
             <span class="d-md-inline m-2">{% translate "Generate Chart" %}</span>
         </a>
     </li>
