@@ -164,6 +164,9 @@ def generate_pap_chart(request):
     # Gather submitted PAP values
     users_data = []
     for profile in get_user_profiles():
+        excluded_users = PapsConfig.get_solo().excluded_users.all()
+        if profile.user in excluded_users:
+            continue
         user_id = profile.user.id
         conf = PapsConfig.get_solo()
         corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 
