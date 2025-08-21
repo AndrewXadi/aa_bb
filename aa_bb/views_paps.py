@@ -243,7 +243,6 @@ def generate_pap_chart(request):
     # Legend in top-right
     ax.legend(loc='upper right', facecolor='#4B4B4B', edgecolor='white', labelcolor='white')
 
-    total = 0
     # Add labels above the stacked bars
     for i, (l, im, c) in enumerate(zip(lawn, imp, corp)):
         total = l + im + c
@@ -253,7 +252,8 @@ def generate_pap_chart(request):
         ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
 
     for i, (l, im, c, ca) in enumerate(zip(lawn, imp, corp, corp_abo)):
-        total_c = l + im + c + ca
+        total = l + im + c
+        total_c = total + ca
         coll = 'white'
         if total != total_c:
             ax.text(i, total_c, str(total), ha='center', va='bottom', color=coll, fontsize=10)
