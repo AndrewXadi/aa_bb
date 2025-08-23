@@ -8,7 +8,7 @@ from allianceauth import hooks
 from allianceauth.services.hooks import MenuItemHook, UrlHook
 
 # AA Example App
-from aa_bb import urls, urls_loa, urls_cb, urls_paps
+from aa_bb import urls, urls_loa, urls_cb, urls_paps, models
 
 
 class CorpBrotherMenuItem(MenuItemHook):
@@ -92,7 +92,12 @@ class LoAMenuItem(MenuItemHook):
         # if not request.user.has_perm("aa_bb.can_access_loa"):
         #     return ""
         if request.user.has_perm("aa_bb.can_access_loa"):
-            return super().render(request)
+            if request.user.has_perm("aa_bb.can_view_all_loa"):
+                pending_count = models.LeaveRequest.objects.filter(status="pending").count()
+                if pending_count:
+                    self.count = pending_count
+                return MenuItemHook.render(self, request)
+            return MenuItemHook.render(self, request)
         return ""
 
 @hooks.register("menu_item_hook")

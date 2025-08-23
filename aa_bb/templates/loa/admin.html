@@ -47,7 +47,17 @@
       </thead>
       <tbody>
         {% for req in loa_requests %}
-          <tr>
+          <tr
+            {% if req.status == 'approved' %}
+              class="table-success"
+            {% elif req.status == 'in_progress' %}
+              class="table-info"
+            {% elif req.status == 'denied' %}
+              class="table-danger"
+            {% elif req.status == 'pending' %}
+              class="table-warning"
+            {% endif %}
+          >
             <td>{{ req.main_character }}</td>
             <td>{{ req.start_date }}</td>
             <td>{{ req.end_date }}</td>
@@ -61,7 +71,9 @@
                 <button
                   type="submit"
                   class="btn btn-sm btn-success"
-                  {% if req.status != 'pending' %}disabled{% endif %}
+                  {% if req.status == 'approved' %}disabled{% endif %}
+                  {% if req.status == 'in_progress' %}disabled{% endif %}
+                  {% if req.status == 'finished' %}disabled{% endif %}
                 >Approve</button>
               </form>
 
@@ -71,7 +83,9 @@
                 <button
                   type="submit"
                   class="btn btn-sm btn-warning"
-                  {% if req.status != 'pending' %}disabled{% endif %}
+                  {% if req.status == 'denied' %}disabled{% endif %}
+                  {% if req.status == 'in_progress' %}disabled{% endif %}
+                  {% if req.status == 'finished' %}disabled{% endif %}
                 >Deny</button>
               </form>
 

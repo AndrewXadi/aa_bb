@@ -643,19 +643,12 @@ def BB_run_regular_loa_updates():
                 if lr.status != "in_progress":
                     lr.status = "in_progress"
                     lr.save(update_fields=["status"])
-                    logger.info(
-                        "   → Marked LOA %s as in_progress for %s",
-                        lr, user.username,
-                    )
+                    send_message(f"{user.username}'s LoA Request status changed to in progress")
             elif today > lr.end_date:
                 # the approved window has passed
                 if lr.status != "finished":
                     lr.status = "finished"
                     lr.save(update_fields=["status"])
-                    logger.info(
-                        "   → Marked LOA %s as finished for %s",
-                        lr, user.username,
-                    )
                     send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
             if lr.status == "in_progress":
                 in_progress = True

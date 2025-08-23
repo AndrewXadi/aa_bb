@@ -433,11 +433,6 @@ def stream_contracts_sse(request: WSGIRequest):
     qs    = gather_user_contracts(user_id)
     total = qs.count()
     connection.close()
-    if total == 0:
-        return StreamingHttpResponse(
-            "<p>No contracts found.</p>",
-            content_type="text/html"
-        )
 
     def generator():
         # Initial SSE heartbeat
@@ -632,14 +627,16 @@ def stream_mails_sse(request):
     qs    = gather_user_mails(user_id)
     total = qs.count()
     connection.close()
-    if total == 0:
-        return StreamingHttpResponse("<p>No mails found.</p>",
-                                     content_type="text/html")
 
     def generator():
         # initial SSE heartbeat
         yield ": ok\n\n"
         processed = hostile_count = 0
+
+        if total == 0:
+            # tell client we're done with zero hostile
+            yield "event: done\ndata:0\n\n"
+            return
 
         for m in qs:
             processed += 1
@@ -732,11 +729,6 @@ def stream_transactions_sse(request):
     qs    = gather_user_transactions(user_id)
     total = qs.count()
     connection.close()
-    if total == 0:
-        return StreamingHttpResponse(
-            "<p>No transactions found.</p>",
-            content_type="text/html"
-        )
 
     # Determine headers from a single hydrated row
     sample = qs[:1]
@@ -753,6 +745,11 @@ def stream_transactions_sse(request):
     def generator():
         yield ": ok\n\n"                # initial heartbeat
         processed = hostile_count = 0
+
+        if total == 0:
+            # tell client we're done with zero hostile
+            yield "event: done\ndata:0\n\n"
+            return
 
         # Emit table header row once
         header_html = (

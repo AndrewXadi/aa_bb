@@ -18,7 +18,17 @@
       </thead>
       <tbody>
         {% for req in loa_requests %}
-          <tr>
+          <tr
+            {% if req.status == 'approved' %}
+              class="table-success"
+            {% elif req.status == 'in_progress' %}
+              class="table-info"
+            {% elif req.status == 'denied' %}
+              class="table-danger"
+            {% elif req.status == 'pending' %}
+              class="table-warning"
+            {% endif %}
+          >
             <td>{{ req.start_date }}</td>
             <td>{{ req.end_date }}</td>
             <td>{{ req.created_at|date:"Y-m-d H:i" }}</td>
