@@ -511,37 +511,37 @@ def BB_register_message_tasks():
     tasks = [
         {
             "name": "BB send daily message",
-            "task_path": "aa_bb.tasks.BB_send_daily_messages",
+            "task_path": "aa_bb.tasks_cb.BB_send_daily_messages",
             "schedule_attr": "dailyschedule",
             "active_attr": "are_daily_messages_active",
         },
         {
             "name": "BB send optional message 1",
-            "task_path": "aa_bb.tasks.BB_send_opt_message1",
+            "task_path": "aa_bb.tasks_cb.BB_send_opt_message1",
             "schedule_attr": "optschedule1",
             "active_attr": "are_opt_messages1_active",
         },
         {
             "name": "BB send optional message 2",
-            "task_path": "aa_bb.tasks.BB_send_opt_message2",
+            "task_path": "aa_bb.tasks_cb.BB_send_opt_message2",
             "schedule_attr": "optschedule2",
             "active_attr": "are_opt_messages2_active",
         },
         {
             "name": "BB send optional message 3",
-            "task_path": "aa_bb.tasks.BB_send_opt_message3",
+            "task_path": "aa_bb.tasks_cb.BB_send_opt_message3",
             "schedule_attr": "optschedule3",
             "active_attr": "are_opt_messages3_active",
         },
         {
             "name": "BB send optional message 4",
-            "task_path": "aa_bb.tasks.BB_send_opt_message4",
+            "task_path": "aa_bb.tasks_cb.BB_send_opt_message4",
             "schedule_attr": "optschedule4",
             "active_attr": "are_opt_messages4_active",
         },
         {
             "name": "BB send optional message 5",
-            "task_path": "aa_bb.tasks.BB_send_opt_message5",
+            "task_path": "aa_bb.tasks_cb.BB_send_opt_message5",
             "schedule_attr": "optschedule5",
             "active_attr": "are_opt_messages5_active",
         },
