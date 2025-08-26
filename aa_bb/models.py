@@ -269,6 +269,54 @@ class PapsConfig(SingletonModel):
         help_text="How many PAPs to add per group"
     )
 
+    capital_groups_get_paps = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Does being in corp capital groups give out paps?"
+    )
+
+    cap_group = models.ForeignKey(
+        AuthGroup,
+        related_name="cap_group",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text="Select your cap group"
+    )
+
+    cap_group_paps = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs to add for being in the cap group"
+    )
+
+    super_group = models.ForeignKey(
+        AuthGroup,
+        related_name="super_group",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text="Select your super group"
+    )
+
+    super_group_paps = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs to add for being in the super group"
+    )
+
+    titan_group = models.ForeignKey(
+        AuthGroup,
+        related_name="titan_group",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text="Select your titan group"
+    )
+
+    titan_group_paps = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many PAPs to add for being in the titan group"
+    )
+
 
 class BigBrotherConfig(SingletonModel):
     token = models.CharField(

@@ -91,6 +91,33 @@ def index(request):
                 if PapsConfig.get_solo().excluded_groups_get_paps:
                     corp_paps = corp_paps + PapsConfig.get_solo().group_paps_modifier
 
+        def _group_name(g):
+            if not g:
+                return None
+            # if the FK points to a wrapper that has `.group`, use that; else assume it's auth.Group
+            target = getattr(g, "group", g)
+            return getattr(target, "name", None)
+        
+        cfg = PapsConfig.get_solo()
+
+        if cfg.capital_groups_get_paps:
+
+            cap_name   = _group_name(cfg.cap_group)
+            super_name = _group_name(cfg.super_group)
+            titan_name = _group_name(cfg.titan_group)
+
+            paps_to_add = 0
+            if cap_name and cap_name in user_groups_set:
+                paps_to_add = cfg.cap_group_paps
+            if super_name and super_name in user_groups_set:
+                paps_to_add = cfg.super_group_paps
+            if titan_name and titan_name in user_groups_set:
+                paps_to_add = cfg.titan_group_paps
+
+            if paps_to_add:
+                corp_paps += paps_to_add
+
+
         if afat_active():
             for char in characters:
                 fats = Fat.objects.filter(
