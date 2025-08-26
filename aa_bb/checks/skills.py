@@ -174,7 +174,7 @@ def render_user_skills_html(user_id: int) -> str:
         total_sp = info.get("total_sp", 0)
         char_id = get_character_id(char_name)
         char_age = get_char_age(char_id)
-        sp_days = total_sp/64800
+        sp_days = (total_sp-384000)/64800
         sp_age_ratio = round(sp_days / char_age, 2)
         formatted = mark_safe(f'<span style="color:red;">{sp_age_ratio}</span>')
         ratio = sp_age_ratio if sp_age_ratio < 1 else formatted

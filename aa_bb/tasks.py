@@ -176,7 +176,7 @@ def BB_run_regular_updates():
                     char_id = get_character_id(char_nameeee)
                     char_age = get_char_age(char_id)
                     total_sp = data["total_sp"]
-                    sp_days = total_sp / 64800 if total_sp else 0
+                    sp_days = (total_sp-384000)/64800 if total_sp else 0
 
                     sp_age_ratio_result[char_nameeee] = {
                         **data,  # keep original skill info
