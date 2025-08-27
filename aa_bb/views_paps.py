@@ -5,7 +5,7 @@ from django.conf import settings
 from django.utils.timezone import now
 from django.db.models import Count
 from django.urls import reverse
-from .models import BigBrotherConfig, PapsConfig
+from .models import BigBrotherConfig, PapsConfig, TicketToolConfig, PapCompliance
 from .app_settings import get_user_profiles, get_user_characters, afat_active
 from afat.models import Fat
 from datetime import datetime
@@ -188,19 +188,21 @@ def generate_pap_chart(request):
     month = int(request.POST.get("month"))
     year = int(request.POST.get("year"))
 
+    max_compliance = TicketToolConfig.get_solo().max_months_without_pap_compliance or 0
+
     # Gather submitted PAP values
     users_data = []
+    excluded_users = PapsConfig.get_solo().excluded_users.all()
+    conf = PapsConfig.get_solo()
     for profile in get_user_profiles():
-        excluded_users = PapsConfig.get_solo().excluded_users.all()
         if profile.user in excluded_users:
             continue
         user_id = profile.user.id
-        conf = PapsConfig.get_solo()
         corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 
         corp_paps = min(corp_raw, conf.max_corp_paps)  # cap at 4
         lawn_paps = int(request.POST.get(f"lawn_paps_{user_id}", 0)) * conf.lawn_modifier     # double lawn
         imperium_paps = int(request.POST.get(f"imperium_paps_{user_id}", 0)) * conf.imp_modifier
-        corp_ab = corp_raw - 4
+        corp_ab = corp_raw - conf.max_corp_paps
         if corp_ab < 0:
             corp_ab = 0
         users_data.append({
@@ -210,6 +212,19 @@ def generate_pap_chart(request):
             "lawn": lawn_paps,
             "imperium": imperium_paps,
         })
+        # ✅ Update PapCompliance
+        if max_compliance != 0:
+            pc, _ = PapCompliance.objects.get_or_create(
+                user_profile=profile,
+                defaults={"pap_compliant": max_compliance},
+            )
+            total_capped = corp_paps + lawn_paps + imperium_paps
+            if total_capped >= conf.required_paps:
+                pc.pap_compliant = min(pc.pap_compliant + 1, max_compliance)
+            else:
+                pc.pap_compliant = max(pc.pap_compliant - 1, 0)  # keep it non-negative
+            pc.save(update_fields=["pap_compliant"])
+
 
     # Chart save path
     app_static_dir = os.path.join(settings.MEDIA_ROOT, "paps")

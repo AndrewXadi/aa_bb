@@ -6,7 +6,7 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,WarmProgress,PapsConfig
+    UserStatus,LeaveRequest,WarmProgress,PapsConfig,ComplianceTicket,TicketToolConfig
 )
 
 @admin.register(BigBrotherConfig)
@@ -40,6 +40,18 @@ class PapsConfigAdmin(SingletonModelAdmin):
         "excluded_users",
         "excluded_users_paps",
     )
+    def has_add_permission(self, request):
+        # Prevent adding new config if one already exists
+        if PapsConfig.objects.exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deleting the singleton instance
+        return True
+    
+@admin.register(TicketToolConfig)
+class TicketToolConfigAdmin(SingletonModelAdmin):
     def has_add_permission(self, request):
         # Prevent adding new config if one already exists
         if PapsConfig.objects.exists():
@@ -87,6 +99,10 @@ class WarmProgressConfig(admin.ModelAdmin):
 @admin.register(UserStatus)
 class UserStatusConfig(admin.ModelAdmin):
     list_display = ['user', 'updated']
+
+@admin.register(ComplianceTicket)
+class ComplianceTicketConfig(admin.ModelAdmin):
+    list_display = ['user', 'is_resolved', 'reason']
 
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(admin.ModelAdmin):

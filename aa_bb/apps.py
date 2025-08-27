@@ -101,6 +101,29 @@ class AaBbConfig(AppConfig):
             else:
                 logger.info("✅ Created ‘CB run regular updates’ periodic task with enabled=False")
 
+            task_tickets, created_tickets = PeriodicTask.objects.get_or_create(
+                name="tickets run regular updates",
+                defaults={
+                    "interval": schedule,
+                    "task": "aa_bb.tasks_cb.hourly_compliance_check",
+                    "enabled": False,  # only on creation
+                },
+            )
+
+            if not created_tickets:
+                updated_tickets = False
+                if task_tickets.interval != schedule or task_tickets.task != "aa_bb.tasks_cb.hourly_compliance_check":
+                    task_tickets.interval = schedule
+                    task_tickets.task = "aa_bb.tasks_cb.hourly_compliance_check"
+                    task_tickets.save()
+                    updated_tickets = True
+                if updated_tickets:
+                    logger.info("✅ Updated 'tickets run regular updates’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘tickets run regular updates’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘tickets run regular updates’ periodic task with enabled=False")
+
             scheduleloa, _ = CrontabSchedule.objects.get_or_create(
                 minute="0",
                 hour="12",

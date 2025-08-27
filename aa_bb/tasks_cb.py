@@ -4,7 +4,7 @@ from allianceauth.authentication.models import UserProfile
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from .models import BigBrotherConfig, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
 import logging
-from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id, get_character_id
+from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id, get_character_id, get_user_profiles
 from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
 from aa_bb.checks_cb.sus_contracts import get_corp_hostile_contracts
 from aa_bb.checks_cb.sus_trans import get_corp_hostile_transactions
@@ -630,6 +630,9 @@ def BB_run_regular_loa_updates():
         if not latest_logoff:
             continue
 
+        # Compute days since that logoff
+        days_since = (timezone.now() - latest_logoff).days
+
          # 1) Check and update any existing approved requests for this user
         lr_qs = LeaveRequest.objects.filter(
             user=user,
@@ -652,9 +655,6 @@ def BB_run_regular_loa_updates():
                     send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
             if lr.status == "in_progress":
                 in_progress = True
-
-        # Compute days since that logoff
-        days_since = (timezone.now() - latest_logoff).days
         if days_since > cfg.loa_max_logoff_days:
             if in_progress == False:
                 flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
@@ -747,3 +747,277 @@ def BB_daily_DB_cleanup():
     if flags:
         flags_text = "\n".join(flags)
         send_message(f"### DB Cleanup Complete:\n{flags_text}")
+
+from .models import ComplianceTicket, PapCompliance, TicketToolConfig
+from aadiscordbot.tasks import run_task_function
+from aadiscordbot.utils.auth import is_user_bot_admin, is_user_authenticated, get_discord_user_id, get_auth_user
+from aadiscordbot.cogs.utils.exceptions import NotAuthenticated
+from allianceauth.services.modules.discord.models import DiscordUser
+from django.contrib.auth import get_user_model
+from typing import Optional
+User = get_user_model()
+
+def corp_check(user) -> bool:
+    """
+    Return True if the given user is compliant according to the currently
+    selected ComplianceFilter in TicketToolConfig (all chars must comply).
+    If no config or no filter is set, default to True (treat as compliant).
+    """
+    try:
+        cfg: Optional[TicketToolConfig] = TicketToolConfig.get_solo()
+    except Exception:
+        # If the singleton isn't set up yet, be lenient.
+        logger.warning("TicketToolConfig.get_solo() failed; treating user as compliant.")
+        return True
+
+    if not cfg or not cfg.compliance_filter:
+        # No filter chosen -> treat everyone as compliant
+        return True
+
+    try:
+        # process_filter(user) returns the 'check' boolean for this user,
+        # where 'check' already applies the filter and the 'negate' flag.
+        return bool(cfg.compliance_filter.process_filter(user))
+    except Exception:
+        # Misconfiguration or unexpected error: log and be lenient.
+        logger.exception("Error while running compliance filter for user id=%s", user.id)
+        return True
+def lawn_check(user):
+    return True
+def paps_check(user):
+    """
+    Check PAP compliance for a given User.
+    - If no PapCompliance row exists for their profile -> treat as compliant (True).
+    - If row exists and pap_compliant > 0 -> compliant (True).
+    - If row exists and pap_compliant == 0 -> non-compliant (False).
+    """
+    try:
+        profile = user.profile  # thanks to related_name='profile'
+    except UserProfile.DoesNotExist:
+        return True  # no profile at all, treat as compliant
+
+    pc = PapCompliance.objects.filter(user_profile=profile).first()
+    if not pc:
+        return True
+
+    return pc.pap_compliant > 0
+def afk_check(user):
+    tcfg = TicketToolConfig.get_solo()
+    max_afk_days = tcfg.Max_Afk_Days
+    lr_qs = LeaveRequest.objects.filter(
+            user=user,
+            status="in_progress",
+        )
+    if lr_qs:
+        return True
+    profile = UserProfile.objects.get(user=user)
+    if not profile:
+        return False
+    try:
+        main_id = profile.main_character.character_id
+    except Exception:
+        main_id = get_character_id(profile)
+
+    # Load main character
+    ec = EveCharacter.objects.filter(character_id=main_id).first()
+    if not ec:
+        return False
+
+    # Find the most recent logoff among all alts
+    latest_logoff = None
+    for char in get_alts_queryset(ec):
+        audit = getattr(char, "characteraudit", None)
+        ts = getattr(audit, "last_known_logoff", None) if audit else None
+        if ts and (latest_logoff is None or ts > latest_logoff):
+            latest_logoff = ts
+
+    if not latest_logoff:
+        return False
+
+    # Compute days since that logoff
+    days_since = (timezone.now() - latest_logoff).days
+    if days_since >= max_afk_days:
+        return False
+    return True
+
+def discord_check(user):
+    try:
+        discord_id = get_discord_user_id(user)
+    except NotAuthenticated:
+        logger.info(f"returned true for user {user.id}")
+        return False
+    return True
+
+
+
+@shared_task
+def hourly_compliance_check():
+    tcfg = TicketToolConfig.get_solo()
+    max_days = {
+        "corp_check": tcfg.corp_check,
+        "lawn_check": tcfg.lawn_check,
+        "paps_check": tcfg.paps_check,
+        "afk_check": tcfg.afk_check,
+        "discord_check": tcfg.discord_check,
+    }
+
+    reason_checkers = {
+        "corp_check": (corp_check, tcfg.corp_check_reason),
+        "lawn_check": (lawn_check, tcfg.lawn_check_reason),
+        "paps_check": (paps_check, tcfg.paps_check_reason),
+        "afk_check": (afk_check, tcfg.afk_check_reason),
+        "discord_check": (discord_check, tcfg.discord_check_reason),
+    }
+
+    reminder_messages = {
+        "corp_check": tcfg.corp_check_reminder,
+        "lawn_check": tcfg.lawn_check_reminder,
+        "paps_check": tcfg.paps_check_reminder,
+        "afk_check": tcfg.afk_check_reminder,
+        "discord_check": tcfg.discord_check_reminder,
+    }
+
+    now = timezone.now()
+
+    # 1. Check compliance reasons
+    for UserProfil in get_user_profiles():
+        user = UserProfil.user
+        for reason, (checker, msg_template) in reason_checkers.items():
+            checked = checker(user)
+            if not checked:
+                logger.info(f"user{user},reason{reason},checked{checked}")
+                ensure_ticket(user, reason)
+
+    # 2. Process existing tickets
+    for ticket in ComplianceTicket.objects.filter(is_resolved=False):
+        reason = ticket.reason
+        checker, _ = reason_checkers[reason]
+
+        # resolved?
+        if ticket.user and checker(ticket.user):
+            close_ticket(ticket)
+            send_message(f"ticket for {user.username} resolved")
+            continue
+
+        if not ticket.user:
+            close_ticket(ticket)
+            send_message(f"ticket for {user.username} closed due to missing auth user")
+            continue
+
+        # DAILY reminder logic with max-days cap + countdown
+        days_elapsed = (now - ticket.created_at).days
+        if days_elapsed <= 0:
+            continue  # don't ping on creation day
+
+        max_dayss = max_days.get(reason, 30)
+        if days_elapsed > max_dayss:
+            # escalation: ping staff role to kick the user
+            mention = f"<@&{tcfg.Role_ID}>"           # role mention
+            user_mention = f"<@{ticket.discord_user_id}>"
+            msg = (f"⚠️ {mention} please review compliance ticket for {user_mention}. "
+                   f"Issue **{reason}** has exceeded {max_dayss} days without resolution. "
+                   f"Consider kicking this user.")
+
+            run_task_function.apply_async(
+                args=["aa_bb.tasks_bot.send_ticket_reminder"],
+                kwargs={
+                    "task_args": [ticket.discord_channel_id, ticket.discord_user_id, msg],
+                    "task_kwargs": {}
+                }
+            )
+            continue
+
+        # last_reminder_sent acts as "last day number we pinged"
+        if ticket.last_reminder_sent == days_elapsed:
+            continue  # already pinged today
+
+        # Build the message: mention the user + role + days left
+        days_left = max_dayss - days_elapsed
+        mention = f"<@{ticket.discord_user_id}>"
+        template = reminder_messages[reason]  # must support {namee}, {role}, {days}
+        if reason == "paps_check":
+            msg = template.format(days=days_left)
+        else:
+            msg = template.format(namee=mention, role=tcfg.Role_ID, days=days_left)
+
+        # Queue the bot-side reminder (ensure task_kwargs is present)
+        run_task_function.apply_async(
+            args=["aa_bb.tasks_bot.send_ticket_reminder"],
+            kwargs={
+                "task_args": [ticket.discord_channel_id, ticket.discord_user_id, msg],
+                "task_kwargs": {}
+            }
+        )
+
+        # Mark today as reminded so we don't ping again today
+        ticket.last_reminder_sent = days_elapsed
+        ticket.save(update_fields=["last_reminder_sent"])
+
+
+def ensure_ticket(user, reason):
+    tcfg = TicketToolConfig.get_solo()
+    max_afk_days = tcfg.Max_Afk_Days
+    reason_checkers = {
+        "corp_check": (corp_check, tcfg.corp_check_reason),
+        "lawn_check": (lawn_check, tcfg.lawn_check_reason),
+        "paps_check": (paps_check, tcfg.paps_check_reason),
+        "afk_check": (afk_check, tcfg.afk_check_reason),
+        "discord_check": (discord_check, tcfg.discord_check_reason),
+    }
+    try:
+        discord_id = get_discord_user_id(user)
+        username = ""
+        _, msg_template = reason_checkers[reason]
+        if reason == "afk_check":
+            ticket_message = msg_template.format(namee=discord_id, role=tcfg.Role_ID, days=max_afk_days)
+        elif reason == "discord_check":
+            username = user.username
+            ticket_message = msg_template.format(namee=username, role=tcfg.Role_ID, days=max_afk_days)
+        else:
+            ticket_message = msg_template.format(namee=discord_id, role=tcfg.Role_ID)
+    except NotAuthenticated:
+        # User has no Discord → fall back to first superuser with Discord linked
+        superusers = User.objects.filter(is_superuser=True)
+        username = user.username
+        discord_user = DiscordUser.objects.filter(user__in=superusers).first()
+        if not discord_user:
+            logger.error("No superuser with Discord linked found. Cannot create fallback ticket.")
+            return
+
+        discord_id = discord_user.uid
+        _, msg_template = reason_checkers[reason]
+        if reason == "afk_check":
+            ticket_message = (
+                f"⚠️ Compliance issue for **{user.username}** "
+                f"(no Discord linked!)\n\n"
+                f"{msg_template.format(namee=user.username, role=tcfg.Role_ID, days=max_afk_days)}"
+            )
+        else:
+            ticket_message = (
+                f"⚠️ Compliance issue for **{user.username}** "
+                f"(no Discord linked!)\n\n"
+                f"{msg_template.format(namee=user.username, role=tcfg.Role_ID)}"
+            )
+
+    # prevent duplicates
+    exists = ComplianceTicket.objects.filter(
+        user=user, reason=reason, is_resolved=False
+    ).exists()
+    if not exists:
+        send_message(f"ticket for {user.username} created, reason - {reason}")
+        run_task_function.apply_async(
+            args=["aa_bb.tasks_bot.create_compliance_ticket"],
+            kwargs={
+                "task_args": [user.id, discord_id, username, reason, ticket_message],
+                "task_kwargs": {}
+            }
+        )
+
+
+def close_ticket(ticket):
+    run_task_function.delay(
+        "aa_bb.tasks_bot.close_ticket_channel",
+        task_args=[ticket.discord_channel_id],
+        task_kwargs={}
+    )
+    ticket.delete()
