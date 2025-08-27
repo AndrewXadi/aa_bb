@@ -6,8 +6,9 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,WarmProgress,PapsConfig,ComplianceTicket,TicketToolConfig
+    UserStatus,LeaveRequest,WarmProgress,PapsConfig,ComplianceTicket
 )
+from .modelss import TicketToolConfig
 
 @admin.register(BigBrotherConfig)
 #class BB_ConfigAdmin(SingletonModelAdmin):

@@ -2,7 +2,7 @@ from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 from allianceauth.authentication.models import UserProfile
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
-from .models import BigBrotherConfig, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest
+from .models import BigBrotherConfig, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest,ComplianceTicket
 import logging
 from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id, get_character_id, get_user_profiles
 from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
@@ -16,6 +16,14 @@ import time
 import traceback
 import random
 from . import __version__
+from .modelss import PapCompliance, TicketToolConfig
+from aadiscordbot.tasks import run_task_function
+from aadiscordbot.utils.auth import get_discord_user_id
+from aadiscordbot.cogs.utils.exceptions import NotAuthenticated
+from allianceauth.services.modules.discord.models import DiscordUser
+from django.contrib.auth import get_user_model
+from typing import Optional
+User = get_user_model()
 
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
@@ -748,14 +756,7 @@ def BB_daily_DB_cleanup():
         flags_text = "\n".join(flags)
         send_message(f"### DB Cleanup Complete:\n{flags_text}")
 
-from .models import ComplianceTicket, PapCompliance, TicketToolConfig
-from aadiscordbot.tasks import run_task_function
-from aadiscordbot.utils.auth import is_user_bot_admin, is_user_authenticated, get_discord_user_id, get_auth_user
-from aadiscordbot.cogs.utils.exceptions import NotAuthenticated
-from allianceauth.services.modules.discord.models import DiscordUser
-from django.contrib.auth import get_user_model
-from typing import Optional
-User = get_user_model()
+
 
 def corp_check(user) -> bool:
     """
