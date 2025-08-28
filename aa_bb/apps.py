@@ -101,6 +101,33 @@ class AaBbConfig(AppConfig):
             else:
                 logger.info("✅ Created ‘CB run regular updates’ periodic task with enabled=False")
 
+            task_ct, created_ct = PeriodicTask.objects.get_or_create(
+                name="BB kickstart stale CT modules",
+                defaults={
+                    "interval": schedule,
+                    "task": "aa_bb.tasks_ct.kickstart_stale_ct_modules",
+                    "enabled": False,  # only on creation
+                },
+            )
+
+            if not created_ct:
+                updated_ct = False
+                # Clear interval if set
+                if task_ct.crontab is not None:
+                    task_ct.crontab = None
+                    updated_ct = True
+                if task_ct.interval != schedule or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
+                    task_ct.interval = schedule
+                    task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
+                    task_ct.save()
+                    updated_ct = True
+                if updated_ct:
+                    logger.info("✅ Updated ‘BB kickstart stale CT modules’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB kickstart stale CT modules’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB kickstart stale CT modules’ periodic task with enabled=False")
+
             task_tickets, created_tickets = PeriodicTask.objects.get_or_create(
                 name="tickets run regular updates",
                 defaults={
@@ -225,33 +252,6 @@ class AaBbConfig(AppConfig):
                     logger.info("ℹ️ ‘BB run regular DB cleanup’ periodic task already exists and is up to date")
             else:
                 logger.info("✅ Created ‘BB run regular DB cleanup’ periodic task with enabled=False")
-
-            task_ct, created_ct = PeriodicTask.objects.get_or_create(
-                name="BB kickstart stale CT modules",
-                defaults={
-                    "crontab": schedule,
-                    "task": "aa_bb.tasks_ct.kickstart_stale_ct_modules",
-                    "enabled": True,  # only on creation
-                },
-            )
-
-            if not created_ct:
-                updated_ct = False
-                # Clear interval if set
-                if task_ct.interval is not None:
-                    task_ct.interval = None
-                    updated_ct = True
-                if task_ct.crontab != schedule or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
-                    task_ct.crontab = schedule
-                    task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
-                    task_ct.save()
-                    updated_ct = True
-                if updated_ct:
-                    logger.info("✅ Updated ‘BB kickstart stale CT modules’ periodic task")
-                else:
-                    logger.info("ℹ️ ‘BB kickstart stale CT modules’ periodic task already exists and is up to date")
-            else:
-                logger.info("✅ Created ‘BB kickstart stale CT modules’ periodic task with enabled=False")
 
 
             # Daily messages

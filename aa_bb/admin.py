@@ -53,6 +53,9 @@ class PapsConfigAdmin(SingletonModelAdmin):
     
 @admin.register(TicketToolConfig)
 class TicketToolConfigAdmin(SingletonModelAdmin):
+    filter_horizontal = (
+        "excluded_users",
+    )
     def has_add_permission(self, request):
         # Prevent adding new config if one already exists
         if PapsConfig.objects.exists():
