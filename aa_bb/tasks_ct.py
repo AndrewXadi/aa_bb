@@ -11,6 +11,7 @@ from allianceauth.services.hooks import get_extension_logger
 from esi.errors import TokenExpiredError
 from esi.models import Token
 from .app_settings import send_message
+from corptools.models import EveCharacter
 
 # Corptools imports (read-only usage)
 from corptools import app_settings
@@ -52,6 +53,13 @@ class ModuleRule:
     tasks: Sequence[Callable]
     extra_predicate: Optional[Callable[[], bool]] = None
 
+def _safe_identity_refresh(char_id: int):
+    try:
+        # This mirrors the button: ensure the EveCharacter row is up to date
+        EveCharacter.objects.update_character(char_id)
+    except Exception as e:
+        # Don’t fail the whole sweep; just log and continue.
+        logger.warning(f"Identity refresh failed for {char_id}: {e}", exc_info=True)
 
 def _is_enabled(flag_name: Optional[str]) -> bool:
     if not flag_name:
@@ -250,6 +258,7 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
     """
     conf = CorptoolsConfiguration.get_solo()
     cutoff = timezone.now() - datetime.timedelta(days=days_stale)
+    cutoff_really_stale = timezone.now() - datetime.timedelta(days=days_stale,hours=6)
 
     qs = CharacterAudit.objects.filter(
         character__character_ownership__isnull=False
@@ -266,8 +275,10 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
         total_chars += 1
         char_id = audit.character.character_id
         per_char_enqueues = 0
+        kickedcharactermodel = False
 
         for rule in RULES:
+            really_stale = _any_available_field_stale(audit, rule.last_update_fields, cutoff_really_stale)
             if not _is_enabled(rule.enabled_flag):
                 continue
             if not _not_temp_disabled(conf, rule.runtime_disable_attr):
@@ -283,6 +294,9 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                 if dry_run:
                     logger.info(f"[DRY-RUN] Would queue {task.name} for char {char_id} (module={rule.name})")
                 else:
+                    if not kickedcharactermodel and really_stale:
+                        _safe_identity_refresh(char_id)
+                        kickedcharactermodel = True
                     task.apply_async(
                         args=[char_id],
                         kwargs={"force_refresh": True},
@@ -295,13 +309,13 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
         if per_char_enqueues:
             updated_names.append(audit.character.character_name)   # <-- store name
             logger.info(f"Queued {per_char_enqueues} module task(s) for char {audit.character.character_name} ({char_id})")
-
-    names_str = ", ".join(updated_names)
-    summary = (
-        f"## CT audit complete:\n"
-        f"- Processed {total_chars} characters\n"
-        f"- Found and queued for update {total_tasks} module task(s) (stale > {days_stale}d).\n"
-        f"- Updated characters:\n{names_str}"
-    )
-    send_message(summary)
+    if updated_names:
+        names_str = ", ".join(updated_names)
+        summary = (
+            f"## CT audit complete:\n"
+            f"- Processed {total_chars} characters\n"
+            f"- Found and queued for update {total_tasks} module task(s) (stale > {days_stale}d).\n"
+            f"- Updated characters:\n{names_str}"
+        )
+        send_message(summary)
     return summary

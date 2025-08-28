@@ -229,7 +229,7 @@ class AaBbConfig(AppConfig):
             task_ct, created_ct = PeriodicTask.objects.get_or_create(
                 name="BB kickstart stale CT modules",
                 defaults={
-                    "crontab": scheduleDB,
+                    "crontab": schedule,
                     "task": "aa_bb.tasks_ct.kickstart_stale_ct_modules",
                     "enabled": True,  # only on creation
                 },
@@ -241,8 +241,8 @@ class AaBbConfig(AppConfig):
                 if task_ct.interval is not None:
                     task_ct.interval = None
                     updated_ct = True
-                if task_ct.crontab != scheduleDB or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
-                    task_ct.crontab = scheduleDB
+                if task_ct.crontab != schedule or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
+                    task_ct.crontab = schedule
                     task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
                     task_ct.save()
                     updated_ct = True
