@@ -7,27 +7,33 @@ from .app_settings import get_user_model
 from allianceauth.authentication.models import UserProfile
 from django.db import transaction
 
-async def create_compliance_ticket(bot, user_id, discord_user_id: int, username: str, reason: str, message: str):
+def get_staff_roles():
+    cfg = TicketToolConfig.get_solo()
+    if not cfg.staff_roles:
+        return []
+    return [int(r.strip()) for r in cfg.staff_roles.split(",") if r.strip().isdigit()]
+
+async def create_compliance_ticket(bot, user_id, discord_user_id: int, reason: str, message: str):
     category_id = TicketToolConfig.get_solo().Category_ID
-    role_id = TicketToolConfig.get_solo().Role_ID
     guild = bot.guilds[0]  # or use a known guild_id if multi-guild
     category = guild.get_channel(category_id)
     member = guild.get_member(discord_user_id) or await guild.fetch_member(discord_user_id)
-    staff_role = guild.get_role(role_id)
     User = get_user_model()
     user = User.objects.get(id=user_id)
     profile = UserProfile.objects.get(user=user)
-    if username != "":
-        display_name = username
-    else:
-        display_name = member.display_name
+
+    staff_roles = get_staff_roles()
 
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         member: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
     }
+
+    for rid in staff_roles:
+        role = guild.get_role(rid)
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
     ticket_number = get_next_ticket_number()
 

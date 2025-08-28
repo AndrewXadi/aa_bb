@@ -2,6 +2,7 @@ from django.db import models
 from allianceauth.authentication.models import UserProfile
 from charlink.models import ComplianceFilter
 from solo.models import SingletonModel
+from django.contrib.auth.models import User
 
 
 class PapCompliance(models.Model):
@@ -34,6 +35,12 @@ class TicketToolConfig(SingletonModel):
         help_text="How many months can a person be in corp w/o meeting the pap requirements? (this is a maximum points a user can get, 1 compliant month = plus 1 point, 1 non compliant = minus 1 point. If user has 0 points they get a ticket)"
     )
 
+    corp_check_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for corp auth compliance?"
+    )
+
     corp_check = models.PositiveIntegerField(
         default=30, 
         help_text="How many days can a user be non compliant on Corp Auth before he should get kicked?"
@@ -51,6 +58,12 @@ class TicketToolConfig(SingletonModel):
         blank=True,
         null=True,
         help_text="Message to send with {role}, {namee} and {days} variables"
+    )
+
+    lawn_check_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for lawn auth compliance?"
     )
 
     lawn_check = models.PositiveIntegerField(
@@ -72,6 +85,12 @@ class TicketToolConfig(SingletonModel):
         help_text="Message to send with {role}, {namee} and {days} variables"
     )
 
+    paps_check_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for pap requirement compliance?"
+    )
+
     paps_check = models.PositiveIntegerField(
         default=45, 
         help_text="How many days can a user not meet the PAP requirements before he should get kicked?"
@@ -89,6 +108,12 @@ class TicketToolConfig(SingletonModel):
         blank=True,
         null=True,
         help_text="Message to send with {days} variable"
+    )
+
+    afk_check_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check if the user logs into the game??"
     )
 
     Max_Afk_Days = models.PositiveIntegerField(
@@ -113,6 +138,12 @@ class TicketToolConfig(SingletonModel):
         blank=True,
         null=True,
         help_text="Message to send with {role}, {namee} and {days} variables"
+    )
+
+    discord_check_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for discord activity?"
     )
 
     discord_check = models.PositiveIntegerField(
@@ -141,9 +172,14 @@ class TicketToolConfig(SingletonModel):
         help_text="Category ID to create the tickets in"
     )
 
-    Role_ID = models.PositiveBigIntegerField(
-        default=0, 
-        null=True,
+    staff_roles = models.TextField(
         blank=True,
-        help_text="Role ID to get pinged alongside the non compliant user"
+        help_text="Comma-separated list of staff role IDs allowed on tickets"
+    )
+
+    excluded_users = models.ManyToManyField(
+        User,
+        related_name="excluded_users",
+        blank=True,
+        help_text="List of users to ignore when checking for compliance"
     )

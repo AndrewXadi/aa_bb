@@ -759,6 +759,8 @@ def BB_daily_DB_cleanup():
 
 
 def corp_check(user) -> bool:
+    if not TicketToolConfig.get_solo().corp_check_enabled:
+        return True
     """
     Return True if the given user is compliant according to the currently
     selected ComplianceFilter in TicketToolConfig (all chars must comply).
@@ -784,8 +786,12 @@ def corp_check(user) -> bool:
         logger.exception("Error while running compliance filter for user id=%s", user.id)
         return True
 def lawn_check(user):
+    if not TicketToolConfig.get_solo().lawn_check_enabled:
+        return True
     return True
 def paps_check(user):
+    if not TicketToolConfig.get_solo().paps_check_enabled:
+        return True
     """
     Check PAP compliance for a given User.
     - If no PapCompliance row exists for their profile -> treat as compliant (True).
@@ -803,6 +809,8 @@ def paps_check(user):
 
     return pc.pap_compliant > 0
 def afk_check(user):
+    if not TicketToolConfig.get_solo().afk_check_enabled:
+        return True
     tcfg = TicketToolConfig.get_solo()
     max_afk_days = tcfg.Max_Afk_Days
     lr_qs = LeaveRequest.objects.filter(
@@ -842,10 +850,11 @@ def afk_check(user):
     return True
 
 def discord_check(user):
+    if not TicketToolConfig.get_solo().discord_check_enabled:
+        return True
     try:
         discord_id = get_discord_user_id(user)
     except NotAuthenticated:
-        logger.info(f"returned true for user {user.id}")
         return False
     return True
 
@@ -880,9 +889,14 @@ def hourly_compliance_check():
 
     now = timezone.now()
 
+    profiles = list(get_user_profiles())
+    allowed_users = {p.user for p in profiles}
+
     # 1. Check compliance reasons
     for UserProfil in get_user_profiles():
         user = UserProfil.user
+        if user in tcfg.excluded_users.all():
+            continue
         for reason, (checker, msg_template) in reason_checkers.items():
             checked = checker(user)
             if not checked:
@@ -897,12 +911,17 @@ def hourly_compliance_check():
         # resolved?
         if ticket.user and checker(ticket.user):
             close_ticket(ticket)
-            send_message(f"ticket for {user.username} resolved")
+            send_message(f"ticket for <@{ticket.discord_user_id}> resolved")
+            continue
+
+        if ticket.user not in allowed_users:
+            close_ticket(ticket)
+            send_message(f"User <@{ticket.discord_user_id}> is no longer a member, closing ticket")
             continue
 
         if not ticket.user:
             close_ticket(ticket)
-            send_message(f"ticket for {user.username} closed due to missing auth user")
+            send_message(f"ticket for <@{ticket.discord_user_id}> closed due to missing auth user")
             continue
 
         # DAILY reminder logic with max-days cap + countdown
@@ -1009,7 +1028,7 @@ def ensure_ticket(user, reason):
         run_task_function.apply_async(
             args=["aa_bb.tasks_bot.create_compliance_ticket"],
             kwargs={
-                "task_args": [user.id, discord_id, username, reason, ticket_message],
+                "task_args": [user.id, discord_id, reason, ticket_message],
                 "task_kwargs": {}
             }
         )
