@@ -226,7 +226,32 @@ class AaBbConfig(AppConfig):
             else:
                 logger.info("✅ Created ‘BB run regular DB cleanup’ periodic task with enabled=False")
 
+            task_ct, created_ct = PeriodicTask.objects.get_or_create(
+                name="BB kickstart stale CT modules",
+                defaults={
+                    "crontab": scheduleDB,
+                    "task": "aa_bb.tasks_ct.kickstart_stale_ct_modules",
+                    "enabled": True,  # only on creation
+                },
+            )
 
+            if not created_ct:
+                updated_ct = False
+                # Clear interval if set
+                if task_ct.interval is not None:
+                    task_ct.interval = None
+                    updated_ct = True
+                if task_ct.crontab != scheduleDB or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
+                    task_ct.crontab = scheduleDB
+                    task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
+                    task_ct.save()
+                    updated_ct = True
+                if updated_ct:
+                    logger.info("✅ Updated ‘BB kickstart stale CT modules’ periodic task")
+                else:
+                    logger.info("ℹ️ ‘BB kickstart stale CT modules’ periodic task already exists and is up to date")
+            else:
+                logger.info("✅ Created ‘BB kickstart stale CT modules’ periodic task with enabled=False")
 
 
             # Daily messages

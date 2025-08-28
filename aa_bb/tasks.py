@@ -23,6 +23,7 @@ import time
 import traceback
 from . import __version__
 from .tasks_cb import *
+from .tasks_ct import *
 # You'd typically store this in persistent storage (e.g., file, DB)
 update_check_time = None
 timer_duration = timedelta(days=7)
