@@ -177,6 +177,13 @@ class TicketToolConfig(SingletonModel):
         help_text="Comma-separated list of staff role IDs allowed on tickets"
     )
 
+    Role_ID = models.PositiveBigIntegerField(
+        default=0, 
+        null=True,
+        blank=True,
+        help_text="Role ID to get pinged alongside the non compliant user"
+    )
+
     excluded_users = models.ManyToManyField(
         User,
         related_name="excluded_users",

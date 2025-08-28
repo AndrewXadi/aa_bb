@@ -193,7 +193,7 @@ def render_transactions(user_id: int) -> str:
             val = html.escape(str(t.get(col)))
             style = ''
             # reuse contract style logic by mapping to transaction
-            if col is 'type':
+            if col == 'type':
                 for key in SUS_TYPES:
                     if key in t['type']:
                         style = 'color: red;'
