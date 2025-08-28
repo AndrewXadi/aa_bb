@@ -129,3 +129,8 @@ def register_paps_menu():
 @hooks.register("url_hook")
 def register_paps_urls():
     return UrlHook(urls_paps, "paps", r"^paps/")
+
+
+@hooks.register('discord_cogs_hook')
+def register_cogs():
+    return ["aa_bb.tasks_bot"]

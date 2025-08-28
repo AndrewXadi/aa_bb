@@ -1043,7 +1043,8 @@ class ComplianceTicket(models.Model):
         ("lawn_check", "LAWN Compliance"),
         ("paps_check", "PAP Requirements"),
         ("afk_check", "Inactivity"),
-        ("discord_check", "User is not on discord")
+        ("discord_check", "User is not on discord"),
+        {"char_removed", "Character removed"},
     ]
 
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

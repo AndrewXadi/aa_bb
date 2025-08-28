@@ -6,6 +6,10 @@ from .models import ComplianceTicket
 from .app_settings import get_user_model
 from allianceauth.authentication.models import UserProfile
 from django.db import transaction
+from discord.commands import SlashCommandGroup
+from discord.ext import commands
+from aadiscordbot.cogs.utils.decorators import sender_is_admin
+from discord.commands import slash_command
 
 def get_staff_roles():
     cfg = TicketToolConfig.get_solo()
@@ -78,3 +82,42 @@ def get_next_ticket_number():
         cfg.ticket_counter = (num + 1) % 10000
         cfg.save(update_fields=["ticket_counter"])
     return formatted
+
+class CharRemovedCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @slash_command(
+        name="resolve-char-removed",
+        description="Mark this channel's 'char_removed' ticket as resolved (no channel/DB deletion)."
+    )
+    @sender_is_admin()
+    async def resolve_char_removed(self, ctx: discord.ApplicationContext):
+        channel = ctx.channel
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            await ctx.respond("Use this in a ticket text channel.", ephemeral=True)
+            return
+
+        ticket = ComplianceTicket.objects.filter(
+            discord_channel_id=channel.id,
+            is_resolved=False,
+        ).first()
+
+        if not ticket:
+            await ctx.respond("No open ticket found for this channel.", ephemeral=True)
+            return
+
+        if ticket.reason != "char_removed":
+            await ctx.respond("This command only works for 'char_removed' tickets.", ephemeral=True)
+            return
+
+        ticket.is_resolved = True
+        ticket.save(update_fields=["is_resolved"])
+
+        await ctx.respond(
+            f"✅ Ticket for <@{ticket.discord_user_id}> marked resolved by <@{ctx.author.id}>.",
+            ephemeral=True
+        )
+
+def setup(bot):
+    bot.add_cog(CharRemovedCommands(bot))

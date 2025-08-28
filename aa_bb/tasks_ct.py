@@ -320,7 +320,7 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
         summary = (
             f"## CT audit complete:\n"
             f"- Processed {total_chars} characters\n"
-            f"- Found and queued for update {total_tasks} module task(s) (stale > {days_stale}d).\n"
+            f"- Found and queued for update {total_tasks} modules (stale > {days_stale}d).\n"
             f"- Updated characters:\n{names_str}"
         )
         send_message(summary)

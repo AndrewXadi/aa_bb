@@ -904,8 +904,17 @@ def hourly_compliance_check():
                 ensure_ticket(user, reason)
 
     # 2. Process existing tickets
-    for ticket in ComplianceTicket.objects.filter(is_resolved=False):
+    for ticket in ComplianceTicket.objects.all():
         reason = ticket.reason
+
+        if reason == "char_removed":
+            logger.info(f"reason:{reason}, resolved:{ticket.is_resolved}")
+            if ticket.is_resolved:
+                logger.info(f"reason:{reason}")
+                close_ticket(ticket)
+                send_message(f"ticket for <@{ticket.discord_user_id}> resolved")
+            continue
+
         checker, _ = reason_checkers[reason]
 
         # resolved?
@@ -1041,3 +1050,7 @@ def close_ticket(ticket):
         task_kwargs={}
     )
     ticket.delete()
+
+def close_char_removed_ticket(ticket):
+    ticket.is_resolved = True
+    ticket.save()
