@@ -8,7 +8,7 @@ from typing import Callable, Iterable, List, Optional, Sequence
 from celery import shared_task
 from django.utils import timezone
 from allianceauth.services.hooks import get_extension_logger
-from esi.errors import TokenExpiredError
+from esi.errors import TokenExpiredError, TokenError, TokenInvalidError
 from esi.models import Token
 from .app_settings import send_message
 from corptools.models import EveCharacter
@@ -100,7 +100,13 @@ def _has_valid_token_with_scopes(char_id: int, scopes: Sequence[str]) -> bool:
         return False
     try:
         return bool(token.valid_access_token())
-    except TokenExpiredError:
+    except (TokenExpiredError, TokenInvalidError) as e:
+        # Expired or invalid refresh token: skip this character for this module
+        logger.info(f"Skipping char {char_id}: unusable token for scopes {scopes} ({e.__class__.__name__})")
+        return False
+    except Exception as e:
+        # Belt-and-suspenders: never let a single token error kill the whole sweep
+        logger.warning(f"Unexpected token error for char {char_id} (scopes {scopes}): {e}", exc_info=True)
         return False
 
 
