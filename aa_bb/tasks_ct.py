@@ -5,13 +5,15 @@ import datetime
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
 
-from celery import shared_task
+from celery import shared_task, chain
+from random import random
 from django.utils import timezone
 from allianceauth.services.hooks import get_extension_logger
 from esi.errors import TokenExpiredError, TokenError, TokenInvalidError
 from esi.models import Token
 from .app_settings import send_message
 from corptools.models import EveCharacter
+from celery_once.tasks import AlreadyQueued
 
 # Corptools imports (read-only usage)
 from corptools import app_settings
@@ -116,17 +118,6 @@ def _has_valid_token_with_scopes(char_id: int, scopes: Sequence[str]) -> bool:
 #   If your deployment uses different scopes, adjust here.
 
 RULES: List[ModuleRule] = [
-    # Corp History (aka "Public Data")
-    ModuleRule(
-        name="Corp History",
-        enabled_flag=None,                          # no explicit app_settings enable flag
-        runtime_disable_attr="disable_update_pub_data",
-        last_update_fields=["last_update_pub_data"],
-        required_scopes=[],                         # public endpoints; no scopes
-        tasks=[update_char_corp_history],
-        # queued with force_refresh=True below, mirroring how update_character does it
-    ),
-
     # Location (only if CharacterAudit tracks a last_update field for it)
     ModuleRule(
         name="Location",
@@ -210,17 +201,6 @@ RULES: List[ModuleRule] = [
         extra_predicate=lambda: (not getattr(app_settings, "CT_CHAR_PAUSE_CONTRACTS", False)),
     ),
     ModuleRule(
-        name="Skills",
-        enabled_flag="CT_CHAR_SKILLS_MODULE",
-        runtime_disable_attr="disable_update_skills",
-        last_update_fields=["last_update_skills", "last_update_skill_que"],
-        required_scopes=[
-            "esi-skills.read_skills.v1",
-            "esi-skills.read_skillqueue.v1",
-        ],
-        tasks=[update_char_skill_list, update_char_skill_queue],
-    ),
-    ModuleRule(
         name="Clones",
         enabled_flag="CT_CHAR_CLONES_MODULE",
         runtime_disable_attr="disable_update_clones",
@@ -247,6 +227,17 @@ RULES: List[ModuleRule] = [
         required_scopes=["esi-characters.read_loyalty.v1"],
         tasks=[update_char_loyaltypoints],
     ),
+    ModuleRule(
+        name="Skills",
+        enabled_flag="CT_CHAR_SKILLS_MODULE",
+        runtime_disable_attr="disable_update_skills",
+        last_update_fields=["last_update_skills", "last_update_skill_que"],
+        required_scopes=[
+            "esi-skills.read_skills.v1",
+            "esi-skills.read_skillqueue.v1",
+        ],
+        tasks=[update_char_skill_list, update_char_skill_queue],
+    ),
 ]
 
 
@@ -258,13 +249,13 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
           * require module enabled (if it has an enable flag),
           * require runtime NOT temp-disabled (if it has a toggle),
           * require a valid token holding that module's scopes (if any),
-          * if ANY available last_update_* is older than `days_stale`, enqueue ONLY that module's task(s)
+          * if ANY available last_update_* is older than `days_stale`, queue ONLY that module's task(s)
             with force_refresh=True.
-    No extras are queued here; corptools' orchestration can handle them elsewhere.
+    This version BUILDS a per-character Celery queue (signatures) and SUBMITS it as a chain.
     """
     conf = CorptoolsConfiguration.get_solo()
     cutoff = timezone.now() - datetime.timedelta(days=days_stale)
-    cutoff_really_stale = timezone.now() - datetime.timedelta(days=days_stale,hours=6)
+    cutoff_really_stale = timezone.now() - datetime.timedelta(days=days_stale, hours=6)
 
     qs = CharacterAudit.objects.filter(
         character__character_ownership__isnull=False
@@ -275,13 +266,17 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
 
     total_chars = 0
     total_tasks = 0
-    updated_names = []
+    submitted_chars = 0
+    updated_names: List[str] = []
+    updated_tasks: List[str] = []
 
     for audit in qs.iterator():
         total_chars += 1
         char_id = audit.character.character_id
-        per_char_enqueues = 0
         kickedcharactermodel = False
+
+        # Build per-character queue of task signatures (in order)
+        que: List = []
 
         for rule in RULES:
             really_stale = _any_available_field_stale(audit, rule.last_update_fields, cutoff_really_stale)
@@ -296,32 +291,62 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
             if not _any_available_field_stale(audit, rule.last_update_fields, cutoff):
                 continue
 
-            for task in rule.tasks:
-                if dry_run:
-                    logger.info(f"[DRY-RUN] Would queue {task.name} for char {char_id} (module={rule.name})")
-                else:
-                    if not kickedcharactermodel and really_stale:
-                        _safe_identity_refresh(char_id)
-                        kickedcharactermodel = True
-                    task.apply_async(
-                        args=[char_id],
-                        kwargs={"force_refresh": True},
-                        priority=6,
-                        countdown=1,
-                    )
-                    total_tasks += 1
-                    per_char_enqueues += 1
+            # If it's *really* stale, give the identity a nudge once
+            if not kickedcharactermodel and really_stale and not dry_run:
+                _safe_identity_refresh(char_id)
+                kickedcharactermodel = True
 
-        if per_char_enqueues:
-            updated_names.append(audit.character.character_name)   # <-- store name
-            logger.info(f"Queued {per_char_enqueues} module task(s) for char {audit.character.character_name} ({char_id})")
+            # Build signatures (like update_character does)
+            for task in rule.tasks:
+                sig = task.si(char_id, force_refresh=True).set(once={'graceful': True})
+                que.append(sig)
+                updated_tasks.append(task.name)
+                total_tasks += 1
+
+        # Submit if we have anything for this character
+        if que:
+            updated_names.append(audit.character.character_name)
+
+            if dry_run:
+                logger.info(
+                    f"[DRY-RUN] Would submit chain of {len(que)} task(s) "
+                    f"for {audit.character.character_name} ({char_id})"
+                )
+            else:
+                # Spread start over configured window; mimic update_character behavior
+                delay = 0#random() * getattr(app_settings, "CT_TASK_SPREAD_DELAY", 0)
+                try:
+                    chain(*que).apply_async(priority=6, countdown=max(0, int(delay)))
+                    submitted_chars += 1
+                    logger.info(
+                        "Queued chain of %d task(s) for %s (%s) with delay=%s",
+                        len(que),
+                        audit.character.character_name,
+                        char_id,
+                        int(delay),
+                    )
+                except AlreadyQueued as e:
+                    # Extremely rare if .set(once={'graceful': True}) wasn’t applied to the first sig,
+                    # or if the backend still raises – just log and continue.
+                    logger.info("Skipped chain for %s (%s): first task already queued (ttl≈%s)",
+                                audit.character.character_name, char_id, getattr(e, 'args', [None])[0])
+
+    # Build summary + optional message
     if updated_names:
         names_str = ", ".join(updated_names)
+        tasks_str = ", ".join(updated_tasks)
         summary = (
             f"## CT audit complete:\n"
             f"- Processed {total_chars} characters\n"
-            f"- Found and queued for update {total_tasks} modules (stale > {days_stale}d).\n"
-            f"- Updated characters:\n{names_str}"
+            f"- Queued {total_tasks} module task(s) across {submitted_chars} character(s) (stale > {days_stale}d).\n({tasks_str})\n"
+            f"- Characters queued:\n{names_str}"
         )
         send_message(summary)
+    else:
+        summary = (
+            f"## CT audit complete:\n"
+            f"- Processed {total_chars} characters\n"
+            f"- No stale modules found (threshold > {days_stale}d)."
+        )
+
     return summary
