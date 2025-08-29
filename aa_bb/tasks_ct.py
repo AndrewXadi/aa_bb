@@ -314,7 +314,7 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                 )
             else:
                 # Spread start over configured window; mimic update_character behavior
-                delay = 0#random() * getattr(app_settings, "CT_TASK_SPREAD_DELAY", 0)
+                delay = random() * getattr(app_settings, "CT_TASK_SPREAD_DELAY", 0)
                 try:
                     chain(*que).apply_async(priority=6, countdown=max(0, int(delay)))
                     submitted_chars += 1
