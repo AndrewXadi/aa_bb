@@ -962,7 +962,7 @@ def hourly_compliance_check():
 
         # Build the message: mention the user + role + days left
         days_left = max_dayss - days_elapsed
-        mention = f"<@{ticket.discord_user_id}>"
+        mention = f"{ticket.discord_user_id}"
         template = reminder_messages[reason]  # must support {namee}, {role}, {days}
         if reason == "paps_check":
             msg = template.format(days=days_left)
