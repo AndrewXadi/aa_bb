@@ -268,7 +268,6 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
     total_tasks = 0
     submitted_chars = 0
     updated_names: List[str] = []
-    updated_tasks: List[str] = []
 
     for audit in qs.iterator():
         total_chars += 1
@@ -300,7 +299,6 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
             for task in rule.tasks:
                 sig = task.si(char_id, force_refresh=True).set(once={'graceful': True})
                 que.append(sig)
-                updated_tasks.append(task.name)
                 total_tasks += 1
 
         # Submit if we have anything for this character
@@ -334,11 +332,10 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
     # Build summary + optional message
     if updated_names:
         names_str = ", ".join(updated_names)
-        tasks_str = ", ".join(updated_tasks)
         summary = (
             f"## CT audit complete:\n"
             f"- Processed {total_chars} characters\n"
-            f"- Queued {total_tasks} module task(s) across {submitted_chars} character(s) (stale > {days_stale}d).\n({tasks_str})\n"
+            f"- Queued {total_tasks} module task(s) across {submitted_chars} character(s) (stale > {days_stale}d).\n"
             f"- Characters queued:\n{names_str}"
         )
         send_message(summary)
