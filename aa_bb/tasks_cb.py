@@ -644,28 +644,25 @@ def BB_run_regular_loa_updates():
          # 1) Check and update any existing approved requests for this user
         lr_qs = LeaveRequest.objects.filter(
             user=user,
-            status="approved",
         )
-        today = date.today()
-        in_progress = False
+        today = timezone.now()
         for lr in lr_qs:
-            if lr.start_date <= today <= lr.end_date:
-                # it’s now in progress
-                if lr.status != "in_progress":
-                    lr.status = "in_progress"
-                    lr.save(update_fields=["status"])
-                    send_message(f"{user.username}'s LoA Request status changed to in progress")
-            elif today > lr.end_date:
-                # the approved window has passed
-                if lr.status != "finished":
-                    lr.status = "finished"
-                    lr.save(update_fields=["status"])
-                    send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
-            if lr.status == "in_progress":
-                in_progress = True
-        if days_since > cfg.loa_max_logoff_days:
-            if in_progress == False:
-                flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
+            if lr.start_date <= today <= lr.end_date and lr.status == "approved":
+                lr.status = "in_progress"
+                lr.save(update_fields=["status"])
+                send_message(f"{user.username}'s LoA Request status changed to in progress")
+            elif today > lr.end_date and lr.status != "finished":
+                lr.status = "finished"
+                lr.save(update_fields=["status"])
+                send_message(f"##{get_pings('LoA Changed Status')} **{ec}**'s LoA\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- for **{lr.reason}**\n## has finished")
+        has_active_loa = LeaveRequest.objects.filter(
+            user=user,
+            status="in_progress",
+            start_date__lte=today,
+            end_date__gte=today,
+        ).exists()
+        if days_since > cfg.loa_max_logoff_days and not has_active_loa:
+            flags.append(f"- **{ec}** was last seen online on {latest_logoff} (**{days_since}** days ago where maximum w/o a LoA request is **{cfg.loa_max_logoff_days}**)")
     if flags:
         flags_text = "\n".join(flags)
         send_message(f"##{get_pings('LoA Inactivity')} Inactive Members Found:\n{flags_text}")

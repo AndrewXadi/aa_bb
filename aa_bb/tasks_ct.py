@@ -1,6 +1,3 @@
-# myapp/tasks/kickstart_selective.py
-# This file can live outside the corptools app.
-
 import datetime
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
@@ -15,11 +12,9 @@ from .app_settings import send_message
 from corptools.models import EveCharacter
 from celery_once.tasks import AlreadyQueued
 
-# Corptools imports (read-only usage)
 from corptools import app_settings
 from corptools.models import CharacterAudit, CorptoolsConfiguration
 
-# Per-module update tasks (exact names match corptools.tasks.character)
 from corptools.tasks.character import (
     update_char_assets,
     update_char_contacts,
@@ -38,7 +33,6 @@ from corptools.tasks.character import (
     update_char_mail,
     update_char_loyaltypoints,
     update_char_industry_jobs, 
-    update_char_corp_history, 
     update_char_location,
 )
 
@@ -48,31 +42,28 @@ logger = get_extension_logger(__name__)
 @dataclass(frozen=True)
 class ModuleRule:
     name: str
-    enabled_flag: Optional[str]            # app_settings enable flag; None => no flag, handle specially
-    runtime_disable_attr: Optional[str]    # CorptoolsConfiguration temp-disable attr; None => no runtime toggle
-    last_update_fields: Sequence[str]      # CharacterAudit fields; if none exist on model => skip module
-    required_scopes: Sequence[str]         # ESI scopes; empty => no scopes required
+    enabled_flag: Optional[str]            
+    runtime_disable_attr: Optional[str]    
+    last_update_fields: Sequence[str]      
+    required_scopes: Sequence[str]         
     tasks: Sequence[Callable]
     extra_predicate: Optional[Callable[[], bool]] = None
 
 def _safe_identity_refresh(char_id: int):
     try:
-        # This mirrors the button: ensure the EveCharacter row is up to date
         EveCharacter.objects.update_character(char_id)
     except Exception as e:
-        # Don’t fail the whole sweep; just log and continue.
         logger.warning(f"Identity refresh failed for {char_id}: {e}", exc_info=True)
 
 def _is_enabled(flag_name: Optional[str]) -> bool:
     if not flag_name:
-        return True  # no dedicated enable flag; treat as enabled (we'll still honor runtime disable)
+        return True
     return bool(getattr(app_settings, flag_name, False))
 
 
 def _not_temp_disabled(conf: CorptoolsConfiguration, attr: Optional[str]) -> bool:
     if not attr:
         return True
-    # If attr is missing on conf, treat as disabled (skip) to be safe
     return bool(getattr(conf, attr, False) is False)
 
 
@@ -81,21 +72,18 @@ def _available_fields(audit: CharacterAudit, fields: Iterable[str]) -> List[str]
 
 
 def _is_stale_value(dt, cutoff) -> bool:
-    # None => never updated => stale
     return (dt is None) or (dt <= cutoff)
 
 
 def _any_available_field_stale(audit: CharacterAudit, fields: Iterable[str], cutoff) -> bool:
     avail = _available_fields(audit, fields)
     if not avail:
-        # Per your rule: if a module doesn't expose a last_update field, skip it
         return False
     return any(_is_stale_value(getattr(audit, f, None), cutoff) for f in avail)
 
 
 def _has_valid_token_with_scopes(char_id: int, scopes: Sequence[str]) -> bool:
     if not scopes:
-        # No scopes needed for this module
         return True
     token = Token.get_token(char_id, scopes)
     if not token:
@@ -103,22 +91,15 @@ def _has_valid_token_with_scopes(char_id: int, scopes: Sequence[str]) -> bool:
     try:
         return bool(token.valid_access_token())
     except (TokenExpiredError, TokenInvalidError) as e:
-        # Expired or invalid refresh token: skip this character for this module
         logger.info(f"Skipping char {char_id}: unusable token for scopes {scopes} ({e.__class__.__name__})")
         return False
     except Exception as e:
-        # Belt-and-suspenders: never let a single token error kill the whole sweep
         logger.warning(f"Unexpected token error for char {char_id} (scopes {scopes}): {e}", exc_info=True)
         return False
 
 
-# NOTE on scopes:
-# - Corp History is public; we require no scopes.
-# - Location typically needs 'esi-location.read_location.v1' and 'esi-location.read_ship_type.v1'.
-#   If your deployment uses different scopes, adjust here.
 
 RULES: List[ModuleRule] = [
-    # Location (only if CharacterAudit tracks a last_update field for it)
     ModuleRule(
         name="Location",
         enabled_flag="CT_CHAR_LOCATIONS_MODULE",
@@ -127,8 +108,6 @@ RULES: List[ModuleRule] = [
         required_scopes=["esi-location.read_location.v1", "esi-location.read_ship_type.v1"],
         tasks=[update_char_location],
     ),
-
-    # Existing modules, unchanged:
     ModuleRule(
         name="Assets",
         enabled_flag="CT_CHAR_ASSETS_MODULE",
@@ -243,16 +222,6 @@ RULES: List[ModuleRule] = [
 
 @shared_task
 def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None, dry_run: bool = False) -> str:
-    """
-    For each CharacterAudit with ownership:
-      - For each module rule:
-          * require module enabled (if it has an enable flag),
-          * require runtime NOT temp-disabled (if it has a toggle),
-          * require a valid token holding that module's scopes (if any),
-          * if ANY available last_update_* is older than `days_stale`, queue ONLY that module's task(s)
-            with force_refresh=True.
-    This version BUILDS a per-character Celery queue (signatures) and SUBMITS it as a chain.
-    """
     conf = CorptoolsConfiguration.get_solo()
     cutoff = timezone.now() - datetime.timedelta(days=days_stale)
     cutoff_really_stale = timezone.now() - datetime.timedelta(days=days_stale, hours=6)
@@ -274,7 +243,6 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
         char_id = audit.character.character_id
         kickedcharactermodel = False
 
-        # Build per-character queue of task signatures (in order)
         que: List = []
 
         for rule in RULES:
@@ -290,18 +258,15 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
             if not _any_available_field_stale(audit, rule.last_update_fields, cutoff):
                 continue
 
-            # If it's *really* stale, give the identity a nudge once
             if not kickedcharactermodel and really_stale and not dry_run:
                 _safe_identity_refresh(char_id)
                 kickedcharactermodel = True
 
-            # Build signatures (like update_character does)
             for task in rule.tasks:
                 sig = task.si(char_id, force_refresh=True).set(once={'graceful': True})
                 que.append(sig)
                 total_tasks += 1
 
-        # Submit if we have anything for this character
         if que:
             updated_names.append(audit.character.character_name)
 
@@ -311,7 +276,6 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                     f"for {audit.character.character_name} ({char_id})"
                 )
             else:
-                # Spread start over configured window; mimic update_character behavior
                 delay = random() * getattr(app_settings, "CT_TASK_SPREAD_DELAY", 0)
                 try:
                     chain(*que).apply_async(priority=6, countdown=max(0, int(delay)))
@@ -324,8 +288,6 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                         int(delay),
                     )
                 except AlreadyQueued as e:
-                    # Extremely rare if .set(once={'graceful': True}) wasn’t applied to the first sig,
-                    # or if the backend still raises – just log and continue.
                     logger.info("Skipped chain for %s (%s): first task already queued (ttl≈%s)",
                                 audit.character.character_name, char_id, getattr(e, 'args', [None])[0])
 
