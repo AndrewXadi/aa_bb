@@ -302,7 +302,7 @@ def generate_pap_chart(request):
         total_c = total + ca
         coll = 'white'
         if total != total_c:
-            ax.text(i, total_c, str(total), ha='center', va='bottom', color=coll, fontsize=10)
+            ax.text(i, total_c, str(total_c), ha='center', va='bottom', color=coll, fontsize=10)
 
     # Determine the max total height of stacked bars
     max_total = max([l + im + c + ca for l, im, c, ca in zip(lawn, imp, corp, corp_abo)])
