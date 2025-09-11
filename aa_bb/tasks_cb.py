@@ -645,7 +645,7 @@ def BB_run_regular_loa_updates():
         lr_qs = LeaveRequest.objects.filter(
             user=user,
         )
-        today = timezone.now()
+        today = timezone.localdate()
         for lr in lr_qs:
             if lr.start_date <= today <= lr.end_date and lr.status == "approved":
                 lr.status = "in_progress"
