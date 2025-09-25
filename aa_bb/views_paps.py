@@ -190,6 +190,7 @@ def generate_pap_chart(request):
     year = int(request.POST.get("year"))
 
     max_compliance = TicketToolConfig.get_solo().max_months_without_pap_compliance or 0
+    starting_compliance = TicketToolConfig.get_solo().starting_pap_compliance or 1
 
     # Gather submitted PAP values
     users_data = []
@@ -217,7 +218,7 @@ def generate_pap_chart(request):
         if max_compliance != 0:
             pc, _ = PapCompliance.objects.get_or_create(
                 user_profile=profile,
-                defaults={"pap_compliant": max_compliance},
+                defaults={"pap_compliant": starting_compliance},
             )
             total_capped = corp_paps + lawn_paps + imperium_paps
             if total_capped >= conf.required_paps:

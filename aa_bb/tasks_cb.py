@@ -696,13 +696,17 @@ def BB_daily_DB_cleanup():
     ProcessedMail, SusMailNote,
     ProcessedTransaction, SusTransactionNote,
     )
-    from corptools.models import Contract, MailMessage, CharacterWalletJournalEntry as WalletJournalEntry
+    from corptools.models import Contract, MailMessage, WalletJournalEntry, CorporateContract
     from django.db import transaction
     # -- CONTRACTS --
     # Get all contract_ids that exist in Contract
-    existing_contract_ids = set(
+    existing_CorporateContract_ids = set(
+        CorporateContract.objects.values_list('contract_id', flat=True)
+    )
+    existing_playercontract_ids = set(
         Contract.objects.values_list('contract_id', flat=True)
     )
+    existing_contract_ids = existing_CorporateContract_ids | existing_playercontract_ids
     
     # Find ProcessedContract entries not in Contract
     orphaned_processed_contracts = ProcessedContract.objects.exclude(contract_id__in=existing_contract_ids)

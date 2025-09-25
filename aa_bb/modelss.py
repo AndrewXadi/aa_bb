@@ -35,6 +35,11 @@ class TicketToolConfig(SingletonModel):
         help_text="How many months can a person be in corp w/o meeting the pap requirements? (this is a maximum points a user can get, 1 compliant month = plus 1 point, 1 non compliant = minus 1 point. If user has 0 points they get a ticket)"
     )
 
+    starting_pap_compliance = models.PositiveIntegerField(
+        default=1,  
+        help_text="How many buffer months does a new user get? (starter value of the above)"
+    )
+
     corp_check_enabled = models.BooleanField(
         default=False,
         editable=True,

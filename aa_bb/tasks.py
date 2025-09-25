@@ -4,7 +4,7 @@ from .models import BigBrotherConfig, UserStatus
 import logging
 from .app_settings import resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_pings
 from aa_bb.checks.awox import  get_awox_kill_links
-from aa_bb.checks.cyno import get_user_cyno_info
+from aa_bb.checks.cyno import get_user_cyno_info, get_current_stint_days_in_corp
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
 from aa_bb.checks.hostile_assets import get_hostile_asset_locations
 from aa_bb.checks.hostile_clones import get_hostile_clone_locations
@@ -336,32 +336,48 @@ def BB_run_regular_updates():
                     if changed_chars:
                         # Mapping for display names
                         cyno_display = {
-                            "s_cyno": "Cyno Skill",
-                            "s_cov_cyno": "CovOps Cyno",
-                            "s_recon": "Recon Ships",
-                            "s_hic": "Heavy Interdiction",
-                            "s_blops": "Black Ops",
-                            "s_covops": "Covert Ops",
-                            "s_brun": "Blockade Runners",
-                            "s_sbomb": "Stealth Bombers",
-                            "s_scru": "Strat Cruisers",
+                            "s_cyno":    "Cyno Skill",
+                            "s_cov_cyno":"CovOps Cyno",
+                            "s_recon":   "Recon Ships",
+                            "s_hic":     "Heavy Interdiction",
+                            "s_blops":   "Black Ops",
+                            "s_covops":  "Covert Ops",
+                            "s_brun":    "Blockade Runners",
+                            "s_sbomb":   "Stealth Bombers",
+                            "s_scru":    "Strat Cruisers",
                             "s_expfrig": "Expedition Frigs",
-                            "i_recon":   "Has Recon",
-                            "i_hic":     "Has Hic",
-                            "i_blops":   "Has Blops",
-                            "i_covops":  "Has covops",
-                            "i_brun":    "Has blockade Runner",  
-                            "i_sbomb":   "Has bomber",
-                            "i_scru":    "Has strat crus",
-                            "i_expfrig": "Has exp frig",
+                            "s_carrier": "Carriers",
+                            "s_dread":   "Dreads",
+                            "s_fax":     "FAXes",
+                            "s_super":   "Supers",
+                            "s_titan":   "Titans",
+                            "s_jf":      "JFs",
+                            "s_rorq":    "Rorqs",
+                            "i_recon":   "Has a Recon",
+                            "i_hic":     "Has a Hic",
+                            "i_blops":   "Has a Blops",
+                            "i_covops":  "Has a covops",
+                            "i_brun":    "Has a blockade Runner",  
+                            "i_sbomb":   "Has a bomber",
+                            "i_scru":    "Has a strat crus",
+                            "i_expfrig": "Has a exp frig",
+                            "i_carrier": "Has a Carrier",
+                            "i_dread":   "Has a Dread",
+                            "i_fax":     "Has a FAX",
+                            "i_super":   "Has a Super",
+                            "i_titan":   "Has a Titan",
+                            "i_jf":      "Has a JF",
+                            "i_rorq":    "Has a Rorq",
                         }
 
                         # Column order
                         cyno_keys = [
                             "s_cyno", "s_cov_cyno", "s_recon", "s_hic", "s_blops",
                             "s_covops", "s_brun", "s_sbomb", "s_scru", "s_expfrig",
+                            "s_carrier", "s_dread", "s_fax", "s_super", "s_titan", "s_jf", "s_rorq",
                             "i_recon", "i_hic", "i_blops", "i_covops", "i_brun",  
                             "i_sbomb", "i_scru", "i_expfrig",
+                            "i_carrier", "i_dread", "i_fax", "i_super", "i_titan", "i_jf", "i_rorq",
                         ]
 
                         if changed_chars:
@@ -398,6 +414,16 @@ def BB_run_regular_updates():
                             can_light_new = new_entry.get("can_light", False)
                             table_lines.append("")
                             table_lines.append(f"{'Can Light':<22} | {'🚩' if can_light_old else '✖'} | {'🚩' if can_light_new else '✖'}")
+
+                            # 👉 Add corp time here
+                            try:
+                                cid = get_character_id(charname)
+                                corp_days = get_current_stint_days_in_corp(cid, BigBrotherConfig.get_solo().main_corporation_id)
+                                corp_label = f"Time in {BigBrotherConfig.get_solo().main_corporation}"
+                                table_lines.append(f"{corp_label:<22} | {corp_days} days")
+                            except Exception as e:
+                                logger.warning(f"Could not fetch corp time for {charname}: {e}")
+
 
                             table_block = "```\n" + "\n".join(table_lines) + "\n```"
                             changes.append(table_block)

@@ -151,3 +151,38 @@ def get_frequent_corp_changes(user_id):
         html += '</tbody></table>'
 
     return format_html(html)
+
+
+def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
+    """
+    Return the number of days the character has been in the given corporation *currently*.
+    If the character is not in that corporation right now, return 0.
+    """
+    try:
+        if is_npc_corporation(corp_id):
+            return 0
+
+        # Pull history (newest entry first from ESI)
+        history = esi.client.Character.get_characters_character_id_corporationhistory(
+            character_id=char_id
+        ).results()
+
+        if not history:
+            return 0
+
+        # Latest membership is always at index 0
+        latest = history[0]
+        if latest["corporation_id"] != corp_id:
+            return 0
+
+        start = ensure_datetime(latest["start_date"])
+        end = now()
+
+        return max(0, (end - start).days)
+
+    except Exception as e:
+        logger.exception(
+            "Failed to compute current stint days for char %s in corp %s: %s",
+            char_id, corp_id, e
+        )
+        return 0
