@@ -173,6 +173,30 @@ def BB_run_regular_updates():
                 sus_trans_result = { str(issuer_id): v for issuer_id, v in get_user_hostile_transactions(user_id).items() }
                 sp_age_ratio_result: dict[str, dict] = {}
 
+                def norm(d):
+                    d = d or {}
+                    return {
+                        n: {k: v for k, v in (entry if isinstance(entry, dict) else {}).items() if k != 'age'}
+                        for n, entry in d.items()
+                    }
+                def skills_norm(d):
+                    out = {}
+                    for name, entry in (d or {}).items():
+                        if not isinstance(entry, dict):
+                            continue
+                        filtered = {}
+                        for k, v in entry.items():
+                            k_str = str(k)
+                            if k_str == 'total_sp':
+                                continue
+                            if isinstance(v, dict):
+                                filtered[k_str] = {
+                                    'trained': v.get('trained', 0) or 0,
+                                    'active': v.get('active', 0) or 0,
+                                }
+                        out[name] = filtered
+                    return out
+
                 for char_nameeee, data in skills_result.items():
                     char_id = get_character_id(char_nameeee)
                     char_age = get_char_age(char_id)
@@ -306,7 +330,7 @@ def BB_run_regular_updates():
                         status.updated = timezone.now()
                         status.save()
 
-                if status.has_cyno != has_cyno or set(cyno_result) != set(status.cyno or []):
+                if status.has_cyno != has_cyno or norm(cyno_result) != norm(status.cyno or {}):
                     # 1) Flag change for top-level boolean
                     if status.has_cyno != has_cyno:
                         changes.append(f"Cyno: {'🚩' if has_cyno else '✖'}")
@@ -432,7 +456,7 @@ def BB_run_regular_updates():
                     status.cyno = new_cyno
 
 
-                if status.has_skills != has_skills or set(skills_result) != set(status.skills or []):
+                if status.has_skills != has_skills or skills_norm(skills_result) != skills_norm(status.skills or {}):
                     # 1) If the boolean flag flipped, append the 🚩 / ✖ as before
                     if status.has_skills != has_skills:
                         changes.append(f"## Skills: {'🚩' if has_skills else '✖'}")

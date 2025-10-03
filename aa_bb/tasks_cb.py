@@ -793,6 +793,12 @@ def lawn_check(user):
 def paps_check(user):
     if not TicketToolConfig.get_solo().paps_check_enabled:
         return True
+    lr_qs = LeaveRequest.objects.filter(
+            user=user,
+            status="in_progress",
+        ).exists()
+    if lr_qs:
+        return True
     """
     Check PAP compliance for a given User.
     - If no PapCompliance row exists for their profile -> treat as compliant (True).
@@ -817,7 +823,7 @@ def afk_check(user):
     lr_qs = LeaveRequest.objects.filter(
             user=user,
             status="in_progress",
-        )
+        ).exists()
     if lr_qs:
         return True
     profile = UserProfile.objects.get(user=user)

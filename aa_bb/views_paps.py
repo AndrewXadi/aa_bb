@@ -5,7 +5,7 @@ from django.conf import settings
 from django.utils.timezone import now
 from django.db.models import Count
 from django.urls import reverse
-from .models import BigBrotherConfig, PapsConfig
+from .models import BigBrotherConfig, PapsConfig, LeaveRequest
 from .modelss import PapCompliance, TicketToolConfig
 from .app_settings import get_user_profiles, get_user_characters, afat_active
 from afat.models import Fat
@@ -198,6 +198,12 @@ def generate_pap_chart(request):
     conf = PapsConfig.get_solo()
     for profile in get_user_profiles():
         if profile.user in excluded_users:
+            continue
+        lr_qs = LeaveRequest.objects.filter(
+                user=profile.user,
+                status="in_progress",
+            ).exists()
+        if lr_qs:
             continue
         user_id = profile.user.id
         corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 

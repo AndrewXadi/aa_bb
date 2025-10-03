@@ -12,7 +12,9 @@ from ..app_settings import (
     resolve_corporation_name,
     get_user_characters,
     is_npc_character,
+    get_entity_info,
 )
+from django.utils import timezone
 from .corp_blacklist import check_char_corp_bl
 from corptools.models import CharacterContact
 
@@ -53,40 +55,53 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
             alli_id = 0
             alli_name = "-"
             contact_name = "-"
+            character_name = "-"
 
             if ctype == 'character':
-                contact_name = cc.contact_name.name
+                # Character: populate all three columns using point-in-time info
+                character_name = cc.contact_name.name
+                info = get_entity_info(cid, timezone.now())
+                corp_id = info.get("corp_id") or 0
+                corp_name = info.get("corp_name") or ""
+                alli_id = info.get("alli_id") or 0
+                alli_name = info.get("alli_name") or ""
+                contact_name = character_name
 
             elif ctype == 'corporation':
+                # Corporation: show corp and its current alliance
                 corp_id = cid
                 if is_npc_corporation(corp_id):
                     continue
                 if corp_id:
-                    corp_name = resolve_corporation_name(corp_id)
+                    corp_name = resolve_corporation_name(corp_id) or ""
                     contact_name = corp_name
                     hist = get_alliance_history_for_corp(corp_id)
                     if hist:
-                        alli_id = hist[-1]['alliance_id']
+                        alli_id = hist[-1].get('alliance_id') or 0
                         if alli_id:
-                            alli_name = resolve_alliance_name(alli_id)
+                            alli_name = resolve_alliance_name(alli_id) or ""
 
             elif ctype == 'alliance':
+                # Alliance: only alliance column, leave character/corp empty
                 alli_id = cid
-                contact_name = resolve_alliance_name(alli_id)
-                alli_name = contact_name
+                alli_name = resolve_alliance_name(alli_id) or ""
+                contact_name = ""
 
             else:
                 contact_name = str(cid)
 
             contacts[cid] = {
-                'contact_type':    ctype,
-                'contact_name':    contact_name,
-                'characters':      set(),
-                'standing':        cc.standing,
-                'corporation_name': corp_name,
-                'coid': corp_id,
-                'alliance_name':    alli_name,
-                'aid': alli_id,
+                'contact_type':     ctype,
+                'contact_name':     contact_name,
+                'characters':       set(),
+                'standing':         cc.standing,
+                # IDs for styling / hostiles checks
+                'coid':              corp_id,
+                'aid':               alli_id,
+                # Explicit display columns
+                'character':         character_name,
+                'corporation':       corp_name,
+                'alliance':          alli_name,
             }
 
         # record which of our chars saw this contact
@@ -100,12 +115,7 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
     return contacts
 
 def get_cell_style_for_row(cid: int, column: str, row: dict) -> str:
-    if column == 'contact_name':
-        if check_char_corp_bl(cid):
-            return 'color: red;'
-        else:
-            return ''
-
+    # standing color (not shown in the 3-col table but kept for compatibility)
     if column == 'standing':
         s = row.get('standing', 0)
         if s >= 6:
@@ -119,19 +129,24 @@ def get_cell_style_for_row(cid: int, column: str, row: dict) -> str:
         else:
             return 'color: #FF0000;'
 
-    if column == 'alliance_name':
-        aid = row.get("aid")
-        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_alliances:
+    # New fixed columns
+    if column == 'character':
+        # Only mark red if the contact itself is a hostile character
+        if row.get('contact_type') == 'character' and check_char_corp_bl(cid):
             return 'color: red;'
-        else:
-            return ''
+        return ''
 
-    if column == 'corporation_name':
+    if column == 'corporation':
         coid = row.get("coid")
         if coid and str(coid) in BigBrotherConfig.get_solo().hostile_corporations:
             return 'color: red;'
-        else:
-            return ''
+        return ''
+
+    if column == 'alliance':
+        aid = row.get("aid")
+        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_alliances:
+            return 'color: red;'
+        return ''
 
     return ''
 
@@ -172,11 +187,8 @@ def render_contacts(user_id: int) -> str:
             html_parts.append('<p>No contacts in this category.</p>')
             continue
 
-        # table headers from first entry
-        first = entries[0]
-        HIDDEN_COLUMNS = {'aid', 'coid'}
-        _, first_entry = first
-        headers = [h for h in first_entry.keys() if h not in HIDDEN_COLUMNS]
+        # Fixed 3-column table per requirements
+        headers = ['character', 'corporation', 'alliance']
         html_parts.append('<table class="table table-striped">')
         html_parts.append('  <thead>')
         html_parts.append('    <tr>')
@@ -188,7 +200,7 @@ def render_contacts(user_id: int) -> str:
         for cid, entry in entries:
             html_parts.append('    <tr>')
             for h in headers:
-                val = entry.get(h)
+                val = entry.get(h, '')
                 display_val = ', '.join(map(str, val)) if isinstance(val, list) else val
                 style = get_cell_style_for_row(cid, h, entry)
                 html_parts.append(f'      <td style="{style}">{html.escape(str(display_val))}</td>')
@@ -225,12 +237,20 @@ def get_user_hostile_notifications(user_id: int) -> dict[int, str]:
 
     for cid, info in contacts.items():
         ctype     = info['contact_type']      # 'character' | 'corporation' | 'alliance'
-        cname     = info['contact_name']
+        # derive a display name based on the type
+        if ctype == 'character':
+            cname = info.get('character') or ''
+        elif ctype == 'corporation':
+            cname = info.get('corporation') or ''
+        elif ctype == 'alliance':
+            cname = info.get('alliance') or ''
+        else:
+            cname = info.get('contact_name') or ''
         chars     = info.get('characters', set())
         coid      = info.get('coid')          # corporation ID (int or None)
-        corp_name = info.get('corporation_name')
+        corp_name = info.get('corporation')
         aid       = info.get('aid')           # alliance ID (int or None)
-        alli_name = info.get('alliance_name')
+        alli_name = info.get('alliance')
         s         = info.get('standing', 0)
 
         alerts: list[str] = []

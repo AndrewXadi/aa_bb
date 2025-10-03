@@ -8,7 +8,7 @@ from .models import (
     BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
     UserStatus,LeaveRequest,WarmProgress,PapsConfig,ComplianceTicket
 )
-from .modelss import TicketToolConfig
+from .modelss import TicketToolConfig,PapCompliance
 
 @admin.register(BigBrotherConfig)
 #class BB_ConfigAdmin(SingletonModelAdmin):
@@ -111,3 +111,8 @@ class ComplianceTicketConfig(admin.ModelAdmin):
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(admin.ModelAdmin):
     list_display = ['main_character', 'start_date', 'end_date', 'reason', 'status']
+    
+@admin.register(PapCompliance)
+class PapComplianceConfig(admin.ModelAdmin):
+    search_fields = ['user_profile']
+    list_display = ['user_profile', 'pap_compliant']

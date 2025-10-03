@@ -205,9 +205,9 @@ def get_user_cyno_info(user_id: int) -> dict:
                     char_dic[f"s_jf"] = 2
             if key == "rorq":
                 if info["trained_skill_level"] >= lvl_req:
-                    char_dic[f"s_scru"] = 1
+                    char_dic[f"s_rorq"] = 1
                 if info["active_skill_level"] >= lvl_req:
-                    char_dic[f"s_scru"] = 2
+                    char_dic[f"s_rorq"] = 2
             if key == "calscru" or key == "amascru" or key == "galscru" or key == "minscru":
                 if info["trained_skill_level"] >= lvl_req:
                     char_dic[f"s_scru"] = 1
