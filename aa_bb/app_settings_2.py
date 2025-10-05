@@ -88,7 +88,7 @@ def afat_active():
 
 
 def install_package_and_migrate(link: str) -> bool:
-    from app_settings import send_message, get_pings
+    from .app_settings import send_message, get_pings
     """
     Install a package from `link` in the current environment,
     then run Django migrations. Returns True on success.
