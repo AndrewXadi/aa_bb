@@ -3,7 +3,7 @@ from django.conf import settings
 from esi.clients import EsiClientProvider
 import re
 import os
-from app_settings import send_message, get_pings
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ def afat_active():
 
 
 def install_package_and_migrate(link: str) -> bool:
+    from app_settings import send_message, get_pings
     """
     Install a package from `link` in the current environment,
     then run Django migrations. Returns True on success.

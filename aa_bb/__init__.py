@@ -1,4 +1,4 @@
 """Initialize the app"""
 
-__version__ = "2.0.19"
+__version__ = "2.0.20"
 __title__ = "BigBrother"
