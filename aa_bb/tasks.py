@@ -104,7 +104,7 @@ def BB_run_regular_updates():
 
             elif result.startswith("v="):
                 latest_version = result.split("=")[1]
-                now = datetime.now()
+                now = timezone.now()
 
                 def format_time_left(delta):
                     days = delta.days
