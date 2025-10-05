@@ -117,7 +117,7 @@ def install_package_and_migrate(link: str) -> bool:
     try:
         from django.core.management import call_command
         call_command("migrate", interactive=False, verbosity=1)
-        send_message("Migrations completed successfully.")
+        send_message("Migrations completed successfully, make sure to restart AA.")
         return True
     except Exception as e:
         logger.warning("call_command('migrate') failed; trying manage.py fallback: %s", e)

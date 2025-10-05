@@ -128,7 +128,7 @@ def BB_run_regular_updates():
                         time_left = timer_duration - elapsed
                         send_message(
                             f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
-                            f"\nYou have {format_time_left(time_left)} remaining to update."
+                            f"\nYou have {format_time_left(time_left)} remaining to update (or restart AA if BB successfully updated itself)."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
                         )
                     else:
