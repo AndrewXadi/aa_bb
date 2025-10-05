@@ -2,7 +2,7 @@ from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter
 from .models import BigBrotherConfig, UserStatus
 import logging
-from .app_settings import resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_pings
+from .app_settings import resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_pings, install_package_and_migrate
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info, get_current_stint_days_in_corp
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
@@ -119,7 +119,9 @@ def BB_run_regular_updates():
                         f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
                         f"\nYou have {format_time_left(time_left)} remaining to update."
                         f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                        f'\nAttempting automatic update'
                     )
+                    install_package_and_migrate(f"http://bb.trpr.space/?token={token}")
                 else:
                     elapsed = now - update_check_time
                     if elapsed < timer_duration:

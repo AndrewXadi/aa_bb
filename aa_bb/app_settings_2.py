@@ -2,6 +2,8 @@ from django.apps import apps
 from django.conf import settings
 from esi.clients import EsiClientProvider
 import re
+import os
+from app_settings import send_message, get_pings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -83,3 +85,79 @@ def aablacklist_active():
 
 def afat_active():
     return apps.is_installed("afat")
+
+
+def install_package_and_migrate(link: str) -> bool:
+    """
+    Install a package from `link` in the current environment,
+    then run Django migrations. Returns True on success.
+    """
+    import sys
+    import subprocess
+    from pathlib import Path
+
+    send_message(f"Starting package update from link: {link}")
+
+    # 1) Install in the same environment as this process
+    try:
+        pip_cmd = [sys.executable, "-m", "pip", "install", link]
+        res = subprocess.run(pip_cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            tail = (res.stderr or res.stdout or "").splitlines()[-20:]
+            logger.error("pip install failed: %s", res.stderr)
+            send_message(f"#{get_pings('Error')} pip install failed:\n```{os.linesep.join(tail)}```")
+            return False
+    except Exception as e:
+        logger.exception("pip install raised exception")
+        send_message(f"#{get_pings('Error')} pip install raised an exception:\n```{e}```")
+        return False
+
+    # 2) Run migrations, prefer in-process call_command
+    try:
+        from django.core.management import call_command
+        call_command("migrate", interactive=False, verbosity=1)
+        send_message("Migrations completed successfully.")
+        return True
+    except Exception as e:
+        logger.warning("call_command('migrate') failed; trying manage.py fallback: %s", e)
+
+    # 3) Fallback: locate manage.py and run it with the same interpreter
+    try:
+        from django.conf import settings
+        base = Path(getattr(settings, "BASE_DIR", ".")).resolve()
+        manage_path = None
+
+        # Common locations relative to BASE_DIR
+        for candidate in (base, base.parent, base.parent.parent):
+            cand = candidate / "manage.py"
+            if cand.exists():
+                manage_path = cand
+                break
+
+        # Last resort: shallow search up one level
+        if manage_path is None:
+            for p in base.parent.glob("**/manage.py"):
+                manage_path = p
+                break
+
+        if manage_path is None:
+            raise FileNotFoundError("manage.py not found under project path(s)")
+
+        mig = subprocess.run(
+            [sys.executable, str(manage_path), "migrate", "--noinput"],
+            capture_output=True,
+            text=True,
+        )
+        if mig.returncode != 0:
+            tail = (mig.stderr or mig.stdout or "").splitlines()[-40:]
+            logger.error("manage.py migrate failed: %s", mig.stderr)
+            send_message(f"#{get_pings('Error')} manage.py migrate failed:\n```{os.linesep.join(tail)}```")
+            return False
+
+        send_message("Migrations completed successfully, make sure to restart AA.")
+        return True
+
+    except Exception as e2:
+        logger.exception("Fallback manage.py migrate failed")
+        send_message(f"#{get_pings('Error')} Could not run migrations:\n```{e2}```")
+        return False
