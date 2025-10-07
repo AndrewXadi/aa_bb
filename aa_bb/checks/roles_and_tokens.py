@@ -66,7 +66,11 @@ def get_user_tokens(user_id):
         missing_corporation_scopes = set(CORPORATION_SCOPES) - corp_scopes_owned
 
         has_corp_token = len(missing_corporation_scopes) == 0
-        char_audit = CharacterAudit.objects.get(character=eve_char).active
+        # If there is no CharacterAudit for this character, treat as non-compliant
+        try:
+            char_audit = CharacterAudit.objects.get(character=eve_char).active
+        except CharacterAudit.DoesNotExist:
+            char_audit = False
 
         tokens_dict[char_name] = {
             "character_token": char_audit,

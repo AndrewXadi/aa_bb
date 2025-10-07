@@ -246,7 +246,7 @@ async function loadSuspiciousTransactions(option, idx) {
       if (clean) {
         updateCardStatus(idx, true);
         // inject “no hostile” row
-        const colspan = thead.querySelectorAll('th').length;
+        const colspan = thead.querySelectorAll('th').length || 1;
         tbody.insertAdjacentHTML('beforeend',
           `<tr><td colspan="${colspan}" class="text-center text-muted">
              No hostile transactions found

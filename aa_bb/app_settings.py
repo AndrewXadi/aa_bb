@@ -155,49 +155,85 @@ def is_npc_character(character_id: int) -> bool:
 def get_character_id(name: str) -> int | None:
     """
     Resolve a character name to ID using ESI /universe/ids/ endpoint,
-    with caching implemented through the Django model.
+    with caching implemented through the Django model. Uses `esi.client` and
+    self-heals duplicate name rows by reconciling via ESI.
     """
-    # Step 1: Check if the character's ID exists in the database
+    # Step 1: Fast-path from DB when exactly one record exists
     try:
         record = Character_names.objects.get(name=name)
+    except Character_names.MultipleObjectsReturned:
+        record = None  # fall through to ESI reconciliation below
+    except Character_names.DoesNotExist:
+        record = None
+    else:
         record.updated = timezone.now()
         record.save()
-        return record.id  # Return the stored ID from the database if found
-    except Character_names.DoesNotExist:
-        pass  # Continue to ESI if not found in the database
+        return record.id
 
-    # Step 2: Fetch from ESI if the name is not in the database
-    url = "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility"
-    headers = {"Accept": "application/json"}
-    payload = [str(name)]  # List of names to be passed to the API
-
+    # Step 2: Resolve via ESI and reconcile duplicates
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()  # Check if the response is successful
-        data = response.json()
-        
-        characters = data.get("characters", [])
-        if characters:
-            char_id = characters[0]["id"]
-            
-            # Save the new ID to the database for future use
-            with transaction.atomic():
-                obj, created = Character_names.objects.get_or_create(
-                    id=char_id,
-                    defaults={"name": name}
-                )
-                if not created and obj.name != name:
-                    obj.name = name
-                    obj.updated = timezone.now()
-                    obj.save()
-
-            return char_id
-        
-        return None  # If no characters found in the response
-
-    except requests.RequestException as e:
-        logger.error(f"Character lookup failed for '{name}': {e}")
+        future = esi.client.Universe.post_universe_ids(
+            names=[str(name)],
+            datasource=DATASOURCE,
+        )
+        data = future.result()
+    except HTTPError as e:
+        logger.error(f"ESI error resolving character name '{name}': {e}")
+        # Fallback to most recent local record if present
+        fallback = (
+            Character_names.objects
+            .filter(name=name)
+            .order_by("-updated")
+            .first()
+        )
+        if fallback:
+            fallback.updated = timezone.now()
+            fallback.save()
+            return fallback.id
         return None
+
+    characters = (data or {}).get("characters", [])
+    if not characters:
+        return None
+
+    char_id = int(characters[0]["id"])
+
+    # Ensure canonical mapping exists
+    with transaction.atomic():
+        obj, created = Character_names.objects.get_or_create(
+            id=char_id,
+            defaults={"name": name}
+        )
+        if not created and obj.name != name:
+            obj.name = name
+            obj.updated = timezone.now()
+            obj.save()
+
+    # Proactively fix any duplicate rows left over with the same name but different IDs
+    try:
+        stale_qs = Character_names.objects.filter(name=name).exclude(id=char_id)
+        if stale_qs.exists():
+            try:
+                # Resolve correct names for stale IDs using ESI
+                stale_ids = [int(s.id) for s in stale_qs]
+                name_future = esi.client.Universe.post_universe_names(
+                    ids=stale_ids,
+                    datasource=DATASOURCE,
+                )
+                name_rows = {int(r.get("id")): r.get("name") for r in name_future.result() or []}
+            except HTTPError:
+                name_rows = {}
+
+            for stale in stale_qs:
+                correct_name = name_rows.get(int(stale.id)) or stale.name
+                if correct_name != stale.name:
+                    stale.name = correct_name
+                    stale.updated = timezone.now()
+                    stale.save()
+    except Exception as e:
+        logger.debug(f"Duplicate cleanup failed for name='{name}': {e}")
+
+    return char_id
 
 _EXPIRY = timedelta(days=30)
 
@@ -913,4 +949,3 @@ def uninstall(reason):
     send_message(f"@everyone BigBrother is uninstalling for the following reason: {reason}.\nThe app *should* continue to work although in an inactive state until you restart your auth. To avoid breaking your auth, please remove aa_bb from installed apps in your local.py before restarting")
     subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "aa_bb"])
     return None
-

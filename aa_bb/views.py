@@ -730,17 +730,13 @@ def stream_transactions_sse(request):
     total = qs.count()
     connection.close()
 
-    # Determine headers from a single hydrated row
-    sample = qs[:1]
-    sample_map    = get_user_transactions(sample)
-    sample_row    = next(iter(sample_map.values()))
+    # Hidden columns for the transactions table
     HIDDEN        = {
         'first_party_id','second_party_id',
         'first_party_corporation_id','second_party_corporation_id',
         'first_party_alliance_id','second_party_alliance_id',
         'entry_id'
     }
-    headers = [h for h in sample_row.keys() if h not in HIDDEN]
 
     def generator():
         yield ": ok\n\n"                # initial heartbeat
@@ -750,6 +746,20 @@ def stream_transactions_sse(request):
             # tell client we're done with zero hostile
             yield "event: done\ndata:0\n\n"
             return
+
+        # Determine headers from a single hydrated row (after empty check)
+        sample_map = get_user_transactions(qs[:1])
+        sample_row = next(iter(sample_map.values()), None)
+        if sample_row:
+            headers = [h for h in sample_row.keys() if h not in HIDDEN]
+        else:
+            # Fallback to a safe default when sampling finds nothing
+            headers = [
+                'date', 'amount', 'balance', 'description', 'reason',
+                'first_party_name', 'first_party_corporation', 'first_party_alliance',
+                'second_party_name', 'second_party_corporation', 'second_party_alliance',
+                'context', 'type',
+            ]
 
         # Emit table header row once
         header_html = (
