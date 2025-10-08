@@ -69,7 +69,7 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
         logger.info(f"contract number: {number}")
 
         # -- issuer --
-        issuer_id = get_character_id(c.issuer_name)
+        issuer_id = c.issuer_name.eve_id
         issuer_type = get_eve_entity_type(issuer_id)
         timeee = getattr(c, "timestamp", timezone.now())
         iinfo = get_entity_info(issuer_id, timeee)
