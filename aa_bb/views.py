@@ -450,7 +450,7 @@ def stream_contracts_sse(request: WSGIRequest):
             yield ": ping\n\n"
 
             issued = getattr(c, "date_issued", timezone.now())
-            issuer_id = get_character_id(c.issuer_name)
+            issuer_id = c.issuer_name.eve_id
             yield ": ping\n\n"
             cid = c.contract_id
             if c.assignee_id != 0:
