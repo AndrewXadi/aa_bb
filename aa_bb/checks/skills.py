@@ -174,12 +174,26 @@ def render_user_skills_html(user_id: int) -> str:
         total_sp = info.get("total_sp", 0)
         char_id = get_character_id(char_name)
         char_age = get_char_age(char_id)
-        sp_days = (total_sp-384000)/64800
-        sp_age_ratio = round(sp_days / char_age, 2)
-        formatted = mark_safe(f'<span style="color:red;">{sp_age_ratio}</span>')
-        ratio = sp_age_ratio if sp_age_ratio < 1 else formatted
+        sp_days = (total_sp - 384000) / 64800 if total_sp else 0
+
+        # Guard against missing or zero age
+        if isinstance(char_age, (int, float)) and char_age > 0:
+            sp_age_ratio = round(sp_days / char_age, 2)
+            formatted = mark_safe(f'<span style="color:red;">{sp_age_ratio}</span>')
+            ratio_display = sp_age_ratio if sp_age_ratio < 1 else formatted
+            age_display = char_age
+        else:
+            ratio_display = "N/A"
+            age_display = "N/A"
+
         # Header with total SP next to name
-        html_parts.append(format_html("<h3>{} (<b>{}</b> SP / <b>{}</b> days old / SP to Age ratio: <b>{}</b>)</h3>", char_name, format_int(total_sp), char_age, ratio))
+        html_parts.append(format_html(
+            "<h3>{} (<b>{}</b> SP / <b>{}</b> days old / SP to Age ratio: <b>{}</b>)</h3>",
+            char_name,
+            format_int(total_sp),
+            age_display,
+            ratio_display,
+        ))
 
         # Build table header
         html_parts.append(

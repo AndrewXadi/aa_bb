@@ -287,15 +287,18 @@ def BB_run_regular_updates():
                 if set(sp_age_ratio_result) != set(status.sp_age_ratio_result or []):
                         flaggs = []
 
+                        def _safe_ratio(info: dict):
+                            age = info.get("char_age")
+                            if not isinstance(age, (int, float)) or age <= 0:
+                                return None
+                            return (info.get("sp_days") or 0) / max(age, 1)
+
                         for char_nameee, new_info in sp_age_ratio_result.items():
-                            if char_nameee not in sp_age_ratio_result:
-                                continue
+                            old_info = (status.sp_age_ratio_result or {}).get(char_nameee, {})
+                            old_ratio = _safe_ratio(old_info)
+                            new_ratio = _safe_ratio(new_info)
 
-                            old_info = status.sp_age_ratio_result.get(char_nameee, {})
-                            old_ratio = old_info.get("sp_days", 0) / max(old_info.get("char_age", 1), 1)
-                            new_ratio = new_info.get("sp_days", 0) / max(new_info.get("char_age", 1), 1)
-
-                            if new_ratio > old_ratio:
+                            if old_ratio is not None and new_ratio is not None and new_ratio > old_ratio:
                                 flaggs.append(
                                     f"- **{char_nameee}'s** SP to age ratio went up from **{old_ratio}** to **{new_ratio}**\n"
                                 )
@@ -836,4 +839,3 @@ def BB_run_regular_updates():
     task = PeriodicTask.objects.filter(name=task_name).first()
     if not task.enabled:
         send_message("Big Brother task has finished, you can now enable the task")
-
