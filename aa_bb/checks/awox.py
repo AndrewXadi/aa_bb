@@ -3,7 +3,7 @@ import time
 import logging
 from django.utils.html import format_html
 from allianceauth.authentication.models import CharacterOwnership
-from ..app_settings import get_site_url, get_contact_email, get_owner_name
+from ..app_settings import get_site_url, get_contact_email, get_owner_name, send_message
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -12,9 +12,31 @@ logger = logging.getLogger(__name__)
 USER_AGENT = f"{get_site_url()} Maintainer: {get_owner_name()} {get_contact_email()}"
 HEADERS = {
     "User-Agent": USER_AGENT,
-    "Accept-Encoding": "gzip"
+    "Accept-Encoding": "gzip",
+    "Accept": "application/json",
 }
 ESI_URL = "https://esi.evetech.net/latest/killmails/{}/{}"
+
+# Limit zKill "down" notifications to once every 2 hours
+_last_zkill_down_notice_monotonic = 0.0
+
+
+def _notify_zkill_down_once(preview: str, status: int | None, content_type: str | None):
+    global _last_zkill_down_notice_monotonic
+    now = time.monotonic()
+    # 2 hours = 7200 seconds
+    if now - _last_zkill_down_notice_monotonic < 3500:
+        return
+    _last_zkill_down_notice_monotonic = now
+    msg = (
+        "zKillboard appears unavailable and awox checks will not work (non-JSON response).\n"
+        f"status={status} content_type='{content_type}'\n"
+        f"body preview: ```{preview}```"
+    )
+    try:
+        send_message(msg)
+    except Exception as e:
+        logger.warning(f"Failed to send zKill down notification: {e}")
 
 def fetch_awox_kills(user_id, delay=0.2):
     characters = CharacterOwnership.objects.filter(user__id=user_id)
@@ -40,7 +62,36 @@ def fetch_awox_kills(user_id, delay=0.2):
             logger.warning(f"Error fetching awox for {char_id}: {e}")
             continue
 
-        killmails = response.json()
+        # zKill may return HTML/Cloudflare challenge or a custom error page
+        content_type = response.headers.get("Content-Type", "")
+        text_preview = (response.text or "").strip()[:200]
+        text_lower = (response.text or "").lower()
+        if (
+            not content_type.startswith("application/json")
+            or "so a big oops happened" in text_lower
+            or "cdn-cgi/challenge-platform" in text_lower
+        ):
+            logger.warning(
+                "Non-JSON response from zKillboard for %s: status=%s content_type=%s body='%s'",
+                char_id,
+                response.status_code,
+                content_type,
+                text_preview,
+            )
+            _notify_zkill_down_once(text_preview, response.status_code, content_type)
+            continue
+
+        try:
+            killmails = response.json()
+        except ValueError as e:
+            logger.warning(
+                "Failed to decode zKillboard JSON for %s: %s. Body preview='%s'",
+                char_id,
+                e,
+                text_preview,
+            )
+            _notify_zkill_down_once(text_preview, response.status_code, content_type)
+            continue
         logger.debug("Character {} has {} potential awox kills".format(char_id, len(killmails)))
 
         for kill in killmails:
