@@ -26,14 +26,11 @@ from typing import Optional
 User = get_user_model()
 
 # You'd typically store this in persistent storage (e.g., file, DB)
-update_check_time = None
-timer_duration = timedelta(days=7)
 
 logger = logging.getLogger(__name__)
 
 @shared_task
 def CB_run_regular_updates():
-    global update_check_time
     instance = BigBrotherConfig.get_solo()
 
 
@@ -753,6 +750,15 @@ def BB_daily_DB_cleanup():
     
     flags.append(f"- Deleted {count_proc} old ProcessedTransaction and {count_sus} SusTransactionNote records.")
 
+    # -- PAP COMPLIANCE: drop entries for non-members --
+    try:
+        member_profile_ids = list(get_user_profiles().values_list('id', flat=True))
+        non_member_pc_qs = PapCompliance.objects.exclude(user_profile_id__in=member_profile_ids)
+        deleted_pc = non_member_pc_qs.delete()[0]
+        flags.append(f"- Deleted {deleted_pc} PapCompliance records for non-members.")
+    except Exception as e:
+        logger.warning(f"PapCompliance cleanup failed: {e}")
+
     if flags:
         flags_text = "\n".join(flags)
         send_message(f"### DB Cleanup Complete:\n{flags_text}")
@@ -878,6 +884,15 @@ def hourly_compliance_check():
         "discord_check": tcfg.discord_check,
     }
 
+    # Per-reason reminder frequency (in days)
+    reminder_frequency = {
+        "corp_check": tcfg.corp_check_frequency,
+        "lawn_check": tcfg.lawn_check_frequency,
+        "paps_check": tcfg.paps_check_frequency,
+        "afk_check": tcfg.afk_check_frequency,
+        "discord_check": tcfg.discord_check_frequency,
+    }
+
     reason_checkers = {
         "corp_check": (corp_check, tcfg.corp_check_reason),
         "lawn_check": (lawn_check, tcfg.lawn_check_reason),
@@ -940,7 +955,7 @@ def hourly_compliance_check():
             send_message(f"ticket for <@{ticket.discord_user_id}> closed due to missing auth user")
             continue
 
-        # DAILY reminder logic with max-days cap + countdown
+        # Reminder logic with per-reason frequency + max-days cap
         days_elapsed = (now - ticket.created_at).days
         if days_elapsed <= 0:
             continue  # don't ping on creation day
@@ -964,8 +979,10 @@ def hourly_compliance_check():
             continue
 
         # last_reminder_sent acts as "last day number we pinged"
-        if ticket.last_reminder_sent == days_elapsed:
-            continue  # already pinged today
+        freq_days = reminder_frequency.get(reason, 1)
+        last_day_pinged = ticket.last_reminder_sent or 0
+        if (days_elapsed - last_day_pinged) < freq_days:
+            continue  # not time to remind yet
 
         # Build the message: mention the user + role + days left
         days_left = max_dayss - days_elapsed

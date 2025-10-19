@@ -51,6 +51,11 @@ class TicketToolConfig(SingletonModel):
         help_text="How many days can a user be non compliant on Corp Auth before he should get kicked?"
     )
 
+    corp_check_frequency = models.PositiveIntegerField(
+        default=1, 
+        help_text="How often should a user be reminded (in days)"
+    )
+
     corp_check_reason = models.TextField(
         default="# <@&{role}>,<@{namee}>\nSome of your characters are missing a valid token on corp auth, go fix it",
         blank=True,
@@ -76,6 +81,11 @@ class TicketToolConfig(SingletonModel):
         help_text="How many days can a user be non compliant on Lawn Auth before he should get kicked?"
     )
 
+    lawn_check_frequency = models.PositiveIntegerField(
+        default=1, 
+        help_text="How often should a user be reminded (in days)"
+    )
+
     lawn_check_reason = models.TextField(
         default="<@&{role}>,<@{namee}>\nSome of your characters are missing a valid token on lawn auth, go fix it",
         blank=True,
@@ -99,6 +109,11 @@ class TicketToolConfig(SingletonModel):
     paps_check = models.PositiveIntegerField(
         default=45, 
         help_text="How many days can a user not meet the PAP requirements before he should get kicked?"
+    )
+
+    paps_check_frequency = models.PositiveIntegerField(
+        default=1, 
+        help_text="How often should a user be reminded (in days)"
     )
 
     paps_check_reason = models.TextField(
@@ -131,6 +146,11 @@ class TicketToolConfig(SingletonModel):
         help_text="How many days can a user not login to game after getting a ticket before he should get a ticket?"
     )
 
+    afk_check_frequency = models.PositiveIntegerField(
+        default=1, 
+        help_text="How often should a user be reminded (in days)"
+    )
+
     afk_check_reason = models.TextField(
         default="<@&{role}>,<@{namee}>, you have been inactive for over {days} day(s) without a LoA request, please fix it or submit a LoA request.",
         blank=True,
@@ -154,6 +174,11 @@ class TicketToolConfig(SingletonModel):
     discord_check = models.PositiveIntegerField(
         default=2, 
         help_text="How many days can a user not be on corp discord before he should get kicked?"
+    )
+
+    discord_check_frequency = models.PositiveIntegerField(
+        default=1, 
+        help_text="How often should a user be reminded (in days)"
     )
 
     discord_check_reason = models.TextField(
@@ -195,3 +220,14 @@ class TicketToolConfig(SingletonModel):
         blank=True,
         help_text="List of users to ignore when checking for compliance"
     )
+
+
+class BBUpdateState(SingletonModel):
+    """Singleton to persist BB update check timing/version across restarts."""
+    update_check_time = models.DateTimeField(null=True, blank=True)
+    latest_version = models.CharField(max_length=50, null=True, blank=True)
+
+    def __str__(self):
+        ts = self.update_check_time.isoformat() if self.update_check_time else "None"
+        ver = self.latest_version or "None"
+        return f"BBUpdateState(time={ts}, version={ver})"

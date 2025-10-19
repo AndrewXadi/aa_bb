@@ -24,15 +24,15 @@ import traceback
 from . import __version__
 from .tasks_cb import *
 from .tasks_ct import *
-# You'd typically store this in persistent storage (e.g., file, DB)
-update_check_time = None
+# Persist update-check timing in DB via singleton model
+from .modelss import BBUpdateState
+
 timer_duration = timedelta(days=7)
 
 logger = logging.getLogger(__name__)
 
 @shared_task
 def BB_run_regular_updates():
-    global update_check_time
     instance = BigBrotherConfig.get_solo()
     instance.is_active = True
 
@@ -106,14 +106,21 @@ def BB_run_regular_updates():
                 latest_version = result.split("=")[1]
                 now = timezone.now()
 
+                # Use persistent singleton state
+                state = BBUpdateState.get_solo()
+                
                 def format_time_left(delta):
                     days = delta.days
                     hours, remainder = divmod(delta.seconds, 3600)
                     minutes = remainder // 60
                     return f"{days} days, {hours} hours, {minutes} minutes"
 
-                if update_check_time is None:
-                    update_check_time = now
+                # First detection of a newer version
+                if not state.update_check_time:
+                    state.update_check_time = now
+                    state.latest_version = latest_version
+                    state.save()
+
                     time_left = timer_duration
                     send_message(
                         f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
@@ -123,24 +130,49 @@ def BB_run_regular_updates():
                     )
                     install_package_and_migrate(f"http://bb.trpr.space/?token={token}")
                 else:
-                    elapsed = now - update_check_time
-                    if elapsed < timer_duration:
-                        time_left = timer_duration - elapsed
+                    # If a different newer version appears during an existing grace period,
+                    # reset the window and attempt auto-update once for this new version.
+                    if state.latest_version != latest_version:
+                        state.update_check_time = now
+                        state.latest_version = latest_version
+                        state.save()
+
+                        time_left = timer_duration
                         send_message(
                             f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
-                            f"\nYou have {format_time_left(time_left)} remaining to update (or restart AA if BB successfully updated itself)."
+                            f"\nYou have {format_time_left(time_left)} remaining to update."
                             f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                            f'\nAttempting automatic update'
                         )
+                        install_package_and_migrate(f"http://bb.trpr.space/?token={token}")
                     else:
-                        send_message(
-                            f"#{get_pings('New Version')} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
-                            f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
-                        )
-                        instance.is_active = False
+                        elapsed = now - state.update_check_time
+                        if elapsed < timer_duration:
+                            time_left = timer_duration - elapsed
+                            send_message(
+                                f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
+                                f"\nYou have {format_time_left(time_left)} remaining to update (or restart AA if BB successfully updated itself)."
+                                f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                            )
+                        else:
+                            send_message(
+                                f"#{get_pings('New Version')} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
+                                f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
+                            )
+                            instance.is_active = False
 
 
             elif result == "OK":
                 logger.info("Token validation successful.")
+                # Purge any persisted update grace state if previously set
+                try:
+                    state = BBUpdateState.get_solo()
+                    if state.update_check_time or state.latest_version:
+                        state.update_check_time = None
+                        state.latest_version = None
+                        state.save()
+                except Exception:
+                    pass
 
             if alliance_id != 150097440:
                 instance.is_active = False
