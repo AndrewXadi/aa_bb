@@ -359,6 +359,29 @@ def BB_run_regular_updates():
                     if new_links:
                         changes.append(f"##{get_pings('AwoX')} New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
+                        tcfg = TicketToolConfig.get_solo()
+                        if tcfg.awox_monitor_enabled:
+                            try:
+                                try:
+                                    user = User.objects.get(id=user_id)
+                                    discord_id = get_discord_user_id(user)
+                                    
+                                    ticket_message = f"<@&{tcfg.Role_ID}>,<@{discord_id}> we've detected your involvment in an AWOX kill, please explain:\n{link_list}"
+                                    send_message(f"ticket for {instance.user} created, reason - AWOX Kill")
+                                    run_task_function.apply_async(
+                                        args=["aa_bb.tasks_bot.create_compliance_ticket"],
+                                        kwargs={
+                                            "task_args": [instance.user.id, discord_id, "awox_kill", ticket_message],
+                                            "task_kwargs": {}
+                                        }
+                                    )
+                                except Exception as e:
+                                    logger.error(e)
+                                    pass
+
+                            except Exception as e:
+                                logger.error(e)
+                                pass
                     old = set(status.awox_kill_links or [])
                     new = set(awox_links) - old
                     if new:

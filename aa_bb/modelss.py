@@ -47,6 +47,12 @@ class TicketToolConfig(SingletonModel):
         help_text="Do you want to check for removed characters?"
     )
 
+    awox_monitor_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for awox kills?"
+    )
+
     corp_check_enabled = models.BooleanField(
         default=False,
         editable=True,
