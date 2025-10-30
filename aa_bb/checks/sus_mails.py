@@ -54,7 +54,7 @@ def gather_user_mails(user_id: int):
     qs = MailMessage.objects.filter(
         recipients__recipient_id__in=user_ids
     ).prefetch_related('recipients', 'recipients__recipient_name')
-    logger.debug(f"Found {qs.count()} mails for user {user_id}")
+    #logger.debug(f"Found {qs.count()} mails for user {user_id}")
     return qs
 
 
@@ -83,7 +83,7 @@ def get_user_mails(qs) -> Dict[int, Dict]:
         recipient_alliance_ids = []
         for mr in m.recipients.all():
             rid   = mr.recipient_id
-            logger.info(f"getting info for {rid}")
+            #logger.info(f"getting info for {rid}")
             rinfo = get_entity_info(rid, timeee)
             recipient_ids.append(rid)
             recipient_names.append(rinfo["name"])

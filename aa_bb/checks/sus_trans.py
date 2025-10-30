@@ -123,7 +123,7 @@ def get_user_transactions(qs) -> Dict[int, Dict]:
             'context': context,
             'type': entry.ref_type,
         }
-    logger.debug(f"Transformed {len(result)} transactions")
+    #logger.debug(f"Transformed {len(result)} transactions")
     return result
 
 

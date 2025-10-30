@@ -10,6 +10,7 @@ from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError, OperationalError
 from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache, SovereigntyMapCache, AllianceHistoryCache, CorporationInfoCache
+from .modelss import CharacterEmploymentCache
 from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
@@ -35,7 +36,7 @@ def get_pings(message_type: str) -> str:
     """
     Given a MessageType instance, return a string of pings separated by spaces.
     """
-    logger.info(f"message type recieved - {message_type}")
+    #logger.info(f"message type recieved - {message_type}")
     cfg = BigBrotherConfig.get_solo()
     pings = []
 
@@ -52,11 +53,11 @@ def get_pings(message_type: str) -> str:
         pings.append("@everyone")
 
     ping = " " + " ".join(pings) if pings else ""
-    logger.info(f"pingrole1 - {cfg.pingrole1_messages.all()}")
-    logger.info(f"pingrole2 - {cfg.pingrole2_messages.all()}")
-    logger.info(f"here - {cfg.here_messages.all()}")
-    logger.info(f"everyone - {cfg.everyone_messages.all()}")
-    logger.info(f"ping sent - {ping}")
+    #logger.info(f"pingrole1 - {cfg.pingrole1_messages.all()}")
+    #logger.info(f"pingrole2 - {cfg.pingrole2_messages.all()}")
+    #logger.info(f"here - {cfg.here_messages.all()}")
+    #logger.info(f"everyone - {cfg.everyone_messages.all()}")
+    #logger.info(f"ping sent - {ping}")
 
     return ping
 
@@ -124,9 +125,13 @@ def get_eve_entity_type(
     """
     # 1. Cache lookup
     try:
-        record = id_types.objects.get(pk=eve_id)  # raises id_types.DoesNotExist if not found :contentReference[oaicite:0]{index=0}
-        record.updated = timezone.now()
-        record.save()
+        record = id_types.objects.get(pk=eve_id)
+        # mark last access time without touching freshness timestamp
+        try:
+            record.last_accessed = timezone.now()
+            record.save(update_fields=["last_accessed"])
+        except Exception:
+            record.save()
         return record.name
     except id_types.DoesNotExist:
         pass
@@ -139,10 +144,8 @@ def get_eve_entity_type(
     # 3. Store in cache
     try:
         with transaction.atomic():
-            id_types.objects.create(
-                id=eve_id,
-                name=entity_type
-            )  # convenience create method: new instance + save :contentReference[oaicite:1]{index=1}
+            obj = id_types(id=eve_id, name=entity_type)
+            obj.save()
     except IntegrityError:
         # another thread/process inserted it first; safe to ignore
         logging.debug(f"ID {eve_id} was cached by another process.")
@@ -263,14 +266,14 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
         cache.updated = timezone.now()
         cache.save()
         if now - cache.updated < _EXPIRY:
-            logger.debug(f"cache hit: entity={entity_id} @ {as_of}")
+            #logger.debug(f"cache hit: entity={entity_id} @ {as_of}")
             return cache.data
         else:
-            logger.debug(f"cache stale: entity={entity_id} @ {as_of}, expired {cache.updated}")
+            #logger.debug(f"cache stale: entity={entity_id} @ {as_of}, expired {cache.updated}")
             cache.delete()
     except EntityInfoCache.DoesNotExist:
         pass
-    logger.debug(f"cache empty: entity={entity_id} @ {as_of}")
+    #logger.debug(f"cache empty: entity={entity_id} @ {as_of}")
 
     # 2) Compute fresh info
     etype = get_eve_entity_type(entity_id)
@@ -340,6 +343,52 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
 
     return info
 
+TTL_SHORT = timedelta(hours=4)
+
+def _ser_dt(v):
+    return v.isoformat() if isinstance(v, datetime) else v
+
+def _deser_dt(v):
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v)
+        except ValueError:
+            try:
+                return parse_datetime(v)
+            except Exception:
+                return v
+    return v
+
+def _ser_employment(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        out.append({
+            'corporation_id': r.get('corporation_id'),
+            'corporation_name': r.get('corporation_name'),
+            'start_date': _ser_dt(r.get('start_date')),
+            'end_date': _ser_dt(r.get('end_date')),
+            'alliance_history': [
+                {'alliance_id': ah.get('alliance_id'), 'start_date': _ser_dt(ah.get('start_date'))}
+                for ah in (r.get('alliance_history') or [])
+            ],
+        })
+    return out
+
+def _deser_employment(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows or []:
+        out.append({
+            'corporation_id': r.get('corporation_id'),
+            'corporation_name': r.get('corporation_name'),
+            'start_date': _deser_dt(r.get('start_date')),
+            'end_date': _deser_dt(r.get('end_date')),
+            'alliance_history': [
+                {'alliance_id': ah.get('alliance_id'), 'start_date': _deser_dt(ah.get('start_date'))}
+                for ah in (r.get('alliance_history') or [])
+            ],
+        })
+    return out
+
 def get_character_employment(character_or_id) -> list[dict]:
     """
     Fetch and format the permanent employment history for a character.
@@ -367,7 +416,20 @@ def get_character_employment(character_or_id) -> list[dict]:
                 "get_character_employment() requires an int or an object with .character_id"
             )
 
-    # 2. Fetch the corp history from ESI
+    # 2. Cache: try DB (4h TTL)
+    try:
+        ce = CharacterEmploymentCache.objects.get(pk=char_id)
+        if timezone.now() - ce.updated < TTL_SHORT:
+            try:
+                ce.last_accessed = timezone.now()
+                ce.save(update_fields=['last_accessed'])
+            except Exception:
+                ce.save()
+            return _deser_employment(ce.data)
+    except CharacterEmploymentCache.DoesNotExist:
+        pass
+
+    # 3. Fetch the corp history from ESI
     try:
         response = esi.client.Character.get_characters_character_id_corporationhistory(
             character_id=char_id
@@ -376,7 +438,7 @@ def get_character_employment(character_or_id) -> list[dict]:
         logger.exception(f"ESI failure for character_id {char_id}: {e}")
         return []
 
-    # 3. Order from earliest to latest
+    # 4. Order from earliest to latest
     history = list(reversed(response))
     rows = []
 
@@ -410,6 +472,14 @@ def get_character_employment(character_or_id) -> list[dict]:
                 defaults={'name': corp_info.get('name', f"Unknown ({corp_id})")}
             )
 
+    # Save to cache
+    try:
+        CharacterEmploymentCache.objects.update_or_create(
+            char_id=char_id,
+            defaults={'data': _ser_employment(rows), 'last_accessed': timezone.now()},
+        )
+    except Exception:
+        pass
     return rows
 
 def get_user_characters(user_id: int) -> dict[int, str]:
@@ -430,7 +500,7 @@ def format_int(value: int) -> str:
 def is_npc_corporation(corp_id):
     return 1_000_000 <= corp_id < 2_000_000
 
-CORP_TTL = timedelta(hours=24)
+CORP_TTL = timedelta(hours=4)
 
 def get_corporation_info(corp_id):
     """

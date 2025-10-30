@@ -106,7 +106,7 @@ class UserStatusConfig(admin.ModelAdmin):
 
 @admin.register(ComplianceTicket)
 class ComplianceTicketConfig(admin.ModelAdmin):
-    list_display = ['user', 'is_resolved', 'reason']
+    list_display = ['user', 'ticket_id', 'reason']
 
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(admin.ModelAdmin):

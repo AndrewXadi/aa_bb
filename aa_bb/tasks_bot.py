@@ -1,5 +1,6 @@
 # example/bot_task.py
 import discord
+import re
 from django.utils import timezone
 from .modelss import TicketToolConfig
 from .models import ComplianceTicket
@@ -20,7 +21,8 @@ def get_staff_roles():
 async def create_compliance_ticket(bot, user_id, discord_user_id: int, reason: str, message: str):
     category_id = TicketToolConfig.get_solo().Category_ID
     guild = bot.guilds[0]  # or use a known guild_id if multi-guild
-    category = guild.get_channel(category_id)
+    # Find or create a category with capacity (auto-clone with -2/-3 if needed)
+    category = await ensure_ticket_category_with_capacity(guild, category_id)
     member = guild.get_member(discord_user_id) or await guild.fetch_member(discord_user_id)
     User = get_user_model()
     user = User.objects.get(id=user_id)
@@ -46,6 +48,7 @@ async def create_compliance_ticket(bot, user_id, discord_user_id: int, reason: s
         category=category,
         overwrites=overwrites,
         topic=f"Compliance ticket for {profile.main_character} [{reason}]",
+        reason="Compliance ticket creation",
     )
 
     await channel.send(message)
@@ -55,6 +58,7 @@ async def create_compliance_ticket(bot, user_id, discord_user_id: int, reason: s
         discord_user_id=member.id,
         discord_channel_id=channel.id,
         reason=reason,
+        ticket_id=ticket_number,
     )
 
 
@@ -107,8 +111,8 @@ class CharRemovedCommands(commands.Cog):
             await ctx.respond("No open ticket found for this channel.", ephemeral=True)
             return
 
-        if ticket.reason != "char_removed":
-            await ctx.respond("This command only works for 'char_removed' tickets.", ephemeral=True)
+        if ticket.reason != "char_removed" and ticket.reason != "awox_kill":
+            await ctx.respond("This command only works for 'char_removed' and 'awox_kill' tickets.", ephemeral=True)
             return
 
         ticket.is_resolved = True
@@ -121,3 +125,141 @@ class CharRemovedCommands(commands.Cog):
 
 def setup(bot):
     bot.add_cog(CharRemovedCommands(bot))
+
+# ---- Category overflow helpers ----
+
+CATEGORY_LIMIT = 50  # Discord hard limit per category
+
+def _parse_family_suffix(base_name: str, candidate_name: str) -> int | None:
+    """
+    Return the numeric suffix for a candidate category in the same family as base_name.
+    Base category => 1, clones => 2, 3, ...; None if not in family.
+    """
+    if candidate_name == base_name:
+        return 1
+    # Match exact base name followed by dash and a positive integer
+    m = re.fullmatch(rf"{re.escape(base_name)}-(\d+)", candidate_name)
+    if not m:
+        return None
+    try:
+        n = int(m.group(1))
+        if n >= 2:
+            return n
+    except Exception:
+        pass
+    return None
+
+def _get_family_categories(guild: discord.Guild, base_category: discord.CategoryChannel) -> list[tuple[int, discord.CategoryChannel]]:
+    """
+    Discover all categories that belong to the ticket family: base name and "-N" clones.
+    Returns a sorted list of (suffix_number, category) with base as 1.
+    """
+    fam: list[tuple[int, discord.CategoryChannel]] = []
+    base_name = base_category.name
+    for cat in guild.categories:
+        suf = _parse_family_suffix(base_name, cat.name)
+        if suf is not None:
+            fam.append((suf, cat))
+    fam.sort(key=lambda x: x[0])
+    return fam
+
+async def ensure_ticket_category_with_capacity(guild: discord.Guild, base_category_id: int) -> discord.CategoryChannel:
+    """
+    Ensure there is a category in the ticket family with available capacity.
+    - Try base, then -2, -3 in order.
+    - If all are full, create next clone suffixed category and return it.
+    """
+    base = guild.get_channel(base_category_id)
+    if not isinstance(base, discord.CategoryChannel):
+        raise RuntimeError("Configured Category_ID is not a valid category")
+
+    family = _get_family_categories(guild, base)
+    for _, cat in family:
+        try:
+            if len(cat.channels) < CATEGORY_LIMIT:
+                return cat
+        except Exception:
+            # Defensive: if anything odd, skip
+            continue
+
+    # All full: create next clone
+    next_suffix = (family[-1][0] + 1) if family else 2
+    name = f"{base.name}-{next_suffix}"
+    # Copy overwrites from base
+    overwrites = base.overwrites
+    new_cat = await guild.create_category(
+        name=name,
+        overwrites=overwrites,
+        reason="Auto-created ticket overflow category",
+        position=base.position + next_suffix - 1 if hasattr(base, "position") else None,
+    )
+    return new_cat
+
+def _is_ticket_channel(ch: discord.abc.GuildChannel) -> bool:
+    return (
+        isinstance(ch, discord.TextChannel)
+        and (
+            (ch.name or "").startswith("ticket-")
+            or (getattr(ch, "topic", None) or "").lower().startswith("compliance ticket")
+        )
+    )
+
+async def rebalance_ticket_categories(bot):
+    """
+    Try to keep earlier categories in the ticket family as full as possible by moving
+    ticket channels leftwards. Delete empty overflow categories (suffix >= 2).
+    """
+    cfg = TicketToolConfig.get_solo()
+    if not cfg.Category_ID:
+        return
+    if not bot.guilds:
+        return
+    guild = bot.guilds[0]
+    base = guild.get_channel(int(cfg.Category_ID))
+    if not isinstance(base, discord.CategoryChannel):
+        return
+
+    family = _get_family_categories(guild, base)
+    if not family:
+        return
+
+    MOVE_LIMIT = 30
+    moves = 0
+
+    # Build lists of ticket channels per category (only tickets)
+    cats = [cat for _, cat in family]
+    tickets_by_cat: dict[int, list[discord.TextChannel]] = {
+        cat.id: [ch for ch in cat.channels if _is_ticket_channel(ch)] for cat in cats
+    }
+
+    # Fill earlier categories from later ones
+    for idx in range(1, len(cats)):
+        if moves >= MOVE_LIMIT:
+            break
+        left = cats[idx - 1]
+        right = cats[idx]
+
+        def left_capacity() -> int:
+            try:
+                return CATEGORY_LIMIT - len(left.channels)
+            except Exception:
+                return 0
+
+        while left_capacity() > 0 and tickets_by_cat.get(right.id) and moves < MOVE_LIMIT:
+            ch = tickets_by_cat[right.id].pop(0)
+            try:
+                await ch.edit(category=left, reason="Ticket overflow rebalancing")
+                moves += 1
+                # Track it in left collection if needed for subsequent steps
+                tickets_by_cat.setdefault(left.id, []).append(ch)
+            except discord.HTTPException:
+                # Skip problematic channel
+                continue
+
+    # Delete empty overflow categories (suffix >= 2)
+    for suffix, cat in reversed(family):
+        if suffix >= 2 and len(cat.channels) == 0:
+            try:
+                await cat.delete(reason="Removing empty ticket overflow category")
+            except discord.HTTPException:
+                pass

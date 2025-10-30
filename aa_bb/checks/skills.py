@@ -111,8 +111,8 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
     """
     # 1) Load all characters owned by this user
     ownership_map = get_user_characters(user_id)
-    logger.info(f"ownership: {len(ownership_map)}")
-    logger.info(f"ownership: {str(ownership_map)}")
+    #logger.info(f"ownership: {len(ownership_map)}")
+    #logger.info(f"ownership: {str(ownership_map)}")
 
     if not ownership_map:
         return {}
@@ -124,14 +124,14 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
         .select_related("skilltotals")                              # JOIN to grab SkillTotals in one query :contentReference[oaicite:2]{index=2}
         .prefetch_related("skill_set")                             # prefetch all Skill rows per character :contentReference[oaicite:3]{index=3}
     )
-    logger.info(f"audits: {len(audits)}")
+    #logger.info(f"audits: {len(audits)}")
 
     result: dict[str, dict] = {}
 
     # 3) Build the output dict
     for audit in audits:
         name = ownership_map[audit.character.character_id]
-        logger.info(name)
+        #logger.info(name)
         totals = audit.skilltotals
 
         # Gather this character's skills into a lookup by skill_id
@@ -168,7 +168,7 @@ def render_user_skills_html(user_id: int) -> str:
     # 1) Fetch all characters’ skill info in one go
     data = get_multiple_user_skill_info(user_id, skill_ids)
     # data is: { "CharName": { "total_sp": int, skill_id: {"trained": int, "active": int}, ... }, ... }
-    logger.info(len(data))
+    #logger.info(len(data))
     html_parts = []
     for char_name, info in data.items():
         total_sp = info.get("total_sp", 0)

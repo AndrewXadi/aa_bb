@@ -20,6 +20,7 @@ from .modelss import PapCompliance, TicketToolConfig
 from aadiscordbot.tasks import run_task_function
 from aadiscordbot.utils.auth import get_discord_user_id
 from aadiscordbot.cogs.utils.exceptions import NotAuthenticated
+from aadiscordbot.app_settings import get_admins
 from allianceauth.services.modules.discord.models import DiscordUser
 from django.contrib.auth import get_user_model
 from typing import Optional
@@ -667,7 +668,8 @@ def BB_run_regular_loa_updates():
 
 @shared_task
 def BB_daily_DB_cleanup():
-    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache, CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache
+    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache, CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache, id_types
+    from .modelss import CharacterEmploymentCache, FrequentCorpChangesCache, CurrentStintCache, AwoxKillsCache
     two_months_ago = timezone.now() - timedelta(days=60)
     flags = []
     #Delete old model entries
@@ -687,13 +689,42 @@ def BB_daily_DB_cleanup():
         count, _ = old_entries.delete()
         flags.append(f"- Deleted {count} old {name} records.")
 
+    # Cleanup caches using last_accessed
+    last_access_models = [
+        (CharacterEmploymentCache, "Character Employment Cache"),
+        (FrequentCorpChangesCache, "Frequent Corp Changes Cache"),
+        (CurrentStintCache, "Current Stint Cache"),
+        (AwoxKillsCache, "AWOX Kills Cache"),
+    ]
+    for model, name in last_access_models:
+        try:
+            old_entries = model.objects.filter(last_accessed__lt=two_months_ago)
+            count, _ = old_entries.delete()
+            flags.append(f"- Deleted {count} old {name} records (by last access).")
+        except Exception:
+            continue
+
+    # id_types: delete if not looked up in last 60 days
+    try:
+        stale_ids = id_types.objects.filter(last_accessed__lt=two_months_ago)
+        count, _ = stale_ids.delete()
+        flags.append(f"- Deleted {count} old ID type cache records (by last access).")
+    except Exception:
+        pass
+
 
     from .models import (
     ProcessedContract, SusContractNote,
     ProcessedMail, SusMailNote,
     ProcessedTransaction, SusTransactionNote,
     )
-    from corptools.models import Contract, MailMessage, WalletJournalEntry, CorporateContract
+    from corptools.models import (
+        Contract,
+        MailMessage,
+        CorporateContract,
+        CharacterWalletJournalEntry,
+        CorporationWalletJournalEntry,
+    )
     from django.db import transaction
     # -- CONTRACTS --
     # Get all contract_ids that exist in Contract
@@ -735,8 +766,9 @@ def BB_daily_DB_cleanup():
     flags.append(f"- Deleted {count_proc} old ProcessedMail and {count_sus} SusMailNote records.")
     
     # -- TRANSACTIONS --
-    existing_entry_ids = set(
-        WalletJournalEntry.objects.values_list('entry_id', flat=True)
+    existing_entry_ids = (
+        set(CharacterWalletJournalEntry.objects.values_list('entry_id', flat=True))
+        | set(CorporationWalletJournalEntry.objects.values_list('entry_id', flat=True))
     )
     
     orphaned_processed_transactions = ProcessedTransaction.objects.exclude(entry_id__in=existing_entry_ids)
@@ -929,7 +961,7 @@ def hourly_compliance_check():
     for ticket in ComplianceTicket.objects.all():
         reason = ticket.reason
 
-        if reason == "char_removed":
+        if reason == "char_removed" or reason == "awox_kill":
             logger.info(f"reason:{reason}, resolved:{ticket.is_resolved}")
             if ticket.is_resolved:
                 logger.info(f"reason:{reason}")
@@ -1006,6 +1038,19 @@ def hourly_compliance_check():
         ticket.last_reminder_sent = days_elapsed
         ticket.save(update_fields=["last_reminder_sent"])
 
+    # Rebalance ticket categories after processing tickets
+    try:
+        run_task_function.apply_async(
+            args=["aa_bb.tasks_bot.rebalance_ticket_categories"],
+            kwargs={
+                "task_args": [],
+                "task_kwargs": {}
+            }
+        )
+    except Exception:
+        # Non-fatal if scheduling fails
+        pass
+
 
 def ensure_ticket(user, reason):
     tcfg = TicketToolConfig.get_solo()
@@ -1032,14 +1077,37 @@ def ensure_ticket(user, reason):
         # User has no Discord → fall back to first superuser with Discord linked
         superusers = User.objects.filter(is_superuser=True)
         username = user.username
-        discord_user = DiscordUser.objects.filter(user__in=superusers).first()
+        discord_user = None
+
+        # Prefer a superuser with a linked Discord account
+        if superusers.exists():
+            discord_user = DiscordUser.objects.filter(user__in=superusers).first()
+
+        # If no superuser exists or none have Discord linked, try the first configured Discord admin
         if not discord_user:
-            logger.error("No superuser with Discord linked found. Cannot create fallback ticket.")
+            try:
+                admin_uids = get_admins() or []
+            except Exception:
+                admin_uids = []
+
+            if admin_uids:
+                discord_user = DiscordUser.objects.filter(uid__in=admin_uids).first()
+
+        # If still nothing, log and notify, then stop
+        if not discord_user:
+            logger.error(f"Failed to create a {reason} ticket for {username}. No eligible fallback found: no superuser or Discord admin with Discord linked.")
+            send_message(f"Failed to create a {reason} ticket for {username}. No eligible fallback found: no superuser or Discord admin with Discord linked.")
             return
 
         discord_id = discord_user.uid
         _, msg_template = reason_checkers[reason]
         if reason == "afk_check":
+            ticket_message = (
+                f"⚠️ Compliance issue for **{user.username}** "
+                f"(no Discord linked!)\n\n"
+                f"{msg_template.format(namee=user.username, role=tcfg.Role_ID, days=max_afk_days)}"
+            )
+        elif reason == "discord_check":
             ticket_message = (
                 f"⚠️ Compliance issue for **{user.username}** "
                 f"(no Discord linked!)\n\n"

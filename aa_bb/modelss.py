@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from allianceauth.authentication.models import UserProfile
 from charlink.models import ComplianceFilter
 from solo.models import SingletonModel
@@ -38,6 +39,12 @@ class TicketToolConfig(SingletonModel):
     starting_pap_compliance = models.PositiveIntegerField(
         default=1,  
         help_text="How many buffer months does a new user get? (starter value of the above)"
+    )
+
+    char_removed_enabled = models.BooleanField(
+        default=False,
+        editable=True,
+        help_text="Do you want to check for removed characters?"
     )
 
     corp_check_enabled = models.BooleanField(
@@ -231,3 +238,66 @@ class BBUpdateState(SingletonModel):
         ts = self.update_check_time.isoformat() if self.update_check_time else "None"
         ver = self.latest_version or "None"
         return f"BBUpdateState(time={ts}, version={ver})"
+
+
+class CharacterEmploymentCache(models.Model):
+    """Cache of character employment timeline (intended 4h TTL)."""
+    char_id = models.BigIntegerField(primary_key=True)
+    data = models.JSONField()
+    updated = models.DateTimeField(auto_now=True)
+    last_accessed = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "character_employment_cache"
+        indexes = [
+            models.Index(fields=["updated"]),
+            models.Index(fields=["last_accessed"]),
+        ]
+
+
+class FrequentCorpChangesCache(models.Model):
+    """Cache of pre-rendered frequent corp changes HTML per user (intended 4h TTL)."""
+    user_id = models.BigIntegerField(primary_key=True)
+    html = models.TextField()
+    updated = models.DateTimeField(auto_now=True)
+    last_accessed = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "frequent_corp_changes_cache"
+        indexes = [
+            models.Index(fields=["updated"]),
+            models.Index(fields=["last_accessed"]),
+        ]
+
+
+class CurrentStintCache(models.Model):
+    """Cache of current stint days per (char, corp) (intended 4h TTL)."""
+    char_id = models.BigIntegerField()
+    corp_id = models.BigIntegerField()
+    days = models.IntegerField(default=0)
+    updated = models.DateTimeField(auto_now=True)
+    last_accessed = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "current_stint_cache"
+        unique_together = ("char_id", "corp_id")
+        indexes = [
+            models.Index(fields=["char_id", "corp_id"]),
+            models.Index(fields=["updated"]),
+            models.Index(fields=["last_accessed"]),
+        ]
+
+
+class AwoxKillsCache(models.Model):
+    """Indefinite cache of AWOX kills per user; pruned by last_accessed (60d)."""
+    user_id = models.BigIntegerField(primary_key=True)
+    data = models.JSONField()
+    updated = models.DateTimeField(auto_now=True)
+    last_accessed = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "awox_kills_cache"
+        indexes = [
+            models.Index(fields=["updated"]),
+            models.Index(fields=["last_accessed"]),
+        ]

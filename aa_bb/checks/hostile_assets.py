@@ -83,7 +83,7 @@ def get_hostile_asset_locations(user_id: int) -> Dict[str, str]:
         if not owner_info:
             # treat fully missing owner info as unresolvable
             hostile_map[display_name] = "Unresolvable"
-            logger.debug(f"No ownership info for assets in {display_name}; marked Unresolvable")
+            #logger.debug(f"No ownership info for assets in {display_name}; marked Unresolvable")
             continue
 
         # attempt to parse owner_id
@@ -114,7 +114,7 @@ def render_assets(user_id: int) -> Optional[str]:
     # Parse hostile IDs into a set of ints
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
     hostile_ids = {int(s) for s in hostile_str.split(",") if s.strip().isdigit()}
-    logger.debug(f"Hostile IDs for assets: {hostile_ids}")
+    #logger.debug(f"Hostile IDs for assets: {hostile_ids}")
 
     html = '<table class="table table-striped">'
     html += '<thead><tr><th>System</th><th>Owner</th></tr></thead><tbody>'

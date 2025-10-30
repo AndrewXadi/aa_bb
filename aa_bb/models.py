@@ -746,6 +746,10 @@ class id_types(models.Model):
         auto_now=True,
         help_text="When this record was last refreshed"
     )
+    last_accessed = models.DateTimeField(
+        default=timezone.now,
+        help_text="When this record was last looked up"
+    )
 
     class Meta:
         db_table = 'aa_bb_ids'
@@ -1045,11 +1049,13 @@ class ComplianceTicket(models.Model):
         ("afk_check", "Inactivity"),
         ("discord_check", "User is not on discord"),
         {"char_removed", "Character removed"},
+        {"awox_kill", "AWOX kill found"},
     ]
 
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     discord_user_id = models.BigIntegerField()
     discord_channel_id = models.BigIntegerField(null=True, blank=True)
+    ticket_id = models.BigIntegerField(null=True, blank=True)
 
     reason = models.CharField(max_length=20, choices=REASONS)
     created_at = models.DateTimeField(auto_now_add=True)

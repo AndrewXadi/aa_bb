@@ -35,9 +35,9 @@ def determine_character_state(user_id, save: bool = False):
     char_db_records = {
         rec.char_id: rec for rec in CharacterAccountState.objects.all()
     }
-    logger.info(f"char_db_records: {str(char_db_records)}")
+    #logger.info(f"char_db_records: {str(char_db_records)}")
     all_char_ids = get_user_characters(user_id)
-    logger.info(f"all_char_ids: {str(all_char_ids)}")
+    #logger.info(f"all_char_ids: {str(all_char_ids)}")
 
     result = {}
     skill_cache = {}  # skill_id -> {char_id: skill_data}
@@ -50,7 +50,7 @@ def determine_character_state(user_id, save: bool = False):
 
     for char_id in all_char_ids:
         char_name = resolve_character_name(char_id)
-        logger.info(f"char_id: {str(char_id)}")
+        #logger.info(f"char_id: {str(char_id)}")
         state = None
         skill_used = None
 
@@ -134,7 +134,7 @@ def render_character_states_html(user_id: int) -> str:
     as a single table with columns Character | State
     """
     data = determine_character_state(user_id)
-    logger.info(f"data: {str(data)}")
+    #logger.info(f"data: {str(data)}")
 
     html = """
     <table class="table table-striped">

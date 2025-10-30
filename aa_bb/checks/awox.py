@@ -3,6 +3,8 @@ import time
 import logging
 from django.utils.html import format_html
 from allianceauth.authentication.models import CharacterOwnership
+from ..modelss import AwoxKillsCache
+from django.utils import timezone
 from ..app_settings import get_site_url, get_contact_email, get_owner_name, send_message
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -39,11 +41,22 @@ def _notify_zkill_down_once(preview: str, status: int | None, content_type: str 
         logger.warning(f"Failed to send zKill down notification: {e}")
 
 def fetch_awox_kills(user_id, delay=0.2):
+    # Indefinite DB cache: return cached kills if present
+    try:
+        cache = AwoxKillsCache.objects.get(pk=user_id)
+        try:
+            cache.last_accessed = timezone.now()
+            cache.save(update_fields=["last_accessed"])
+        except Exception:
+            cache.save()
+        return cache.data or []
+    except AwoxKillsCache.DoesNotExist:
+        pass
     characters = CharacterOwnership.objects.filter(user__id=user_id)
     char_ids = [c.character.character_id for c in characters]
     char_id_map = {c.character.character_id: c.character.character_name for c in characters}
 
-    logger.debug("Fetching AWOX kills for user {}: {}".format(user_id, char_id_map))
+    #logger.debug("Fetching AWOX kills for user {}: {}".format(user_id, char_id_map))
 
     kills_by_id = {}
 
@@ -92,7 +105,7 @@ def fetch_awox_kills(user_id, delay=0.2):
             )
             _notify_zkill_down_once(text_preview, response.status_code, content_type)
             continue
-        logger.debug("Character {} has {} potential awox kills".format(char_id, len(killmails)))
+        #logger.debug("Character {} has {} potential awox kills".format(char_id, len(killmails)))
 
         for kill in killmails:
             kill_id = kill.get("killmail_id")
@@ -133,7 +146,15 @@ def fetch_awox_kills(user_id, delay=0.2):
             except Exception as e:
                 logger.error("Error processing killmail {}: {}".format(kill_id, e))
 
-    return list(kills_by_id.values()) if kills_by_id else None
+    data_list = list(kills_by_id.values()) if kills_by_id else []
+    try:
+        AwoxKillsCache.objects.update_or_create(
+            user_id=user_id,
+            defaults={"data": data_list, "last_accessed": timezone.now()},
+        )
+    except Exception:
+        pass
+    return data_list if data_list else None
 
 
 def render_awox_kills_html(userID):

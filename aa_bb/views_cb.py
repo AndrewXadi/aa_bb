@@ -468,10 +468,10 @@ def stream_contracts_sse(request: WSGIRequest):
                     else:
                         assignee_id = c.acceptor_id
                     yield ": ping\n\n"
-                    logger.info(f"getting info for {issuer_id}")
+                    #logger.info(f"getting info for {issuer_id}")
                     iinfo     = get_entity_info(issuer_id, issued)
                     yield ": ping\n\n"
-                    logger.info(f"getting info for {assignee_id}")
+                    #logger.info(f"getting info for {assignee_id}")
                     ainfo     = get_entity_info(assignee_id, issued)
                     yield ": ping\n\n"
 

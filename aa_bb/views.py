@@ -458,10 +458,10 @@ def stream_contracts_sse(request: WSGIRequest):
             else:
                 assignee_id = c.acceptor_id
             yield ": ping\n\n"
-            logger.info(f"getting info for {issuer_id}")
+            #logger.info(f"getting info for {issuer_id}")
             iinfo     = get_entity_info(issuer_id, issued)
             yield ": ping\n\n"
-            logger.info(f"getting info for {assignee_id}")
+            #logger.info(f"getting info for {assignee_id}")
             ainfo     = get_entity_info(assignee_id, issued)
             yield ": ping\n\n"
 
@@ -647,7 +647,7 @@ def stream_mails_sse(request):
 
             # 1) hydrate sender
             sender_id = m.from_id
-            logger.info(f"getting info for {sender_id}")
+            #logger.info(f"getting info for {sender_id}")
             sinfo     = get_entity_info(sender_id, sent)
             yield ": ping\n\n"  # immediately after expensive call
 
@@ -660,7 +660,7 @@ def stream_mails_sse(request):
             recipient_alliance_ids  = []
             for mr in m.recipients.all():
                 rid   = mr.recipient_id
-                logger.info(f"getting info for {rid}")
+                #logger.info(f"getting info for {rid}")
                 rinfo = get_entity_info(rid, sent)
                 yield ": ping\n\n"  # after each recipient lookup
 

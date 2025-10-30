@@ -1,13 +1,16 @@
 import logging
+from datetime import timedelta
 from django.utils.html import format_html
-from django.utils.timezone import now
+from django.utils.timezone import now, timezone
 from esi.clients import EsiClientProvider
 from allianceauth.authentication.models import CharacterOwnership
 from ..models import BigBrotherConfig
 from ..app_settings import ensure_datetime, is_npc_corporation, get_alliance_history_for_corp, get_alliance_name, get_corporation_info
+from ..modelss import FrequentCorpChangesCache, CurrentStintCache
 
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
+TTL_SHORT = timedelta(hours=4)
 
 # External site favicons, fetched each time directly from the source
 ZKILL_ICON = "https://zkillboard.com/favicon.ico"
@@ -19,6 +22,18 @@ EVESEARCH_ICON  = "https://eve-search.com/favicon.ico"
 
 
 def get_frequent_corp_changes(user_id):
+    # Try 4h cache first
+    try:
+        cache = FrequentCorpChangesCache.objects.get(pk=user_id)
+        if timezone.now() - cache.updated < TTL_SHORT:
+            try:
+                cache.last_accessed = timezone.now()
+                cache.save(update_fields=["last_accessed"])
+            except Exception:
+                cache.save()
+            return format_html(cache.html)
+    except FrequentCorpChangesCache.DoesNotExist:
+        pass
     # Load hostile lists
     cfg = BigBrotherConfig.get_solo()
     hostile_corps = {int(cid) for cid in cfg.hostile_corporations.split(',') if cid}
@@ -150,6 +165,13 @@ def get_frequent_corp_changes(user_id):
             html += format_html(row_html)
         html += '</tbody></table>'
 
+    # Save cache
+    try:
+        FrequentCorpChangesCache.objects.update_or_create(
+            user_id=user_id, defaults={"html": str(html), "last_accessed": timezone.now()}
+        )
+    except Exception:
+        pass
     return format_html(html)
 
 
@@ -161,6 +183,19 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
     try:
         if is_npc_corporation(corp_id):
             return 0
+
+        # 4h cached value
+        try:
+            cache = CurrentStintCache.objects.get(char_id=char_id, corp_id=corp_id)
+            if timezone.now() - cache.updated < TTL_SHORT:
+                try:
+                    cache.last_accessed = timezone.now()
+                    cache.save(update_fields=["last_accessed"])
+                except Exception:
+                    cache.save()
+                return int(cache.days)
+        except CurrentStintCache.DoesNotExist:
+            pass
 
         # Pull history (newest entry first from ESI)
         history = esi.client.Character.get_characters_character_id_corporationhistory(
@@ -178,7 +213,16 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
         start = ensure_datetime(latest["start_date"])
         end = now()
 
-        return max(0, (end - start).days)
+        days = max(0, (end - start).days)
+        try:
+            CurrentStintCache.objects.update_or_create(
+                char_id=char_id,
+                corp_id=corp_id,
+                defaults={"days": days, "last_accessed": timezone.now()},
+            )
+        except Exception:
+            pass
+        return days
 
     except Exception as e:
         logger.exception(

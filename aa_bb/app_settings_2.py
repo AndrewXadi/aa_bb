@@ -1,6 +1,9 @@
 from django.apps import apps
 from django.conf import settings
 from esi.clients import EsiClientProvider
+from django.utils import timezone
+from datetime import timedelta
+from .models import CorporationInfoCache, Alliance_names
 import re
 import os
 
@@ -8,6 +11,7 @@ import os
 import logging
 logger = logging.getLogger(__name__)
 esi = EsiClientProvider()
+TTL_SHORT = timedelta(hours=4)
 
 def get_main_corp_id():
     from allianceauth.eveonline.models import EveCharacter
@@ -37,33 +41,70 @@ def get_corp_info(corp_id):
             "alliance_id": None
         }
 
+    # Try DB cache first
     try:
-        logger.debug(f"Fetching corp info for corp_id {corp_id}")
+        entry = CorporationInfoCache.objects.get(pk=corp_id)
+        if timezone.now() - entry.updated < TTL_SHORT:
+            return {"name": entry.name, "alliance_id": getattr(entry, "alliance_id", None)}
+        else:
+            entry.delete()
+    except CorporationInfoCache.DoesNotExist:
+        pass
+
+    # Fetch from ESI
+    member_count = 0
+    try:
+        #logger.debug(f"Fetching corp info for corp_id {corp_id}")
         result = esi.client.Corporation.get_corporations_corporation_id(
             corporation_id=corp_id
         ).results()
-        return {
+        data = {
             "name": result.get("name", f"Unknown ({corp_id})"),
-            "alliance_id": result.get("alliance_id")
+            # alliance_id is not part of CorporationInfoCache model, we return it only
+            "alliance_id": result.get("alliance_id"),
         }
+        member_count = result.get("member_count", 0)
     except Exception as e:
         logger.warning(f"Error fetching corp {corp_id}: {e}")
-        return {
-            "name": f"Unknown Corp ({corp_id})",
-            "alliance_id": None
-        }
+        data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
+
+    # Store/update DB cache
+    try:
+        CorporationInfoCache.objects.update_or_create(
+            corp_id=corp_id,
+            defaults={"name": data["name"], "member_count": member_count},
+        )
+    except Exception:
+        pass
+
+    return data
     
 def get_alliance_name(alliance_id):
     if not alliance_id:
         return "None"
+    # Try DB cache first with 4h TTL
+    try:
+        rec = Alliance_names.objects.get(pk=alliance_id)
+        if timezone.now() - rec.updated < TTL_SHORT:
+            return rec.name
+    except Alliance_names.DoesNotExist:
+        rec = None
+
     try:
         result = esi.client.Alliance.get_alliances_alliance_id(
             alliance_id=alliance_id
         ).results()
-        return result.get("name", f"Unknown ({alliance_id})")
+        name = result.get("name", f"Unknown ({alliance_id})")
     except Exception as e:
         logger.warning(f"Error fetching alliance {alliance_id}: {e}")
-        return f"Unknown ({alliance_id})"
+        name = f"Unknown ({alliance_id})"
+
+    try:
+        Alliance_names.objects.update_or_create(pk=alliance_id, defaults={"name": name})
+    except Exception:
+        pass
+
+    return name
 
 def get_site_url():  # regex sso url
     regex = r"^(.+)\/s.+"

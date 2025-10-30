@@ -19,6 +19,8 @@ def trigger_task_sync(sender, instance, **kwargs):
 
 @receiver(pre_delete, sender=CharacterOwnership)
 def removed_character(sender, instance, **kwargs):
+    if not TicketToolConfig.get_solo().char_removed_enabled:
+        return
     try:
         character = instance.character
         discord_id = get_discord_user_id(instance.user)

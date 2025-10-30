@@ -91,7 +91,7 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
         if not owner_info:
             # fully unresolvable
             hostile_map[display_name] = "Unresolvable"
-            logger.debug(f"No owner info for clone in {display_name}; marked Unresolvable")
+            #logger.debug(f"No owner info for clone in {display_name}; marked Unresolvable")
             continue
 
         oid = int(owner_info["owner_id"])
