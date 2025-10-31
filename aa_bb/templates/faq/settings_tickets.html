@@ -1,0 +1,257 @@
+{% extends 'faq/base.html' %}
+{% load i18n %}
+
+{% block details %}
+{% include 'faq/settings_nav.html' %}
+
+<h1>{% translate "TicketToolConfig Fields" %}</h1>
+<p>
+  {% blocktrans %}<code>TicketToolConfig</code> powers automated compliance tickets created by the Discord bot and background tasks. Configure it from Django admin → BigBrother → TicketToolConfig before enabling the ticket pipeline.{% endblocktrans %}
+</p>
+
+<h2 class="mt-4">{% translate "General Filters & Counters" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>compliance_filter</code></td>
+        <td>{% translate "Optional <code>ComplianceFilter</code> object that limits which users are considered when building tickets." %}</td>
+      </tr>
+      <tr>
+        <td><code>ticket_counter</code></td>
+        <td>{% translate "Auto-incrementing number used in ticket channel names. Read-only in admin." %}</td>
+      </tr>
+      <tr>
+        <td><code>max_months_without_pap_compliance</code></td>
+        <td>{% translate "Upper bound on compliance points a pilot can accumulate. Falling to zero triggers a PAP ticket." %}</td>
+      </tr>
+      <tr>
+        <td><code>starting_pap_compliance</code></td>
+        <td>{% translate "Initial compliance points granted when someone joins the corp." %}</td>
+      </tr>
+      <tr>
+        <td><code>char_removed_enabled</code></td>
+        <td>{% translate "Enable tickets when characters are removed from auth without being replaced." %}</td>
+      </tr>
+      <tr>
+        <td><code>awox_monitor_enabled</code></td>
+        <td>{% translate "Create tickets if AWOX kills are detected for the user." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Corp Auth Compliance" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>corp_check_enabled</code></td>
+        <td>{% translate "Turns on tickets for pilots missing corp auth tokens." %}</td>
+      </tr>
+      <tr>
+        <td><code>corp_check</code></td>
+        <td>{% translate "Days of non-compliance allowed before the first ticket is opened." %}</td>
+      </tr>
+      <tr>
+        <td><code>corp_check_frequency</code></td>
+        <td>{% translate "Reminder interval (days) after a corp compliance ticket is raised." %}</td>
+      </tr>
+      <tr>
+        <td><code>corp_check_reason</code></td>
+        <td>{% translate "Initial message template. Supports placeholders <code>{role}</code> and <code>{namee}</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>corp_check_reminder</code></td>
+        <td>{% translate "Reminder template. Includes placeholders <code>{role}</code>, <code>{namee}</code>, and <code>{days}</code>." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "LAWN Auth Compliance" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>lawn_check_enabled</code></td>
+        <td>{% translate "Enable tickets for missing LAWN auth tokens." %}</td>
+      </tr>
+      <tr>
+        <td><code>lawn_check</code></td>
+        <td>{% translate "Days of non-compliance allowed before the LAWN ticket appears." %}</td>
+      </tr>
+      <tr>
+        <td><code>lawn_check_frequency</code></td>
+        <td>{% translate "Reminder interval for LAWN compliance tickets (days)." %}</td>
+      </tr>
+      <tr>
+        <td><code>lawn_check_reason</code></td>
+        <td>{% translate "Initial message template for LAWN issues. Supports <code>{role}</code> and <code>{namee}</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>lawn_check_reminder</code></td>
+        <td>{% translate "Reminder template with placeholders <code>{role}</code>, <code>{namee}</code>, and <code>{days}</code>." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "PAP Compliance Monitoring" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>paps_check_enabled</code></td>
+        <td>{% translate "Enable tickets for pilots who fall below the PAP compliance threshold." %}</td>
+      </tr>
+      <tr>
+        <td><code>paps_check</code></td>
+        <td>{% translate "Days without hitting PAP quotas before a ticket is opened." %}</td>
+      </tr>
+      <tr>
+        <td><code>paps_check_frequency</code></td>
+        <td>{% translate "Reminder interval for PAP tickets (days)." %}</td>
+      </tr>
+      <tr>
+        <td><code>paps_check_reason</code></td>
+        <td>{% translate "Initial message template. Supports <code>{role}</code> and <code>{namee}</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>paps_check_reminder</code></td>
+        <td>{% translate "Reminder template that uses <code>{days}</code> to show remaining grace period." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "AFK Monitoring" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>afk_check_enabled</code></td>
+        <td>{% translate "Enable inactivity tickets based on login activity." %}</td>
+      </tr>
+      <tr>
+        <td><code>Max_Afk_Days</code></td>
+        <td>{% translate "Days a user may be absent before the initial AFK ticket is created." %}</td>
+      </tr>
+      <tr>
+        <td><code>afk_check</code></td>
+        <td>{% translate "Additional days granted after a ticket before escalation occurs." %}</td>
+      </tr>
+      <tr>
+        <td><code>afk_check_frequency</code></td>
+        <td>{% translate "Reminder interval for AFK tickets (days)." %}</td>
+      </tr>
+      <tr>
+        <td><code>afk_check_reason</code></td>
+        <td>{% translate "Initial message template. Supports <code>{role}</code>, <code>{namee}</code>, and <code>{days}</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>afk_check_reminder</code></td>
+        <td>{% translate "Reminder template with the same placeholders as the initial AFK message." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Discord Linking" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>discord_check_enabled</code></td>
+        <td>{% translate "Creates tickets for pilots who have not linked their Discord account in Auth." %}</td>
+      </tr>
+      <tr>
+        <td><code>discord_check</code></td>
+        <td>{% translate "Days without a linked Discord before the ticket is opened." %}</td>
+      </tr>
+      <tr>
+        <td><code>discord_check_frequency</code></td>
+        <td>{% translate "Reminder cadence (days) for Discord linking tickets." %}</td>
+      </tr>
+      <tr>
+        <td><code>discord_check_reason</code></td>
+        <td>{% translate "Initial Discord message template. Supports <code>{role}</code> and <code>{namee}</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>discord_check_reminder</code></td>
+        <td>{% translate "Reminder template using <code>{role}</code>, <code>{namee}</code>, and <code>{days}</code> placeholders." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Ticket Channel Settings" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Category_ID</code></td>
+        <td>{% translate "Discord category ID where new ticket channels should be created." %}</td>
+      </tr>
+      <tr>
+        <td><code>staff_roles</code></td>
+        <td>{% translate "Comma-separated list of Discord role IDs allowed to view ticket channels." %}</td>
+      </tr>
+      <tr>
+        <td><code>Role_ID</code></td>
+        <td>{% translate "Optional role ID pinged in every new ticket alongside the pilot." %}</td>
+      </tr>
+      <tr>
+        <td><code>excluded_users</code></td>
+        <td>{% translate "Users ignored by automated checks and never given tickets." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-4 text-muted small">
+  {% blocktrans %}Ticket templates support the placeholders noted above. Keep Discord mentions lightweight—most corps ping one escalation role and the affected pilot.{% endblocktrans %}
+</p>
+{% endblock %}

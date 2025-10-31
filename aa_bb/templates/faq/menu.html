@@ -1,0 +1,27 @@
+{% load i18n %}
+{% if perms.aa_bb.basic_access %}
+    <li class="nav-item">
+        <a class="nav-link{% if request.resolver_match.url_name == 'manual' or request.resolver_match.url_name == 'manual_cards' %} active{% endif %}" href="{% url 'aa_bb:manual' %}">
+            <i class="fas fa-clone"></i>
+            <span class="d-md-inline m-2">{% translate "Card Reference" %}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if request.resolver_match.url_name == 'manual_settings' or request.resolver_match.url_name == 'manual_settings_bb' or request.resolver_match.url_name == 'manual_settings_paps' or request.resolver_match.url_name == 'manual_settings_tickets' %} active{% endif %}" href="{% url 'aa_bb:manual_settings' %}">
+            <i class="fas fa-sliders-h"></i>
+            <span class="d-md-inline m-2">{% translate "Config Settings" %}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if request.resolver_match.url_name == 'manual_modules' %} active{% endif %}" href="{% url 'aa_bb:manual_modules' %}">
+            <i class="fas fa-toggle-on"></i>
+            <span class="d-md-inline m-2">{% translate "Module Status" %}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if request.resolver_match.url_name == 'manual_faq' %} active{% endif %}" href="{% url 'aa_bb:manual_faq' %}">
+            <i class="fas fa-question-circle"></i>
+            <span class="d-md-inline m-2">{% translate "FAQ" %}</span>
+        </a>
+    </li>
+{% endif %}

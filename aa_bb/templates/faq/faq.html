@@ -1,0 +1,39 @@
+{% extends 'faq/base.html' %}
+{% load i18n %}
+
+{% block details %}
+<h1>{% translate "Frequently Asked Questions" %}</h1>
+<p class="lead">
+  {% translate "Highlights from recent support chats with corps deploying BigBrother." %}
+</p>
+
+<h2>{% translate "Data Loading & Performance" %}</h2>
+<dl>
+  <dt>{% translate "Does the cache warmer run for every single user?" %}</dt>
+  <dd>
+    {% blocktrans %}The first time you load a pilot it gathers contracts, mails, and transactions and stores the results for about two months. Subsequent visits are instant until the cache expires. For large corps we still suggest setting your gunicorn timeout to 0; the warmer is a best-effort helper but heavy streams can still be killed by strict timeouts.{% endblocktrans %}
+  </dd>
+
+  <dt>{% translate "We still see cards stalling after warming. Any tips?" %}</dt>
+  <dd>
+    {% blocktrans %}Double-check that <code>is_warmer_active</code> is true and Celery workers are running. Some pilots simply have a lot of data—when that happens, keeping timeouts relaxed is the safest fix.{% endblocktrans %}
+  </dd>
+</dl>
+
+<h2>{% translate "PAP Workflow" %}</h2>
+<dl>
+  <dt>{% translate "Does the PAP page pull alliance fleets automatically?" %}</dt>
+  <dd>
+    {% blocktrans %}Not yet. For now you paste exported PAP numbers into the form; once alliance APIs are available the import will be automatic.{% endblocktrans %}
+  </dd>
+
+  <dt>{% translate "What happens if someone rejoins after being removed for low PAPs?" %}</dt>
+  <dd>
+    {% blocktrans %}Rejoining members start over with the configured baseline. If you removed them at zero points, they return with the initial value you set in the configuration.{% endblocktrans %}
+  </dd>
+</dl>
+
+<p class="text-muted small">
+  {% translate "Still stuck? PM Andrew Xadi on discord so we can grow this list." %}
+</p>
+{% endblock %}

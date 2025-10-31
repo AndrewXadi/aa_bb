@@ -75,6 +75,37 @@ def register_menu():
     return BigBrotherMenuItem()
 
 
+class BigBrotherManualMenuItem(MenuItemHook):
+    """Menu entry for the BigBrother user manual."""
+
+    def __init__(self):
+        super().__init__(
+            _("Big Brother Manual"),
+            "fas fa-book",
+            "aa_bb:manual",
+            navactive=[
+                "aa_bb:manual",
+                "aa_bb:manual_cards",
+                "aa_bb:manual_settings",
+                "aa_bb:manual_settings_bb",
+                "aa_bb:manual_settings_paps",
+                "aa_bb:manual_settings_tickets",
+                "aa_bb:manual_modules",
+                "aa_bb:manual_faq",
+            ],
+        )
+
+    def render(self, request):
+        if request.user.has_perm("aa_bb.basic_access"):
+            return super().render(request)
+        return ""
+
+
+@hooks.register("menu_item_hook")
+def register_bigbrother_manual_menu():
+    return BigBrotherManualMenuItem()
+
+
 @hooks.register("url_hook")
 def register_bigbrother_urls():
     return UrlHook(urls, "BigBrother", r"^aa_bb/")

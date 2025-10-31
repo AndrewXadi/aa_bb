@@ -1,5 +1,7 @@
 import html
 import logging
+import time
+import json
 
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib import messages
@@ -9,16 +11,16 @@ from django.http import (
     JsonResponse,
     HttpResponseBadRequest,
     StreamingHttpResponse,
+    HttpResponseForbidden,
 )
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
-import time
-from allianceauth.authentication.models import UserProfile, CharacterOwnership
 from django_celery_beat.models import PeriodicTask
-from django.utils.safestring import mark_safe
-import json
-from django.http import HttpResponseForbidden
+from django.utils import timezone
+
+from allianceauth.authentication.models import UserProfile, CharacterOwnership
+
 from .forms import LeaveRequestForm
 from aa_bb.checks.awox import render_awox_kills_html
 from aa_bb.checks.corp_changes import get_frequent_corp_changes
@@ -341,6 +343,8 @@ def index(request: WSGIRequest):
         "CARD_DEFINITIONS": CARD_DEFINITIONS,
     }
     return render(request, "aa_bb/index.html", context)
+
+
 
 
 # Paginated endpoints for Suspicious Contracts

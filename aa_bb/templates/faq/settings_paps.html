@@ -1,0 +1,129 @@
+{% extends 'faq/base.html' %}
+{% load i18n %}
+
+{% block details %}
+{% include 'faq/settings_nav.html' %}
+
+<h1>{% translate "PapsConfig Fields" %}</h1>
+<p>
+  {% blocktrans %}<code>PapsConfig</code> drives the PAP compliance calculator shown on the PAPs tab and used by the ticket tool. Update these settings in Django admin → BigBrother → PapsConfig before running monthly audits.{% endblocktrans %}
+</p>
+
+<h2 class="mt-4">{% translate "Monthly Targets & Core Modifiers" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>required_paps</code></td>
+        <td>{% translate "Baseline PAPs each pilot must earn per month to stay compliant." %}</td>
+      </tr>
+      <tr>
+        <td><code>corp_modifier</code></td>
+        <td>{% translate "Multiplier applied to corp PAPs when calculating totals." %}</td>
+      </tr>
+      <tr>
+        <td><code>max_corp_paps</code></td>
+        <td>{% translate "Ceiling on how many corp PAPs count after modifiers are applied." %}</td>
+      </tr>
+      <tr>
+        <td><code>lawn_modifier</code></td>
+        <td>{% translate "Multiplier for alliance PAPs." %}</td>
+      </tr>
+      <tr>
+        <td><code>imp_modifier</code></td>
+        <td>{% translate "Multiplier for IMP PAPs." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Group-Based PAP Awards" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>group_paps</code></td>
+        <td>{% translate "AllianceAuth groups that grant additional PAPs when the user belongs to them." %}</td>
+      </tr>
+      <tr>
+        <td><code>group_paps_modifier</code></td>
+        <td>{% translate "Number of PAPs to add per qualifying group membership." %}</td>
+      </tr>
+      <tr>
+        <td><code>capital_groups_get_paps</code></td>
+        <td>{% translate "Enables automatic PAP awards for users in your capital-group selections below." %}</td>
+      </tr>
+      <tr>
+        <td><code>cap_group</code></td>
+        <td>{% translate "Auth group marking capital pilots eligible for bonus PAPs." %}</td>
+      </tr>
+      <tr>
+        <td><code>cap_group_paps</code></td>
+        <td>{% translate "PAP bonus added when a user belongs to <code>cap_group</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>super_group</code></td>
+        <td>{% translate "Auth group used to identify supercapital pilots." %}</td>
+      </tr>
+      <tr>
+        <td><code>super_group_paps</code></td>
+        <td>{% translate "Bonus PAPs awarded to members of <code>super_group</code>." %}</td>
+      </tr>
+      <tr>
+        <td><code>titan_group</code></td>
+        <td>{% translate "Auth group tracking titan pilots." %}</td>
+      </tr>
+      <tr>
+        <td><code>titan_group_paps</code></td>
+        <td>{% translate "Bonus PAPs granted when a user belongs to <code>titan_group</code>." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Exclusions & Overrides" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>excluded_groups</code></td>
+        <td>{% translate "Groups whose members should never receive PAP credit from the <code>group_paps</code> list." %}</td>
+      </tr>
+      <tr>
+        <td><code>excluded_groups_get_paps</code></td>
+        <td>{% translate "When enabled, users in excluded groups still receive one copy of the group modifier rather than zero." %}</td>
+      </tr>
+      <tr>
+        <td><code>excluded_users</code></td>
+        <td>{% translate "Specific users excluded from all PAP awards." %}</td>
+      </tr>
+      <tr>
+        <td><code>excluded_users_paps</code></td>
+        <td>{% translate "Users who still earn PAPs from fleets but not from group modifiers." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-4 text-muted small">
+  {% blocktrans %}Remember to revisit the PAP ticket thresholds in <code>TicketToolConfig</code> after changing required values here so automated tickets stay aligned.{% endblocktrans %}
+</p>
+{% endblock %}

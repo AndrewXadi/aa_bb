@@ -1,0 +1,57 @@
+{% extends 'faq/base.html' %}
+{% load i18n %}
+
+{% block details %}
+<h1>{% translate "Module Status" %}</h1>
+<p>{% translate "Live checks highlight which modules are ready right now and what is missing when they are not." %}</p>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Module" %}</th>
+        <th scope="col">{% translate "Status" %}</th>
+        <th scope="col">{% translate "Current checks" %}</th>
+        <th scope="col">{% translate "Next steps" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for module in modules %}
+        <tr class="{% if module.active %}table-success{% else %}table-warning{% endif %}">
+          <td>
+            <strong>{{ module.name }}</strong>
+            {% if module.summary %}
+              <p class="text-muted small mb-0">{{ module.summary }}</p>
+            {% endif %}
+          </td>
+          <td>
+            {% if module.active %}
+              <span class="badge bg-success">{% translate "Active" %}</span>
+            {% else %}
+              <span class="badge bg-danger">{% translate "Inactive" %}</span>
+            {% endif %}
+          </td>
+          <td>
+            <ul class="mb-0 ps-3">
+              {% for detail in module.details %}
+                <li>{{ detail }}</li>
+              {% endfor %}
+            </ul>
+          </td>
+          <td>
+            <ul class="mb-0 ps-3">
+              {% for action in module.actions %}
+                <li>{{ action }}</li>
+              {% endfor %}
+            </ul>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4">{% translate "No module data available." %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

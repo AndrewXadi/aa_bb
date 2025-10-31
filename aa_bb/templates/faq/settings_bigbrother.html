@@ -1,0 +1,179 @@
+{% extends 'faq/base.html' %}
+{% load i18n %}
+
+{% block details %}
+{% include 'faq/settings_nav.html' %}
+
+<h1>{% translate "BigBrotherConfig Fields" %}</h1>
+<p>
+  {% blocktrans %}The core BigBrother behaviour lives in <code>BigBrotherConfig</code>. These options handle activation, hostile lists, webhooks, and background schedulers. Adjust them from Django admin → BigBrother → BigBrotherConfig.{% endblocktrans %}
+</p>
+
+<h2 class="mt-4">{% translate "Installation & Identity" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>token</code></td>
+        <td>{% translate "Install token issued for the BigBrother service. The updater disables the app if validation fails." %}</td>
+      </tr>
+      <tr>
+        <td><code>main_corporation_id</code> / <code>main_corporation</code></td>
+        <td>{% translate "Populated automatically from the first superuser character detected during the scheduled update task. Identifies your primary corporation." %}</td>
+      </tr>
+      <tr>
+        <td><code>main_alliance_id</code> / <code>main_alliance</code></td>
+        <td>{% translate "Automatically captured alliance counterpart. Both fields are read-only snapshots managed by the updater." %}</td>
+      </tr>
+      <tr>
+        <td><code>is_active</code></td>
+        <td>{% translate "Managed by the updater. Turns false if the token self-destructs or the corporation/alliance is not authorised." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Access Control" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>bb_guest_states</code></td>
+        <td>{% translate "AllianceAuth states treated as guests. Recruiter-level users only see pilots in these states." %}</td>
+      </tr>
+      <tr>
+        <td><code>bb_member_states</code></td>
+        <td>{% translate "States that count as full members for BigBrother and CorpBrother checks." %}</td>
+      </tr>
+      <tr>
+        <td><code>member_corporations</code> / <code>member_alliances</code></td>
+        <td>{% translate "Comma-separated IDs that should be considered members even if they sit outside the primary corp/alliance." %}</td>
+      </tr>
+      <tr>
+        <td><code>ignored_corporations</code></td>
+        <td>{% translate "Corporation IDs excluded from CorpBrother dropdowns and compliance checks." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Hostile & Whitelist Lists" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>hostile_alliances</code> / <code>hostile_corporations</code></td>
+        <td>{% translate "Comma-separated IDs that flag alliances or corporations as hostile. Cards, mails, and transactions look here to colour results red." %}</td>
+      </tr>
+      <tr>
+        <td><code>whitelist_alliances</code> / <code>whitelist_corporations</code></td>
+        <td>{% translate "IDs that should never be flagged, even if they appear in default hostile data sets." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Discord Notifications" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>pingroleID</code> / <code>pingroleID2</code></td>
+        <td>{% translate "Discord role IDs to mention when selected message types fire. Use raw numeric IDs." %}</td>
+      </tr>
+      <tr>
+        <td><code>pingrole1_messages</code> / <code>pingrole2_messages</code></td>
+        <td>{% translate "Choose which <code>MessageType</code> entries ping each role." %}</td>
+      </tr>
+      <tr>
+        <td><code>here_messages</code> / <code>everyone_messages</code></td>
+        <td>{% translate "Message types that should ping @here or @everyone through the configured webhook." %}</td>
+      </tr>
+      <tr>
+        <td><code>webhook</code> / <code>loawebhook</code> / <code>dailywebhook</code> / <code>optwebhook1-5</code></td>
+        <td>{% translate "Discord webhook destinations for core alerts, LoA notices, daily digests, and up to five optional channels." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "ESI Scope Enforcement" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>character_scopes</code> / <code>corporation_scopes</code></td>
+        <td>{% translate "Comma-separated scope requirements. Missing scopes surface in the Compliance card and related alerts." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="mt-4">{% translate "Scheduling & Feature Toggles" %}</h2>
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>{% translate "Field" %}</th>
+        <th>{% translate "Description" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>dailyschedule</code> / <code>optschedule1-5</code></td>
+        <td>{% translate "Celery beat schedules used for daily and optional webhook messages." %}</td>
+      </tr>
+      <tr>
+        <td><code>is_loa_active</code> / <code>is_paps_active</code></td>
+        <td>{% translate "Toggle the integrated LoA and PAP modules. Restart AllianceAuth after changing." %}</td>
+      </tr>
+      <tr>
+        <td><code>is_warmer_active</code></td>
+        <td>{% translate "Enables the cache warmer that preloads contract/mail/transaction streams. Disable only if your gunicorn timeout in supervisor config is set to 0 =." %}</td>
+      </tr>
+      <tr>
+        <td><code>are_daily_messages_active</code> / <code>are_opt_messages1-5_active</code></td>
+        <td>{% translate "Master switches for daily and optional message delivery. Turn off to pause alerts without removing schedules or webhooks." %}</td>
+      </tr>
+      <tr>
+        <td><code>loa_max_logoff_days</code></td>
+        <td>{% translate "Maximum days a user may stay logged off without an LoA before reminders escalate." %}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-4 text-muted small">
+  {% blocktrans %}Fields not listed above are read-only helpers populated by automation. Leave them unchanged unless instructed by the maintainer.{% endblocktrans %}
+</p>
+{% endblock %}
