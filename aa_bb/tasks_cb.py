@@ -2,7 +2,10 @@ from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 from allianceauth.authentication.models import UserProfile
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
-from .models import BigBrotherConfig, CorpStatus, Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,LeaveRequest,ComplianceTicket
+from .models import (
+    BigBrotherConfig, CorpStatus, Messages, OptMessages1, OptMessages2, OptMessages3,
+    OptMessages4, OptMessages5
+)
 import logging
 from .app_settings import send_message, get_pings, resolve_corporation_name, get_users, get_user_id, get_character_id, get_user_profiles
 from aa_bb.checks_cb.hostile_assets import get_corp_hostile_asset_locations
@@ -16,7 +19,7 @@ import time
 import traceback
 import random
 from . import __version__
-from .modelss import PapCompliance, TicketToolConfig
+from .modelss import PapCompliance, TicketToolConfig, LeaveRequest, ComplianceTicket
 from aadiscordbot.tasks import run_task_function
 from aadiscordbot.utils.auth import get_discord_user_id
 from aadiscordbot.cogs.utils.exceptions import NotAuthenticated
@@ -668,8 +671,14 @@ def BB_run_regular_loa_updates():
 
 @shared_task
 def BB_daily_DB_cleanup():
-    from .models import Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache, CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache, id_types
-    from .modelss import CharacterEmploymentCache, FrequentCorpChangesCache, CurrentStintCache, AwoxKillsCache
+    from .models import (
+        Alliance_names, Character_names, Corporation_names, UserStatus, EntityInfoCache,
+        id_types,
+    )
+    from .modelss import (
+        CharacterEmploymentCache, FrequentCorpChangesCache, CurrentStintCache, AwoxKillsCache,
+        CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache,
+    )
     two_months_ago = timezone.now() - timedelta(days=60)
     flags = []
     #Delete old model entries

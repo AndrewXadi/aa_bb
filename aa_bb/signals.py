@@ -6,8 +6,7 @@ from allianceauth.authentication.models import (
     CharacterOwnership, EveCharacter, UserProfile,
 )
 import logging
-from .models import ComplianceTicket
-from .modelss import TicketToolConfig
+from .modelss import TicketToolConfig, ComplianceTicket
 from .app_settings import send_message
 from aadiscordbot.tasks import run_task_function
 from aadiscordbot.utils.auth import get_discord_user_id

@@ -9,8 +9,13 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from typing import Optional, Dict, Tuple, Any, List
 from django.db import transaction, IntegrityError, OperationalError
-from .models import Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types, EntityInfoCache, SovereigntyMapCache, AllianceHistoryCache, CorporationInfoCache
-from .modelss import CharacterEmploymentCache
+from .models import (
+    Alliance_names, Corporation_names, Character_names, BigBrotherConfig, id_types,
+    EntityInfoCache,
+)
+from .modelss import (
+    CharacterEmploymentCache, CorporationInfoCache, AllianceHistoryCache, SovereigntyMapCache,
+)
 from dateutil.parser import parse as parse_datetime
 import time
 from bravado.exception import HTTPError
@@ -869,4 +874,3 @@ def get_user_id(character_name):
         return ownership.user.id
     except CharacterOwnership.DoesNotExist:
         return None
-

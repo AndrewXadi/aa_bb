@@ -2,8 +2,7 @@
 import discord
 import re
 from django.utils import timezone
-from .modelss import TicketToolConfig
-from .models import ComplianceTicket
+from .modelss import TicketToolConfig, ComplianceTicket
 from .app_settings import get_user_model
 from allianceauth.authentication.models import UserProfile
 from django.db import transaction

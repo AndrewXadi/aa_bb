@@ -5,10 +5,10 @@ from django.contrib import admin
 from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
-    BigBrotherConfig,Messages,OptMessages1,OptMessages2,OptMessages3,OptMessages4,OptMessages5,
-    UserStatus,LeaveRequest,WarmProgress,PapsConfig,ComplianceTicket
+    BigBrotherConfig, Messages, OptMessages1, OptMessages2, OptMessages3, OptMessages4,
+    OptMessages5, UserStatus, WarmProgress, PapsConfig
 )
-from .modelss import TicketToolConfig,PapCompliance
+from .modelss import TicketToolConfig, PapCompliance, LeaveRequest, ComplianceTicket
 
 @admin.register(BigBrotherConfig)
 #class BB_ConfigAdmin(SingletonModelAdmin):

@@ -50,7 +50,8 @@ from aa_bb.checks_cb.sus_contracts import (
     gather_user_contracts,
 )
 from .app_settings import get_system_owner, aablacklist_active, get_user_characters, get_entity_info, get_main_character_name, get_character_id, send_message, get_pings, resolve_corporation_name
-from .models import BigBrotherConfig, WarmProgress, LeaveRequest
+from .models import BigBrotherConfig, WarmProgress
+from .modelss import LeaveRequest
 from corptools.models import Contract  # Ensure this is the correct import for Contract model
 #from datetime import datetime
 from django.utils import timezone

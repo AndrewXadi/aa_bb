@@ -3,7 +3,8 @@ from django.conf import settings
 from esi.clients import EsiClientProvider
 from django.utils import timezone
 from datetime import timedelta
-from .models import CorporationInfoCache, Alliance_names, BigBrotherConfig
+from .models import Alliance_names, BigBrotherConfig
+from .modelss import CorporationInfoCache
 import re
 import os
 import time

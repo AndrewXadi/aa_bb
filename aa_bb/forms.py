@@ -1,7 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from .models import LeaveRequest
+from .modelss import LeaveRequest
 
 class LeaveRequestForm(forms.ModelForm):
     start_date = forms.DateField(

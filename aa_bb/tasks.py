@@ -17,6 +17,7 @@ from aa_bb.checks.sus_contracts import get_user_hostile_contracts
 from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from aa_bb.checks.clone_state import determine_character_state
+from aa_bb.checks.corp_changes import time_in_corp
 from datetime import datetime, timedelta
 from django.utils import timezone
 import time
@@ -360,7 +361,7 @@ def BB_run_regular_updates():
                         changes.append(f"##{get_pings('AwoX')} New AwoX kill(s):\n{link_list}")
                         logger.info(f"{char_name} new links")
                         tcfg = TicketToolConfig.get_solo()
-                        if tcfg.awox_monitor_enabled:
+                        if tcfg.awox_monitor_enabled and time_in_corp(user_id) >= 1:
                             try:
                                 try:
                                     user = User.objects.get(id=user_id)

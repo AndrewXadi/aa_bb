@@ -174,6 +174,15 @@ def get_frequent_corp_changes(user_id):
         pass
     return format_html(html)
 
+def time_in_corp(user_id):
+    days = 0
+    characters = CharacterOwnership.objects.filter(user__id=user_id)
+    for char in characters:
+        char_id   = char.character.character_id
+        c_days = get_current_stint_days_in_corp(char_id, BigBrotherConfig.get_solo().main_corporation_id)
+        if c_days > days:
+            days = c_days
+    return days
 
 def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
     """

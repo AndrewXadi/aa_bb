@@ -5,8 +5,8 @@ from django.conf import settings
 from django.utils.timezone import now
 from django.db.models import Count
 from django.urls import reverse
-from .models import BigBrotherConfig, PapsConfig, LeaveRequest
-from .modelss import PapCompliance, TicketToolConfig
+from .models import BigBrotherConfig, PapsConfig
+from .modelss import PapCompliance, TicketToolConfig, LeaveRequest
 from .app_settings import get_user_profiles, get_user_characters, afat_active
 from afat.models import Fat
 from datetime import datetime
