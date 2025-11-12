@@ -1,6 +1,5 @@
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 import logging
-from esi.clients import EsiClientProvider
 import re
 import subprocess
 import sys
@@ -18,14 +17,16 @@ from .modelss import (
 )
 from dateutil.parser import parse as parse_datetime
 import time
-from bravado.exception import HTTPError, BravadoConnectionError
+from httpx import RequestError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from django.contrib.auth import get_user_model
 from allianceauth.framework.api.user import get_main_character_name_from_user
+from esi.exceptions import HTTPClientError, HTTPServerError, HTTPNotModified
+from .esi_client import esi, to_plain, call_result, call_results, parse_expires
+from .esi_cache import expiry_cache_key, get_cached_expiry, set_cached_expiry
 from .app_settings_2 import *
 
 logger = logging.getLogger(__name__)
-esi = EsiClientProvider()
 
 ESI_BASE = "https://esi.evetech.net/latest"
 DATASOURCE = "tranquility"
@@ -105,16 +106,19 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
 
     for attempt in range(1, max_retries + 1):
         try:
-            future = esi.client.Universe.post_universe_names(
+            operation = esi.client.Universe.PostUniverseNames(
                 ids=[eve_id],
                 datasource=datasource or "tranquility",
             )
-            results = future.result()
+            try:
+                results = to_plain(operation.result())
+            except HTTPNotModified:
+                results = to_plain(operation.result(use_etag=False))
             break
-        except HTTPError as exc:
+        except (HTTPClientError, HTTPServerError) as exc:
             logger.warning(f"ESI error resolving {eve_id}: {exc}")
             return None
-        except (BravadoConnectionError, requests.exceptions.RequestException) as exc:
+        except (RequestError, requests.exceptions.RequestException) as exc:
             logger.warning(
                 "Transient ESI connection issue while resolving %s "
                 "(attempt %s/%s): %s",
@@ -196,13 +200,15 @@ def get_character_id(name: str) -> int | None:
         return record.id
 
     # Step 2: Resolve via ESI and reconcile duplicates
+    operation = esi.client.Universe.PostUniverseIds(
+        names=[str(name)],
+        datasource=DATASOURCE,
+    )
     try:
-        future = esi.client.Universe.post_universe_ids(
-            names=[str(name)],
-            datasource=DATASOURCE,
-        )
-        data = future.result()
-    except HTTPError as e:
+        data = to_plain(operation.result())
+    except HTTPNotModified:
+        data = to_plain(operation.result(use_etag=False))
+    except (HTTPClientError, HTTPServerError) as e:
         logger.error(f"ESI error resolving character name '{name}': {e}")
         # Fallback to most recent local record if present
         fallback = (
@@ -241,12 +247,19 @@ def get_character_id(name: str) -> int | None:
             try:
                 # Resolve correct names for stale IDs using ESI
                 stale_ids = [int(s.id) for s in stale_qs]
-                name_future = esi.client.Universe.post_universe_names(
+                name_future = esi.client.Universe.PostUniverseNames(
                     ids=stale_ids,
                     datasource=DATASOURCE,
                 )
-                name_rows = {int(r.get("id")): r.get("name") for r in name_future.result() or []}
-            except HTTPError:
+                try:
+                    name_data = to_plain(name_future.result())
+                except HTTPNotModified:
+                    name_data = to_plain(name_future.result(use_etag=False))
+                name_rows = {
+                    int(r.get("id")): r.get("name")
+                    for r in (name_data or [])
+                }
+            except (HTTPClientError, HTTPServerError):
                 name_rows = {}
 
             for stale in stale_qs:
@@ -439,23 +452,47 @@ def get_character_employment(character_or_id) -> list[dict]:
             )
 
     # 2. Cache: try DB (4h TTL)
+    expiry_key = expiry_cache_key("char_emp", char_id)
+    expiry_hint = get_cached_expiry(expiry_key)
+    cache_entry = None
+    cached_rows = None
     try:
         ce = CharacterEmploymentCache.objects.get(pk=char_id)
-        if timezone.now() - ce.updated < TTL_SHORT:
+        cache_entry = ce
+        cached_rows = _deser_employment(ce.data)
+        now_ts = timezone.now()
+        if expiry_hint and expiry_hint > now_ts:
+            return cached_rows
+        if expiry_hint is None and now_ts - ce.updated < TTL_SHORT:
             try:
                 ce.last_accessed = timezone.now()
                 ce.save(update_fields=['last_accessed'])
             except Exception:
                 ce.save()
-            return _deser_employment(ce.data)
+            return cached_rows
     except CharacterEmploymentCache.DoesNotExist:
-        pass
+        cache_entry = None
 
     # 3. Fetch the corp history from ESI
+    operation = esi.client.Character.GetCharactersCharacterIdCorporationhistory(
+        character_id=char_id
+    )
     try:
-        response = esi.client.Character.get_characters_character_id_corporationhistory(
-            character_id=char_id
-        ).results()
+        response, new_expiry = call_results(operation)
+        set_cached_expiry(expiry_key, new_expiry)
+    except HTTPNotModified as exc:
+        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
+        if cache_entry:
+            try:
+                cache_entry.updated = timezone.now()
+                cache_entry.last_accessed = timezone.now()
+                cache_entry.save(update_fields=["updated", "last_accessed"])
+            except Exception:
+                cache_entry.save()
+            return cached_rows or _deser_employment(cache_entry.data)
+        logger.debug("ESI returned 304 for char %s but no cache available", char_id)
+        response, new_expiry = call_results(operation, use_etag=False)
+        set_cached_expiry(expiry_key, new_expiry)
     except Exception as e:
         logger.exception(f"ESI failure for character_id {char_id}: {e}")
         return []
@@ -528,25 +565,48 @@ def get_corporation_info(corp_id):
     """
     Fetch corporation info from DB cache or ESI (24h TTL).
     """
+    expiry_key = expiry_cache_key("corp_info", corp_id)
+    expiry_hint = get_cached_expiry(expiry_key)
     # 1) Try DB cache first
+    cached_entry = None
     try:
         entry = CorporationInfoCache.objects.get(pk=corp_id)
-        if timezone.now() - entry.updated < CORP_TTL:
+        cached_entry = entry
+        now_ts = timezone.now()
+        if expiry_hint and expiry_hint > now_ts:
             return {"name": entry.name, "member_count": entry.member_count}
-        # else: expired → delete to refresh
-        entry.delete()
+        if expiry_hint is None and now_ts - entry.updated < CORP_TTL:
+            return {"name": entry.name, "member_count": entry.member_count}
     except CorporationInfoCache.DoesNotExist:
-        pass
+        entry = None
 
     # 2) Fetch fresh from ESI
     try:
-        result = esi.client.Corporation.get_corporations_corporation_id(
+        operation = esi.client.Corporation.GetCorporationsCorporationId(
             corporation_id=corp_id
-        ).results()
+        )
+        result, expires_at = call_result(operation)
+        set_cached_expiry(expiry_key, expires_at)
         info = {
             "name": result.get("name", f"Unknown ({corp_id})"),
             "member_count": result.get("member_count", 0),
         }
+    except HTTPNotModified as exc:
+        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
+        if cached_entry:
+            cached_entry.updated = timezone.now()
+            cached_entry.save(update_fields=["updated"])
+            return {"name": cached_entry.name, "member_count": cached_entry.member_count}
+        logger.debug("ESI returned 304 for corp %s but no cache exists", corp_id)
+        try:
+            result, expires_at = call_result(operation, use_etag=False)
+            set_cached_expiry(expiry_key, expires_at)
+            return {
+                "name": result.get("name", f"Unknown ({corp_id})"),
+                "member_count": result.get("member_count", 0),
+            }
+        except Exception:
+            return {"name": f"Unknown Corp ({corp_id})", "member_count": 0}
     except (SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:
@@ -567,11 +627,21 @@ def ensure_datetime(value):
         return parse_datetime(value)
     return value
 
-def _fetch_alliance_history(corp_id):
+def _fetch_alliance_history(corp_id, expiry_key, cached_history=None):
+    operation = esi.client.Corporation.GetCorporationsCorporationIdAlliancehistory(
+        corporation_id=corp_id
+    )
     try:
-        return esi.client.Corporation.get_corporations_corporation_id_alliancehistory(
-            corporation_id=corp_id
-        ).results()
+        data, expires_at = call_results(operation)
+        set_cached_expiry(expiry_key, expires_at)
+        return data
+    except HTTPNotModified as exc:
+        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
+        if cached_history is not None:
+            return cached_history
+        data, expires_at = call_results(operation, use_etag=False)
+        set_cached_expiry(expiry_key, expires_at)
+        return data
     except (SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:
@@ -605,25 +675,35 @@ def _serialize_datetime(value):
 
 def get_alliance_history_for_corp(corp_id):
     # 1) Try DB cache first
+    cached_history = None
+    expiry_key = expiry_cache_key("corp_alliance_history", corp_id)
+    expiry_hint = get_cached_expiry(expiry_key)
     try:
         entry = AllianceHistoryCache.objects.get(pk=corp_id)
-        if entry.is_fresh:
-            return [
-                {
-                    "alliance_id": h.get("alliance_id"),
-                    "start_date": _parse_datetime(h.get("start_date")),
-                }
-                for h in entry.history
-            ]
-        else:
-            entry.delete()
+        cached_history = [
+            {
+                "alliance_id": h.get("alliance_id"),
+                "start_date": _parse_datetime(h.get("start_date")),
+            }
+            for h in entry.history
+        ]
+        now_ts = timezone.now()
+        if expiry_hint and expiry_hint > now_ts:
+            return cached_history
+        if expiry_hint is None and entry.is_fresh:
+            return cached_history
+        entry.delete()
     except AllianceHistoryCache.DoesNotExist:
         pass
 
     # 2) Fetch fresh directly
     history = []
     try:
-        response = _fetch_alliance_history(corp_id)
+        response = _fetch_alliance_history(
+            corp_id,
+            expiry_key=expiry_key,
+            cached_history=cached_history,
+        )
         history = [
             {
                 "alliance_id": h.get("alliance_id"),

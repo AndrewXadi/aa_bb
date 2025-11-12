@@ -1,6 +1,5 @@
 from django.apps import apps
 from django.conf import settings
-from esi.clients import EsiClientProvider
 from django.utils import timezone
 from datetime import timedelta
 from .models import Alliance_names, BigBrotherConfig
@@ -12,12 +11,14 @@ from collections import deque
 import subprocess
 import sys
 import requests
-from bravado.exception import HTTPError
+from httpx import RequestError
+from esi.exceptions import HTTPClientError, HTTPServerError, HTTPNotModified
+from .esi_client import esi, to_plain, call_result, parse_expires
+from .esi_cache import expiry_cache_key, get_cached_expiry, set_cached_expiry
 
 
 import logging
 logger = logging.getLogger(__name__)
-esi = EsiClientProvider()
 TTL_SHORT = timedelta(hours=4)
 
 def get_main_corp_id():
@@ -48,12 +49,24 @@ def get_corp_info(corp_id):
             "alliance_id": None
         }
 
+    expiry_key = expiry_cache_key("corp_info", corp_id)
+    expiry_hint = get_cached_expiry(expiry_key)
+
     # Try DB cache first
+    cached_entry = None
     try:
         entry = CorporationInfoCache.objects.get(pk=corp_id)
-        if timezone.now() - entry.updated < TTL_SHORT:
+        now_ts = timezone.now()
+        if expiry_hint and expiry_hint > now_ts:
+            return {"name": entry.name, "alliance_id": getattr(entry, "alliance_id", None)}
+        if expiry_hint is None and now_ts - entry.updated < TTL_SHORT:
             return {"name": entry.name, "alliance_id": getattr(entry, "alliance_id", None)}
         else:
+            cached_entry = {
+                "name": entry.name,
+                "alliance_id": getattr(entry, "alliance_id", None),
+                "member_count": entry.member_count,
+            }
             entry.delete()
     except CorporationInfoCache.DoesNotExist:
         pass
@@ -62,17 +75,43 @@ def get_corp_info(corp_id):
     member_count = 0
     try:
         #logger.debug(f"Fetching corp info for corp_id {corp_id}")
-        result = esi.client.Corporation.get_corporations_corporation_id(
+        operation = esi.client.Corporation.GetCorporationsCorporationId(
             corporation_id=corp_id
-        ).results()
+        )
+        result, expires_at = call_result(operation)
+        set_cached_expiry(expiry_key, expires_at)
         data = {
             "name": result.get("name", f"Unknown ({corp_id})"),
             # alliance_id is not part of CorporationInfoCache model, we return it only
             "alliance_id": result.get("alliance_id"),
         }
         member_count = result.get("member_count", 0)
-    except Exception as e:
-        logger.warning(f"Error fetching corp {corp_id}: {e}")
+    except HTTPNotModified as exc:
+        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
+        if cached_entry:
+            data = {
+                "name": cached_entry["name"],
+                "alliance_id": cached_entry["alliance_id"],
+            }
+            member_count = cached_entry.get("member_count", 0)
+        else:
+            try:
+                result, expires_at = call_result(operation, use_etag=False)
+                set_cached_expiry(expiry_key, expires_at)
+                data = {
+                    "name": result.get("name", f"Unknown ({corp_id})"),
+                    "alliance_id": result.get("alliance_id"),
+                }
+                member_count = result.get("member_count", 0)
+            except Exception as e:
+                logger.warning(f"Error fetching corp {corp_id} after 304: {e}")
+                data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
+                member_count = 0
+    except (HTTPClientError, HTTPServerError) as e:
+        logger.warning(f"ESI error fetching corp {corp_id}: {e}")
+        data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
+    except (RequestError, requests.exceptions.RequestException) as e:
+        logger.warning(f"Network error fetching corp {corp_id}: {e}")
         data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
 
     # Store/update DB cache
@@ -92,18 +131,43 @@ def get_alliance_name(alliance_id):
     # Try DB cache first with 4h TTL
     try:
         rec = Alliance_names.objects.get(pk=alliance_id)
-        if timezone.now() - rec.updated < TTL_SHORT:
-            return rec.name
     except Alliance_names.DoesNotExist:
         rec = None
 
+    expiry_key = expiry_cache_key("alliance_name", alliance_id)
+    expiry_hint = get_cached_expiry(expiry_key)
+    if rec:
+        now_ts = timezone.now()
+        if expiry_hint and expiry_hint > now_ts:
+            return rec.name
+        if expiry_hint is None and now_ts - rec.updated < TTL_SHORT:
+            return rec.name
+
+    cached_name = rec.name if rec else None
+    operation = esi.client.Alliance.GetAlliancesAllianceId(
+        alliance_id=alliance_id
+    )
     try:
-        result = esi.client.Alliance.get_alliances_alliance_id(
-            alliance_id=alliance_id
-        ).results()
+        result, expires_at = call_result(operation)
+        set_cached_expiry(expiry_key, expires_at)
         name = result.get("name", f"Unknown ({alliance_id})")
-    except Exception as e:
-        logger.warning(f"Error fetching alliance {alliance_id}: {e}")
+    except HTTPNotModified as exc:
+        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
+        if cached_name:
+            name = cached_name
+        else:
+            try:
+                result, expires_at = call_result(operation, use_etag=False)
+                set_cached_expiry(expiry_key, expires_at)
+                name = result.get("name", f"Unknown ({alliance_id})")
+            except Exception as e:
+                logger.warning(f"Error fetching alliance {alliance_id} after 304: {e}")
+                name = f"Unknown ({alliance_id})"
+    except (HTTPClientError, HTTPServerError) as e:
+        logger.warning(f"ESI error fetching alliance {alliance_id}: {e}")
+        name = f"Unknown ({alliance_id})"
+    except (RequestError, requests.exceptions.RequestException) as e:
+        logger.warning(f"Network error fetching alliance {alliance_id}: {e}")
         name = f"Unknown ({alliance_id})"
 
     try:
@@ -306,7 +370,7 @@ def send_message(message: str, hook: str = None):
                 response = requests.post(webhook_url, json=payload)
                 response.raise_for_status()
                 return  # success
-            except HTTPError:
+            except requests.exceptions.HTTPError:
                 if response.status_code == 429:
                     # obey Discord's Retry-After header
                     retry_after = response.headers.get("Retry-After")

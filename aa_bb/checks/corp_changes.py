@@ -2,14 +2,19 @@ import logging
 from datetime import timedelta
 from django.utils.html import format_html
 from django.utils.timezone import now, timezone
-from esi.clients import EsiClientProvider
 from allianceauth.authentication.models import CharacterOwnership
 from ..models import BigBrotherConfig
-from ..app_settings import ensure_datetime, is_npc_corporation, get_alliance_history_for_corp, get_alliance_name, get_corporation_info
+from ..app_settings import (
+    ensure_datetime,
+    is_npc_corporation,
+    get_alliance_history_for_corp,
+    get_alliance_name,
+    get_corporation_info,
+    get_character_employment,
+)
 from ..modelss import FrequentCorpChangesCache, CurrentStintCache
 
 logger = logging.getLogger(__name__)
-esi = EsiClientProvider()
 TTL_SHORT = timedelta(hours=4)
 
 # External site favicons, fetched each time directly from the source
@@ -46,9 +51,7 @@ def get_frequent_corp_changes(user_id):
         char_name = str(char.character)
         char_id   = char.character.character_id
         try:
-            response = esi.client.Character.get_characters_character_id_corporationhistory(
-                character_id=char.character.character_id
-            ).results()
+            history = get_character_employment(char_id)
         except Exception:
             continue
 
@@ -74,7 +77,6 @@ def get_frequent_corp_changes(user_id):
             f'style="margin-left:2px;vertical-align:middle;"/></a> '
         )
 
-        history = list(reversed(response))
         rows = []
 
         for idx, membership in enumerate(history):
@@ -206,16 +208,13 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
         except CurrentStintCache.DoesNotExist:
             pass
 
-        # Pull history (newest entry first from ESI)
-        history = esi.client.Character.get_characters_character_id_corporationhistory(
-            character_id=char_id
-        ).results()
+        history = get_character_employment(char_id)
 
         if not history:
             return 0
 
-        # Latest membership is always at index 0
-        latest = history[0]
+        # Latest membership is always at the end of our list
+        latest = history[-1]
         if latest["corporation_id"] != corp_id:
             return 0
 
