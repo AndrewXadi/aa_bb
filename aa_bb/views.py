@@ -153,16 +153,6 @@ def load_cards(request: WSGIRequest) -> JsonResponse:
         })
     return JsonResponse({"cards": cards})
 
-@login_required
-@permission_required("aa_bb.basic_access")
-def warm_cache(request):
-    option  = request.GET.get("option", "")
-    user_id = get_user_id(option)
-    if user_id:
-        warm_entity_cache_task.delay(user_id)
-        return JsonResponse({"started": True})
-    return JsonResponse({"error": "Unknown account"}, status=400)
-
 @shared_task(bind=True)
 def warm_entity_cache_task(self, user_id):
     """
@@ -264,7 +254,7 @@ def warm_cache(request):
     Immediately registers a WarmProgress row so queued tasks also appear.
     """
     if not BigBrotherConfig.get_solo().is_warmer_active:
-        return
+        return JsonResponse({"error": "Warmer disabled"}, status=403)
     option  = request.GET.get("option", "")
     user_id = get_user_id(option)
     if not user_id:
