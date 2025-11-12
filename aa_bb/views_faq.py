@@ -1,15 +1,31 @@
+import secrets
+
+import requests
 from django.apps import apps as django_apps
-from django.db import OperationalError, ProgrammingError
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.handlers.wsgi import WSGIRequest
-from django.shortcuts import render
+from django.db import OperationalError, ProgrammingError
+from django.http import HttpResponseBadRequest
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_celery_beat.models import PeriodicTask
+from urllib.parse import quote_plus
 
 from .models import BigBrotherConfig, PapsConfig
-from .modelss import TicketToolConfig
+from .modelss import (
+    TicketToolConfig,
+    BigBrotherRedditSettings,
+    BigBrotherRedditMessage,
+)
+from .reddit import (
+    is_reddit_module_visible,
+    reddit_status,
+    reddit_app_configured,
+)
 
 
 @login_required
@@ -60,6 +76,21 @@ def manual_modules(request: WSGIRequest):
         ticket_cfg = None
         ticket_cfg_error = str(exc)
 
+    reddit_cfg = None
+    reddit_cfg_error = None
+    reddit_messages_error = None
+    reddit_messages_count = 0
+    if is_reddit_module_visible():
+        try:
+            reddit_cfg = BigBrotherRedditSettings.get_solo()
+        except (OperationalError, ProgrammingError) as exc:
+            reddit_cfg_error = str(exc)
+        else:
+            try:
+                reddit_messages_count = BigBrotherRedditMessage.objects.count()
+            except (OperationalError, ProgrammingError) as exc:
+                reddit_messages_error = str(exc)
+
     task_name = "BB run regular updates"
     periodic_task = PeriodicTask.objects.filter(name=task_name).first()
 
@@ -79,7 +110,7 @@ def manual_modules(request: WSGIRequest):
             if action_text and action_text not in actions:
                 actions.append(action_text)
 
-    def make_module(name, summary, issues, actions, info=None, active_override=None):
+    def make_module(name, summary, issues, actions, info=None, active_override=None, cta=None):
         info = info or []
         issues = list(dict.fromkeys(issues))
         actions = list(dict.fromkeys(actions))
@@ -96,6 +127,7 @@ def manual_modules(request: WSGIRequest):
             "active": bool(active),
             "details": details,
             "actions": actions,
+            "cta": cta,
         }
 
     # BigBrother Core Dashboard
@@ -484,6 +516,172 @@ def manual_modules(request: WSGIRequest):
         )
     )
 
+    if is_reddit_module_visible():
+        reddit_issues, reddit_actions, reddit_info = [], [], []
+        reddit_cta = None
+        reddit_active = False
+        summary = _("Automated posts to r/evejobs plus reply monitoring.")
+        reddit_setup_action = None
+
+        if reddit_cfg is None:
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                True,
+                format_html(
+                    "BigBrotherRedditSettings could not be loaded ({}).",
+                    reddit_cfg_error or _("database schema mismatch"),
+                ),
+                format_html("Run {} to apply pending migrations.", format_html("<code>manage.py migrate aa_bb</code>")),
+            )
+        elif reddit_messages_error:
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                True,
+                format_html("Reddit message table unavailable ({}).", reddit_messages_error),
+                format_html("Run {} to apply pending migrations.", format_html("<code>manage.py migrate aa_bb</code>")),
+            )
+        else:
+            status = reddit_status(reddit_cfg)
+            if not status.api_credentials_ready:
+                reddit_callback_url = request.build_absolute_uri(
+                    reverse("aa_bb:reddit_oauth_callback")
+                )
+                reddit_apps_link = format_html(
+                    '<a href="https://www.reddit.com/prefs/apps" target="_blank" rel="noopener noreferrer">{}</a>',
+                    _("reddit.com/prefs/apps"),
+                )
+                reddit_setup_action = format_html(
+                    _("Create a Reddit <strong>script</strong> application at {} and set the redirect URI to {}."),
+                    reddit_apps_link,
+                    format_html("<code>{}</code>", reddit_callback_url),
+                )
+            if reddit_messages_count:
+                reddit_info.append(
+                    format_html(_("Messages queued: {}"), reddit_messages_count)
+                )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not status.messages_ready,
+                format_html("{} has no entries.", code("BigBrotherRedditMessage")),
+                format_html("{}", _("Add at least one reddit message in Django admin.")),
+            )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not status.api_credentials_ready,
+                format_html("{}", _("Fill the reddit API credentials in BigBrotherRedditSettings.")),
+                format_html("{}", _("Populate client id, secret and user agent.")),
+            )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not status.praw_ready,
+                format_html("Python package {} is not installed.", code("praw")),
+                format_html("{}", _("Install praw inside your AllianceAuth virtualenv.")),
+            )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not reddit_cfg.reddit_scope,
+                format_html("{}", _("Reddit OAuth scope list is empty.")),
+                format_html("{}", _("Provide the scopes you need (e.g. 'identity submit read').")),
+            )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not reddit_cfg.reddit_webhook,
+                format_html("{} is empty.", code("BigBrotherRedditSettings.reddit_webhook")),
+                format_html("{}", _("Paste the Discord webhook that should receive publication notices.")),
+            )
+            register_issue(
+                reddit_issues,
+                reddit_actions,
+                not reddit_cfg.enabled,
+                format_html("{} is disabled.", code("BigBrotherRedditSettings.enabled")),
+                format_html("{}", _("Flip the enabled toggle once you are ready to post.")),
+            )
+
+            ready_for_oauth = (
+                status.messages_ready
+                and status.api_credentials_ready
+                and status.praw_ready
+            )
+            if ready_for_oauth and not status.token_available:
+                login_url = reverse("aa_bb:reddit_oauth_login")
+                reddit_cta = format_html(
+                    '<a class="btn btn-outline-primary btn-sm" href="{}">{}</a>',
+                    login_url,
+                    _("Authorize Reddit"),
+                )
+                register_issue(
+                    reddit_issues,
+                    reddit_actions,
+                    True,
+                    format_html("{}", _("Reddit OAuth token missing.")),
+                    format_html("{}", _("Use the button below to store the non-expiring token.")),
+                )
+            elif not status.token_available:
+                register_issue(
+                    reddit_issues,
+                    reddit_actions,
+                    True,
+                    format_html("{}", _("Reddit OAuth token is missing but other requirements are incomplete.")),
+                    format_html("{}", _("Complete the other checks, refresh, then authorize Reddit.")),
+                )
+            else:
+                if reddit_cfg.reddit_token_obtained:
+                    token_ts = timezone.localtime(reddit_cfg.reddit_token_obtained)
+                    reddit_info.append(
+                        format_html(
+                            "{} {}",
+                            _("Reddit token stored:"),
+                            token_ts.strftime("%Y-%m-%d %H:%M %Z"),
+                        )
+                    )
+                if reddit_cfg.reddit_account_name:
+                    reddit_info.append(
+                        format_html(
+                            _("Authorized as u/{}."),
+                            reddit_cfg.reddit_account_name,
+                        )
+                    )
+
+            reddit_info.append(
+                format_html(
+                    _("Posting to r/{} every {} day(s) at 13:00 EVE time."),
+                    reddit_cfg.reddit_subreddit,
+                    reddit_cfg.post_interval_days,
+                )
+            )
+            if reddit_cfg.last_submission_at:
+                reddit_info.append(
+                    format_html(
+                        _("Last submission: {} UTC."),
+                        timezone.localtime(reddit_cfg.last_submission_at).strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
+
+            reddit_active = (
+                status.fully_operational
+                and status.token_available
+                and reddit_cfg.enabled
+            )
+
+        modules.append(
+            make_module(
+                _("Reddit recruitment"),
+                summary,
+                reddit_issues,
+                reddit_actions + ([reddit_setup_action] if reddit_setup_action else []),
+                info=reddit_info,
+                active_override=reddit_active,
+                cta=reddit_cta,
+            )
+        )
+
     return render(request, "faq/modules.html", {"modules": modules})
 
 
@@ -492,3 +690,130 @@ def manual_modules(request: WSGIRequest):
 def manual_faq(request: WSGIRequest):
     """Manual tab: FAQ content."""
     return render(request, "faq/faq.html")
+
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def reddit_oauth_login(request: WSGIRequest):
+    if not is_reddit_module_visible():
+        return HttpResponseBadRequest("Reddit module is not available for this corporation.")
+
+    try:
+        reddit_cfg = BigBrotherRedditSettings.get_solo()
+    except (OperationalError, ProgrammingError) as exc:
+        messages.error(request, _("Could not load reddit settings: {}.").format(exc))
+        return redirect("aa_bb:manual_modules")
+
+    if not reddit_app_configured(reddit_cfg):
+        messages.error(request, _("Reddit OAuth client id/secret must be configured first."))
+        return redirect("aa_bb:manual_modules")
+
+    state = secrets.token_urlsafe(32)
+    request.session["bb_reddit_oauth_state"] = state
+
+    redirect_uri = reddit_cfg.reddit_redirect_override or request.build_absolute_uri(
+        reverse("aa_bb:reddit_oauth_callback")
+    )
+    scope = reddit_cfg.reddit_scope or "identity submit read"
+    auth_url = (
+        "https://www.reddit.com/api/v1/authorize"
+        f"?client_id={reddit_cfg.reddit_client_id}"
+        "&response_type=code"
+        f"&redirect_uri={quote_plus(redirect_uri)}"
+        "&duration=permanent"
+        f"&scope={quote_plus(scope)}"
+        f"&state={quote_plus(state)}"
+    )
+    return redirect(auth_url)
+
+
+@login_required
+@permission_required("aa_bb.basic_access")
+def reddit_oauth_callback(request: WSGIRequest):
+    if not is_reddit_module_visible():
+        return HttpResponseBadRequest("Reddit module is not available for this corporation.")
+
+    expected_state = request.session.get("bb_reddit_oauth_state")
+    returned_state = request.GET.get("state")
+    if not expected_state or expected_state != returned_state:
+        return HttpResponseBadRequest("Invalid OAuth state.")
+
+    error = request.GET.get("error")
+    if error:
+        messages.error(request, _("Reddit authorization failed: {}.").format(error))
+        return redirect("aa_bb:manual_modules")
+
+    code_value = request.GET.get("code")
+    if not code_value:
+        messages.error(request, _("Reddit did not return an authorization code."))
+        return redirect("aa_bb:manual_modules")
+
+    try:
+        reddit_cfg = BigBrotherRedditSettings.get_solo()
+    except (OperationalError, ProgrammingError) as exc:
+        messages.error(request, _("Could not load reddit settings: {}.").format(exc))
+        return redirect("aa_bb:manual_modules")
+
+    if not reddit_app_configured(reddit_cfg):
+        messages.error(request, _("Reddit OAuth client id/secret must be configured first."))
+        return redirect("aa_bb:manual_modules")
+
+    redirect_uri = reddit_cfg.reddit_redirect_override or request.build_absolute_uri(
+        reverse("aa_bb:reddit_oauth_callback")
+    )
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": code_value,
+        "redirect_uri": redirect_uri,
+    }
+
+    headers = {
+        "User-Agent": reddit_cfg.reddit_user_agent or "aa-bb-reddit-oauth/1.0",
+    }
+
+    try:
+        response = requests.post(
+            "https://www.reddit.com/api/v1/access_token",
+            data=data,
+            headers=headers,
+            auth=(reddit_cfg.reddit_client_id, reddit_cfg.reddit_client_secret),
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        messages.error(request, _("Reddit token exchange failed: {}.").format(exc))
+        return redirect("aa_bb:manual_modules")
+    except ValueError:
+        messages.error(request, _("Reddit token exchange returned an unexpected payload."))
+        return redirect("aa_bb:manual_modules")
+
+    reddit_cfg.reddit_access_token = payload.get("access_token", "")
+    refresh_token = payload.get("refresh_token")
+    if refresh_token:
+        reddit_cfg.reddit_refresh_token = refresh_token
+    reddit_cfg.reddit_token_type = payload.get("token_type", "")
+    reddit_cfg.reddit_token_obtained = timezone.now()
+    reddit_cfg.save()
+
+    if reddit_cfg.reddit_access_token:
+        me_headers = {
+            "Authorization": f"bearer {reddit_cfg.reddit_access_token}",
+            "User-Agent": headers["User-Agent"],
+        }
+        try:
+            me_resp = requests.get(
+                "https://oauth.reddit.com/api/v1/me",
+                headers=me_headers,
+                timeout=15,
+            )
+            if me_resp.ok:
+                reddit_cfg.reddit_account_name = me_resp.json().get("name", "")
+                reddit_cfg.save(update_fields=["reddit_account_name"])
+        except requests.RequestException:
+            pass
+
+    request.session.pop("bb_reddit_oauth_state", None)
+    messages.success(request, _("Reddit token stored successfully for the reddit module."))
+    return redirect("aa_bb:manual_modules")

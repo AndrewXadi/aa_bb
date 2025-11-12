@@ -18,7 +18,7 @@ from .modelss import (
 )
 from dateutil.parser import parse as parse_datetime
 import time
-from bravado.exception import HTTPError
+from bravado.exception import HTTPError, BravadoConnectionError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from django.contrib.auth import get_user_model
 from allianceauth.framework.api.user import get_main_character_name_from_user
@@ -99,15 +99,33 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
     if eve_id is None:
         logging.warning("No EVE ID provided to get_eve_entity_type_int")
         return None
-    try:
-        future = esi.client.Universe.post_universe_names(
-            ids=[eve_id],                # must be `ids`
-            datasource=datasource or "tranquility"
-        )
-        results = future.result()        # <-- use .result(), not .results()
-    except HTTPError as e:
-        logging.warning(f"ESI error resolving {eve_id}: {e}")
-        return None
+    max_retries = 3
+    delay_seconds = 0.5
+    results = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            future = esi.client.Universe.post_universe_names(
+                ids=[eve_id],
+                datasource=datasource or "tranquility",
+            )
+            results = future.result()
+            break
+        except HTTPError as exc:
+            logger.warning(f"ESI error resolving {eve_id}: {exc}")
+            return None
+        except (BravadoConnectionError, requests.exceptions.RequestException) as exc:
+            logger.warning(
+                "Transient ESI connection issue while resolving %s "
+                "(attempt %s/%s): %s",
+                eve_id,
+                attempt,
+                max_retries,
+                exc,
+            )
+            if attempt == max_retries:
+                return None
+            time.sleep(delay_seconds * attempt)
 
     if not results:
         return None

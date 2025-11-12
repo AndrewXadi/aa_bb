@@ -8,6 +8,7 @@ class AaBbConfig(AppConfig):
 
     def ready(self):
         import aa_bb.signals
+        import aa_bb.tasks_reddit  # noqa: F401  # ensure Celery auto-discovery
         import logging
         logger = logging.getLogger(__name__)
         from .models import MessageType
@@ -347,8 +348,76 @@ class AaBbConfig(AppConfig):
                     if existing_task:
                         existing_task.delete()
                         logger.info(f"🗑️ Deleted '{name}' periodic task because messages are disabled")
+
+            from .reddit import is_reddit_module_visible
+
+            reddit_task_names = [
+                "BB reddit evejobs post",
+                "BB reddit reply watcher",
+            ]
+
+            if is_reddit_module_visible():
+                reddit_post_schedule, _ = CrontabSchedule.objects.get_or_create(
+                    minute="0",
+                    hour="13",
+                    day_of_week="*",
+                    day_of_month="*",
+                    month_of_year="*",
+                    timezone="UTC",
+                )
+
+                reddit_post_task, created_reddit_post = PeriodicTask.objects.get_or_create(
+                    name="BB reddit evejobs post",
+                    defaults={
+                        "crontab": reddit_post_schedule,
+                        "task": "aa_bb.tasks_reddit.post_reddit_recruitment",
+                        "enabled": False,
+                    },
+                )
+                if not created_reddit_post:
+                    updated = False
+                    if reddit_post_task.crontab != reddit_post_schedule:
+                        reddit_post_task.crontab = reddit_post_schedule
+                        updated = True
+                    if reddit_post_task.task != "aa_bb.tasks_reddit.post_reddit_recruitment":
+                        reddit_post_task.task = "aa_bb.tasks_reddit.post_reddit_recruitment"
+                        updated = True
+                    if updated:
+                        reddit_post_task.save()
+                        logger.info("✅ Updated 'BB reddit evejobs post' periodic task")
+
+                reddit_reply_schedule, _ = CrontabSchedule.objects.get_or_create(
+                    minute="0",
+                    hour="*",
+                    day_of_week="*",
+                    day_of_month="*",
+                    month_of_year="*",
+                    timezone="UTC",
+                )
+
+                reddit_reply_task, created_reddit_reply = PeriodicTask.objects.get_or_create(
+                    name="BB reddit reply watcher",
+                    defaults={
+                        "crontab": reddit_reply_schedule,
+                        "task": "aa_bb.tasks_reddit.monitor_reddit_replies",
+                        "enabled": False,
+                    },
+                )
+                if not created_reddit_reply:
+                    updated = False
+                    if reddit_reply_task.crontab != reddit_reply_schedule:
+                        reddit_reply_task.crontab = reddit_reply_schedule
+                        updated = True
+                    if reddit_reply_task.task != "aa_bb.tasks_reddit.monitor_reddit_replies":
+                        reddit_reply_task.task = "aa_bb.tasks_reddit.monitor_reddit_replies"
+                        updated = True
+                    if updated:
+                        reddit_reply_task.save()
+                        logger.info("✅ Updated 'BB reddit reply watcher' periodic task")
+            else:
+                deleted, _ = PeriodicTask.objects.filter(name__in=reddit_task_names).delete()
+                if deleted:
+                    logger.info("🗑️ Removed reddit periodic tasks because corp gate is not satisfied")
         except (OperationalError, ProgrammingError) as e:
             logger.warning(f"Could not register periodic task yet: {e}")
-
-
 

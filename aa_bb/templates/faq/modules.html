@@ -23,6 +23,11 @@
             {% if module.summary %}
               <p class="text-muted small mb-0">{{ module.summary }}</p>
             {% endif %}
+            {% if module.cta %}
+              <div class="mt-2">
+                {{ module.cta|safe }}
+              </div>
+            {% endif %}
           </td>
           <td>
             {% if module.active %}

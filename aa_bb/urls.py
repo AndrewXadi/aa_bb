@@ -27,6 +27,12 @@ urlpatterns = [
         name="manual_settings_tickets",
     ),
     path("manual/modules/", views_faq.manual_modules, name="manual_modules"),
+    path("manual/modules/reddit/login/", views_faq.reddit_oauth_login, name="reddit_oauth_login"),
+    path(
+        "manual/modules/reddit/oauth/callback/",
+        views_faq.reddit_oauth_callback,
+        name="reddit_oauth_callback",
+    ),
     path("manual/faq/", views_faq.manual_faq, name="manual_faq"),
 
     # Bulk loader (not used by paginated SUS_CONTR but retained)

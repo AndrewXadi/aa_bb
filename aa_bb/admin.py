@@ -8,7 +8,37 @@ from .models import (
     BigBrotherConfig, Messages, OptMessages1, OptMessages2, OptMessages3, OptMessages4,
     OptMessages5, UserStatus, WarmProgress, PapsConfig
 )
-from .modelss import TicketToolConfig, PapCompliance, LeaveRequest, ComplianceTicket
+from .modelss import (
+    TicketToolConfig,
+    PapCompliance,
+    LeaveRequest,
+    ComplianceTicket,
+    BigBrotherRedditSettings,
+    BigBrotherRedditMessage,
+)
+from .reddit import is_reddit_module_visible
+
+
+class RedditAdminVisibilityMixin:
+    """Hide the reddit admin entries when the corp gate is not satisfied."""
+
+    def _allowed(self) -> bool:
+        return is_reddit_module_visible()
+
+    def has_module_permission(self, request):
+        return self._allowed() and super().has_module_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._allowed() and super().has_view_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return self._allowed() and super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._allowed() and super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._allowed() and super().has_delete_permission(request, obj)
 
 @admin.register(BigBrotherConfig)
 #class BB_ConfigAdmin(SingletonModelAdmin):
@@ -65,6 +95,34 @@ class TicketToolConfigAdmin(SingletonModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Prevent deleting the singleton instance
         return True
+
+
+@admin.register(BigBrotherRedditSettings)
+class BigBrotherRedditSettingsAdmin(RedditAdminVisibilityMixin, SingletonModelAdmin):
+    exclude = (
+        "reddit_access_token",
+        "reddit_refresh_token",
+        "reddit_token_type",
+        "last_submission_id",
+        "last_submission_permalink",
+        "reddit_account_name",
+    )
+    readonly_fields = ("reddit_token_obtained", "last_submission_at", "last_reply_checked_at", "reddit_account_name")
+
+    def has_add_permission(self, request):
+        if BigBrotherRedditSettings.objects.exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(BigBrotherRedditMessage)
+class BigBrotherRedditMessageAdmin(RedditAdminVisibilityMixin, admin.ModelAdmin):
+    list_display = ("title", "used_in_cycle", "created")
+    list_filter = ("used_in_cycle",)
+    search_fields = ("title", "content")
     
 @admin.register(Messages)
 class DailyMessageConfig(admin.ModelAdmin):
