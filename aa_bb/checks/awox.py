@@ -5,7 +5,16 @@ from django.utils.html import format_html
 from allianceauth.authentication.models import CharacterOwnership
 from ..modelss import AwoxKillsCache
 from django.utils import timezone
-from ..app_settings import get_site_url, get_contact_email, get_owner_name, send_message
+from esi.exceptions import HTTPNotModified
+from ..esi_client import esi, call_result
+from ..app_settings import (
+    DATASOURCE,
+    esi_tenant_kwargs,
+    get_site_url,
+    get_contact_email,
+    get_owner_name,
+    send_message,
+)
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -17,7 +26,6 @@ HEADERS = {
     "Accept-Encoding": "gzip",
     "Accept": "application/json",
 }
-ESI_URL = "https://esi.evetech.net/latest/killmails/{}/{}"
 
 # Limit zKill "down" notifications to once every 2 hours
 _last_zkill_down_notice_monotonic = 0.0
@@ -118,33 +126,36 @@ def fetch_awox_kills(user_id, delay=0.2):
                 continue
 
             #time.sleep(delay)
+            operation = esi.client.Killmails.GetKillmailsKillmailIdKillmailHash(
+                killmail_id=kill_id,
+                killmail_hash=hash_,
+                **esi_tenant_kwargs(DATASOURCE),
+            )
             try:
-                esi_resp = requests.get(ESI_URL.format(kill_id, hash_), headers=HEADERS)
-                if esi_resp.status_code != 200:
-                    logger.warning("Failed to fetch ESI killmail {}: {}".format(kill_id, esi_resp.status_code))
-                    continue
-
-                full_kill = esi_resp.json()
-                attackers = full_kill.get("attackers", [])
-                victim_id = full_kill.get("victim", {}).get("character_id")
-
-                attacker_names = set()
-                for attacker in attackers:
-                    a_id = attacker.get("character_id")
-                    if a_id in char_ids and a_id != victim_id:
-                        attacker_names.add(char_id_map.get(a_id))
-
-                if not attacker_names:
-                    continue
-
-                kills_by_id[kill_id] = {
-                    "value": int(value),
-                    "link": f"https://zkillboard.com/kill/{kill_id}/",
-                    "chars": attacker_names
-                }
-
+                full_kill, _ = call_result(operation)
+            except HTTPNotModified:
+                full_kill, _ = call_result(operation, use_etag=False)
             except Exception as e:
-                logger.error("Error processing killmail {}: {}".format(kill_id, e))
+                logger.warning("Failed to fetch ESI killmail %s: %s", kill_id, e)
+                continue
+
+            attackers = full_kill.get("attackers", [])
+            victim_id = full_kill.get("victim", {}).get("character_id")
+
+            attacker_names = set()
+            for attacker in attackers:
+                a_id = attacker.get("character_id")
+                if a_id in char_ids and a_id != victim_id:
+                    attacker_names.add(char_id_map.get(a_id))
+
+            if not attacker_names:
+                continue
+
+            kills_by_id[kill_id] = {
+                "value": int(value),
+                "link": f"https://zkillboard.com/kill/{kill_id}/",
+                "chars": attacker_names
+            }
 
     data_list = list(kills_by_id.values()) if kills_by_id else []
     try:

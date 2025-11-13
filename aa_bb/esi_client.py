@@ -17,6 +17,8 @@ DEFAULT_OPERATIONS = [
     "GetCorporationsCorporationId",
     "GetCorporationsCorporationIdAlliancehistory",
     "GetAlliancesAllianceId",
+    "GetSovereigntyMap",
+    "GetKillmailsKillmailIdKillmailHash",
 ]
 
 

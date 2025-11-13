@@ -28,9 +28,38 @@ from .app_settings_2 import *
 
 logger = logging.getLogger(__name__)
 
-ESI_BASE = "https://esi.evetech.net/latest"
 DATASOURCE = "tranquility"
-HEADERS = {"Accept": "application/json"}
+
+
+def esi_tenant_kwargs(datasource: str | None):
+    """
+    Translate legacy datasource argument into the new X-Tenant header expected by
+    the aiopenapi3-powered ESI client.
+    """
+    tenant = datasource or DATASOURCE
+    return {"X_Tenant": tenant} if tenant else {}
+
+
+def _resolve_names_via_esi(ids: list[int]) -> dict[int, str]:
+    """
+    Resolve a list of EVE IDs into their names using /universe/names via the
+    OpenAPI client. Returns a dict mapping id -> name.
+    """
+    if not ids:
+        return {}
+    operation = esi.client.Universe.PostUniverseNames(
+        body=ids,
+        **esi_tenant_kwargs(DATASOURCE),
+    )
+    try:
+        rows = to_plain(operation.result())
+    except HTTPNotModified:
+        rows = to_plain(operation.result(use_etag=False))
+    return {
+        int(row.get("id")): row.get("name")
+        for row in (rows or [])
+        if row.get("id") is not None
+    }
 
 
 
@@ -107,8 +136,8 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
     for attempt in range(1, max_retries + 1):
         try:
             operation = esi.client.Universe.PostUniverseNames(
-                ids=[eve_id],
-                datasource=datasource or "tranquility",
+                body=[eve_id],
+                **esi_tenant_kwargs(datasource),
             )
             try:
                 results = to_plain(operation.result())
@@ -201,8 +230,8 @@ def get_character_id(name: str) -> int | None:
 
     # Step 2: Resolve via ESI and reconcile duplicates
     operation = esi.client.Universe.PostUniverseIds(
-        names=[str(name)],
-        datasource=DATASOURCE,
+        body=[str(name)],
+        **esi_tenant_kwargs(DATASOURCE),
     )
     try:
         data = to_plain(operation.result())
@@ -248,8 +277,8 @@ def get_character_id(name: str) -> int | None:
                 # Resolve correct names for stale IDs using ESI
                 stale_ids = [int(s.id) for s in stale_qs]
                 name_future = esi.client.Universe.PostUniverseNames(
-                    ids=stale_ids,
-                    datasource=DATASOURCE,
+                    body=stale_ids,
+                    **esi_tenant_kwargs(DATASOURCE),
                 )
                 try:
                     name_data = to_plain(name_future.result())
@@ -726,6 +755,7 @@ def get_alliance_history_for_corp(corp_id):
     return history
 
 def _get_sov_map() -> list:
+    entry = None
     try:
         entry = SovereigntyMapCache.objects.get(pk=1)
         if entry.is_fresh:
@@ -733,13 +763,20 @@ def _get_sov_map() -> list:
     except SovereigntyMapCache.DoesNotExist:
         pass
 
-    resp = requests.get(
-        f"{ESI_BASE}/sovereignty/map/",
-        params={"datasource": DATASOURCE},
-        headers=HEADERS,
+    operation = esi.client.Sovereignty.GetSovereigntyMap(
+        **esi_tenant_kwargs(DATASOURCE),
     )
-    resp.raise_for_status()
-    data = resp.json()
+    try:
+        data, _ = call_results(operation)
+    except HTTPNotModified:
+        if entry:
+            try:
+                entry.updated = timezone.now()
+                entry.save(update_fields=["updated"])
+            except Exception:
+                entry.save()
+            return entry.data
+        data, _ = call_results(operation, use_etag=False)
 
     SovereigntyMapCache.objects.update_or_create(
         pk=1,
@@ -747,10 +784,6 @@ def _get_sov_map() -> list:
     )
 
     return data
-
-ESI_BASE    = "https://esi.evetech.net/latest"
-DATASOURCE  = "tranquility"
-HEADERS     = {"Accept": "application/json"}
 
 def resolve_alliance_name(owner_id: int) -> str:
     """
@@ -768,16 +801,8 @@ def resolve_alliance_name(owner_id: int) -> str:
 
     # 2. Fetch from ESI
     try:
-        resp = requests.post(
-            f"{ESI_BASE}/universe/names/",
-            params={"datasource": DATASOURCE},
-            json=[owner_id],
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        entry = next((n for n in data if n.get("id") == owner_id), None)
-        owner_name = entry.get("name") if entry else "Unresolvable"
+        name_map = _resolve_names_via_esi([owner_id])
+        owner_name = name_map.get(owner_id) or "Unresolvable"
 
         # 3. Save or update the DB record
         with transaction.atomic():
@@ -817,16 +842,8 @@ def resolve_corporation_name(corp_id: int) -> str:
 
     # 2. Fetch from ESI
     try:
-        resp = requests.post(
-            f"{ESI_BASE}/universe/names/",
-            params={"datasource": DATASOURCE},
-            json=[corp_id],
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        entry = next((n for n in data if n.get("id") == corp_id), None)
-        corp_name = entry.get("name") if entry else "Unresolvable"
+        name_map = _resolve_names_via_esi([corp_id])
+        corp_name = name_map.get(corp_id) or "Unresolvable"
 
         # 3. Save or update the DB record
         with transaction.atomic():
@@ -866,16 +883,8 @@ def resolve_character_name(char_id: int) -> str:
 
     # 2. Fetch from ESI
     try:
-        resp = requests.post(
-            f"{ESI_BASE}/universe/names/",
-            params={"datasource": DATASOURCE},
-            json=[char_id],
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        entry = next((n for n in data if n.get("id") == char_id), None)
-        char_name = entry.get("name") if entry else "Unresolvable"
+        name_map = _resolve_names_via_esi([char_id])
+        char_name = name_map.get(char_id) or "Unresolvable"
 
         # 3. Save or update the DB record
         with transaction.atomic():
@@ -929,17 +938,24 @@ def get_system_owner(system: str) -> Dict[str, str]:
         return {"owner_id": owner_id, "owner_name": f"Unresolvable sov, {e_short}{e_detail}", "owner_type": owner_type}
 
     # 3) Determine owner ID and type
-    if "alliance_id" in entry:
-        owner_id = str(entry["alliance_id"])
+    alliance_id = entry.get("alliance_id")
+    faction_id = entry.get("faction_id")
+    if alliance_id:
+        owner_id = str(alliance_id)
         owner_type = "alliance"
-    elif "faction_id" in entry:
-        owner_id = str(entry["faction_id"])
+    elif faction_id:
+        owner_id = str(faction_id)
         owner_type = "faction"
     else:
         return {"owner_id": "0", "owner_name": "Unclaimed", "owner_type": "unknown"}
 
     # 4) Resolve owner name
-    owner_name = resolve_alliance_name(int(owner_id))
+    try:
+        owner_name = resolve_alliance_name(int(owner_id))
+    except (TypeError, ValueError):
+        owner_name = "Unresolvable owner"
+        owner_id = "0"
+        owner_type = "unknown"
     return {"owner_id": owner_id, "owner_name": owner_name, "owner_type": owner_type}
 
 
