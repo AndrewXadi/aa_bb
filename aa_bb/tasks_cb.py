@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 def CB_run_regular_updates():
     instance = BigBrotherConfig.get_solo()
 
+    if not instance.dlc_corp_brother_active:
+        logger.info("Corp Brother DLC disabled; skipping CB_run_regular_updates.")
+        return
 
     try:
         if instance.is_active:
@@ -340,6 +343,8 @@ def get_ali_character_names(ali_id: int) -> str:
 @shared_task
 def BB_send_daily_messages():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.dailywebhook
     enabled = config.are_daily_messages_active
 
@@ -367,6 +372,8 @@ def BB_send_daily_messages():
 @shared_task
 def BB_send_opt_message1():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.optwebhook1
     enabled = config.are_opt_messages1_active
 
@@ -394,6 +401,8 @@ def BB_send_opt_message1():
 @shared_task
 def BB_send_opt_message2():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.optwebhook2
     enabled = config.are_opt_messages2_active
 
@@ -421,6 +430,8 @@ def BB_send_opt_message2():
 @shared_task
 def BB_send_opt_message3():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.optwebhook3
     enabled = config.are_opt_messages3_active
 
@@ -448,6 +459,8 @@ def BB_send_opt_message3():
 @shared_task
 def BB_send_opt_message4():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.optwebhook4
     enabled = config.are_opt_messages4_active
 
@@ -475,6 +488,8 @@ def BB_send_opt_message4():
 @shared_task
 def BB_send_opt_message5():
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        return
     webhook = config.optwebhook5
     enabled = config.are_opt_messages5_active
 
@@ -505,6 +520,19 @@ def BB_register_message_tasks():
     logger.info("🔄 Running BB_register_message_tasks...")
 
     config = BigBrotherConfig.get_solo()
+    if not config.dlc_daily_messages_active:
+        PeriodicTask.objects.filter(
+            name__in=[
+                "BB send daily message",
+                "BB send optional message 1",
+                "BB send optional message 2",
+                "BB send optional message 3",
+                "BB send optional message 4",
+                "BB send optional message 5",
+            ]
+        ).delete()
+        logger.info("Daily message DLC disabled; skipping task registration.")
+        return
 
     # Default fallback schedule (12:00 UTC daily)
     default_schedule, _ = CrontabSchedule.objects.get_or_create(
@@ -599,6 +627,9 @@ def BB_register_message_tasks():
 @shared_task
 def BB_run_regular_loa_updates():
     cfg = BigBrotherConfig.get_solo()
+    if not cfg.dlc_loa_active:
+        logger.info("LoA DLC disabled; skipping BB_run_regular_loa_updates.")
+        return
     if not cfg.is_loa_active:
         logger.info("LoA feature disabled; skipping updates.")
         return
@@ -916,6 +947,10 @@ def discord_check(user):
 
 @shared_task
 def hourly_compliance_check():
+    cfg = BigBrotherConfig.get_solo()
+    if not cfg.dlc_tickets_active:
+        logger.info("Ticket DLC disabled; skipping hourly_compliance_check.")
+        return
     tcfg = TicketToolConfig.get_solo()
     max_days = {
         "corp_check": tcfg.corp_check,

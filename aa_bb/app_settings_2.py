@@ -316,6 +316,34 @@ def validate_token_with_server(token, client_version=None, self_des=None, self_d
         return e
 
 
+def fetch_token_module_status(token):
+    """Return module flags for the provided token from the BBAC server."""
+
+    url = "http://bb.trpr.space/token-modules"
+    headers = {"User-Agent": "6eq8cJSNKBoA4sSLwINMY7iA4oNznAmtvSFSXlsd"}
+    params = {"token": token}
+
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            logger.warning(
+                "Failed to fetch token modules (status %s): %s",
+                response.status_code,
+                response.text[:200],
+            )
+            return {}
+        data = response.json()
+        modules = data.get("modules")
+        if isinstance(modules, dict):
+            return modules
+        logger.warning("Token modules response missing 'modules' dict: %s", data)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Error fetching token modules: %s", exc)
+    except ValueError:
+        logger.warning("Invalid JSON while fetching token modules")
+    return {}
+
+
 _webhook_history = deque()  # stores timestamp floats of last webhook sends
 _channel_history = deque()  # stores timestamp floats of last channel sends
 

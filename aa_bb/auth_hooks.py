@@ -10,6 +10,7 @@ from allianceauth.services.hooks import MenuItemHook, UrlHook
 # AA Example App
 from aa_bb import urls, urls_loa, urls_cb, urls_paps
 from .modelss import LeaveRequest
+from .models import BigBrotherConfig
 
 
 class CorpBrotherMenuItem(MenuItemHook):
@@ -27,6 +28,14 @@ class CorpBrotherMenuItem(MenuItemHook):
 
     def render(self, request):
         """Render the menu item"""
+
+        try:
+            cfg = BigBrotherConfig.get_solo()
+        except BigBrotherConfig.DoesNotExist:
+            cfg = None
+
+        if not cfg or not cfg.dlc_corp_brother_active:
+            return ""
 
         if request.user.has_perm("aa_bb.basic_access_cb"):
             return MenuItemHook.render(self, request)
@@ -118,11 +127,19 @@ class LoAMenuItem(MenuItemHook):
             "fas fa-plane",
             "loa:index",
             navactive=["loa:"],
-        )
+    )
     def render(self, request):
         # Optional permission check:
         # if not request.user.has_perm("aa_bb.can_access_loa"):
         #     return ""
+        try:
+            cfg = BigBrotherConfig.get_solo()
+        except BigBrotherConfig.DoesNotExist:
+            cfg = None
+
+        if not cfg or not cfg.dlc_loa_active:
+            return ""
+
         if request.user.has_perm("aa_bb.can_access_loa"):
             if request.user.has_perm("aa_bb.can_view_all_loa"):
                 pending_count = LeaveRequest.objects.filter(status="pending").count()
@@ -148,8 +165,16 @@ class PapsMenuItem(MenuItemHook):
             "fas fa-chart-bar",
             "paps:history",
             navactive=["paps:"],
-        )
+    )
     def render(self, request):
+        try:
+            cfg = BigBrotherConfig.get_solo()
+        except BigBrotherConfig.DoesNotExist:
+            cfg = None
+
+        if not cfg or not cfg.dlc_pap_active:
+            return ""
+
         if request.user.has_perm("aa_bb.can_access_paps"):
             return super().render(request)
         return ""

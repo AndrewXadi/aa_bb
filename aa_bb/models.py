@@ -567,6 +567,42 @@ class BigBrotherConfig(SingletonModel):
         help_text="has the plugin been activated/deactivated?"
     )
 
+    dlc_corp_brother_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the Corp Brother module is enabled for this token."
+    )
+
+    dlc_loa_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the Leave of Absence module is enabled for this token."
+    )
+
+    dlc_pap_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the PAP module is enabled for this token."
+    )
+
+    dlc_tickets_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the Tickets module is enabled for this token."
+    )
+
+    dlc_reddit_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the Reddit module is enabled for this token."
+    )
+
+    dlc_daily_messages_active = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="Read-only flag showing if the Daily Messages module is enabled for this token."
+    )
+
     is_loa_active = models.BooleanField(
         default=False,
         editable=True,
@@ -636,6 +672,29 @@ class BigBrotherConfig(SingletonModel):
             )
         #self.pk = self.id = 1  # Enforce singleton
         return super().save(*args, **kwargs)
+
+    DLC_FLAG_MAP = {
+        "corp_brother": "dlc_corp_brother_active",
+        "loa": "dlc_loa_active",
+        "pap": "dlc_pap_active",
+        "tickets": "dlc_tickets_active",
+        "reddit": "dlc_reddit_active",
+        "daily_messages": "dlc_daily_messages_active",
+    }
+
+    def apply_module_status(self, modules):
+        """Update DLC flags from module data.
+
+        Returns list of field names that changed.
+        """
+
+        changed_fields = []
+        for module_key, field_name in self.DLC_FLAG_MAP.items():
+            new_value = bool(modules.get(module_key, False))
+            if getattr(self, field_name) != new_value:
+                setattr(self, field_name, new_value)
+                changed_fields.append(field_name)
+        return changed_fields
     
 class Corporation_names(models.Model):
     """
@@ -948,4 +1007,3 @@ class EntityInfoCache(models.Model):
             models.Index(fields=["entity_id", "as_of"]),
             models.Index(fields=["updated"]),
         ]
-

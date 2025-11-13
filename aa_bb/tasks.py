@@ -2,7 +2,18 @@ from celery import shared_task
 from allianceauth.eveonline.models import EveCharacter
 from .models import BigBrotherConfig, UserStatus
 import logging
-from .app_settings import resolve_character_name, uninstall, validate_token_with_server, send_message, get_users, get_user_id, get_character_id, get_pings, install_package_and_migrate
+from .app_settings import (
+    resolve_character_name,
+    uninstall,
+    validate_token_with_server,
+    send_message,
+    get_users,
+    get_user_id,
+    get_character_id,
+    get_pings,
+    install_package_and_migrate,
+    fetch_token_module_status,
+)
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info, get_current_stint_days_in_corp
 from aa_bb.checks.skills import get_multiple_user_skill_info, skill_ids, get_char_age
@@ -71,6 +82,17 @@ def BB_run_regular_updates():
                 self_des=self_des,
                 self_des_reas=self_des_reas
             )
+
+            modules = {}
+            dlc_message_pending = False
+            if isinstance(result, str) and not result.startswith("self_destruct"):
+                modules = fetch_token_module_status(token)
+                if modules:
+                    changed_flags = instance.apply_module_status(modules)
+                    changed_to_true = [
+                        field for field in changed_flags if getattr(instance, field, False)
+                    ]
+                    dlc_message_pending = bool(changed_to_true)
 
             if result.startswith("self_destruct"):
                 reasons = {
@@ -180,6 +202,10 @@ def BB_run_regular_updates():
                 uninstall(f"**Your corp( isn't allowed to run this plugin**(aid:{alliance_id}),cid:{char.corporation_id})")
 
         instance.save()
+        if dlc_message_pending:
+            send_message(
+                f"#{get_pings('Info')} One or more DLC modules were just enabled for this token. Please restart AllianceAuth to load the new features."
+            )
 
         # Check user statuses
         if instance.is_active:

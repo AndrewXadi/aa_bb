@@ -2,8 +2,6 @@ from solo.admin import SingletonModelAdmin
 
 from django.contrib import admin
 
-from allianceauth.services.hooks import get_extension_logger
-
 from .models import (
     BigBrotherConfig, Messages, OptMessages1, OptMessages2, OptMessages3, OptMessages4,
     OptMessages5, UserStatus, WarmProgress, PapsConfig
@@ -17,13 +15,22 @@ from .modelss import (
     BigBrotherRedditMessage,
 )
 from .reddit import is_reddit_module_visible
+from django.core.exceptions import ObjectDoesNotExist
 
 
-class RedditAdminVisibilityMixin:
-    """Hide the reddit admin entries when the corp gate is not satisfied."""
+class DLCVisibilityMixin:
+    """Hide admin entries when the related DLC flag is disabled."""
+
+    dlc_attr = None
 
     def _allowed(self) -> bool:
-        return is_reddit_module_visible()
+        if not self.dlc_attr:
+            return True
+        try:
+            cfg = BigBrotherConfig.get_solo()
+        except ObjectDoesNotExist:
+            return False
+        return bool(getattr(cfg, self.dlc_attr, False))
 
     def has_module_permission(self, request):
         return self._allowed() and super().has_module_permission(request)
@@ -40,10 +47,39 @@ class RedditAdminVisibilityMixin:
     def has_delete_permission(self, request, obj=None):
         return self._allowed() and super().has_delete_permission(request, obj)
 
+
+class PapModuleVisibilityMixin(DLCVisibilityMixin):
+    dlc_attr = "dlc_pap_active"
+
+
+class TicketModuleVisibilityMixin(DLCVisibilityMixin):
+    dlc_attr = "dlc_tickets_active"
+
+
+class LoaModuleVisibilityMixin(DLCVisibilityMixin):
+    dlc_attr = "dlc_loa_active"
+
+
+class DailyMessagesVisibilityMixin(DLCVisibilityMixin):
+    dlc_attr = "dlc_daily_messages_active"
+
+
 @admin.register(BigBrotherConfig)
 #class BB_ConfigAdmin(SingletonModelAdmin):
 class BB_ConfigAdmin(SingletonModelAdmin):
-    readonly_fields = ('main_corporation','main_alliance', 'main_corporation_id','main_alliance_id', 'is_active',)
+    readonly_fields = (
+        'main_corporation',
+        'main_alliance',
+        'main_corporation_id',
+        'main_alliance_id',
+        'is_active',
+        'dlc_corp_brother_active',
+        'dlc_loa_active',
+        'dlc_pap_active',
+        'dlc_tickets_active',
+        'dlc_reddit_active',
+        'dlc_daily_messages_active',
+    )
     filter_horizontal = (
         "pingrole1_messages",
         "pingrole2_messages",
@@ -64,7 +100,7 @@ class BB_ConfigAdmin(SingletonModelAdmin):
         return True
 
 @admin.register(PapsConfig)
-class PapsConfigAdmin(SingletonModelAdmin):
+class PapsConfigAdmin(PapModuleVisibilityMixin, SingletonModelAdmin):
     filter_horizontal = (
         "group_paps",
         "excluded_groups",
@@ -82,7 +118,7 @@ class PapsConfigAdmin(SingletonModelAdmin):
         return True
     
 @admin.register(TicketToolConfig)
-class TicketToolConfigAdmin(SingletonModelAdmin):
+class TicketToolConfigAdmin(TicketModuleVisibilityMixin, SingletonModelAdmin):
     filter_horizontal = (
         "excluded_users",
     )
@@ -95,6 +131,13 @@ class TicketToolConfigAdmin(SingletonModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Prevent deleting the singleton instance
         return True
+
+
+class RedditAdminVisibilityMixin(DLCVisibilityMixin):
+    dlc_attr = "dlc_reddit_active"
+
+    def _allowed(self) -> bool:
+        return super()._allowed() and is_reddit_module_visible()
 
 
 @admin.register(BigBrotherRedditSettings)
@@ -125,32 +168,32 @@ class BigBrotherRedditMessageAdmin(RedditAdminVisibilityMixin, admin.ModelAdmin)
     search_fields = ("title", "content")
     
 @admin.register(Messages)
-class DailyMessageConfig(admin.ModelAdmin):
+class DailyMessageConfig(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages1)
-class OptMessage1Config(admin.ModelAdmin):
+class OptMessage1Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages2)
-class OptMessage2Config(admin.ModelAdmin):
+class OptMessage2Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages3)
-class OptMessage3Config(admin.ModelAdmin):
+class OptMessage3Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages4)
-class OptMessage4Config(admin.ModelAdmin):
+class OptMessage4Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages5)
-class OptMessage5Config(admin.ModelAdmin):
+class OptMessage5Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
 
@@ -163,14 +206,14 @@ class UserStatusConfig(admin.ModelAdmin):
     list_display = ['user', 'updated']
 
 @admin.register(ComplianceTicket)
-class ComplianceTicketConfig(admin.ModelAdmin):
+class ComplianceTicketConfig(TicketModuleVisibilityMixin, admin.ModelAdmin):
     list_display = ['user', 'ticket_id', 'reason']
 
 @admin.register(LeaveRequest)
-class LeaveRequestConfig(admin.ModelAdmin):
+class LeaveRequestConfig(LoaModuleVisibilityMixin, admin.ModelAdmin):
     list_display = ['main_character', 'start_date', 'end_date', 'reason', 'status']
     
 @admin.register(PapCompliance)
-class PapComplianceConfig(admin.ModelAdmin):
+class PapComplianceConfig(PapModuleVisibilityMixin, admin.ModelAdmin):
     search_fields = ['user_profile']
     list_display = ['user_profile', 'pap_compliant']

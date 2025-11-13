@@ -17,8 +17,6 @@ from .modelss import BigBrotherRedditMessage, BigBrotherRedditSettings
 
 logger = logging.getLogger(__name__)
 
-BB_REDDIT_CORP_ID = 98764200
-
 
 @dataclass(frozen=True)
 class RedditModuleStatus:
@@ -38,12 +36,12 @@ class RedditModuleStatus:
 
 
 def is_reddit_module_visible() -> bool:
-    """Gate the reddit module to the designated main corporation."""
+    """Gate the reddit module to installations that purchased the DLC."""
     try:
         cfg = BigBrotherConfig.get_solo()
     except (BigBrotherConfig.DoesNotExist, OperationalError, ProgrammingError):
         return False
-    return int(cfg.main_corporation_id or 0) == BB_REDDIT_CORP_ID
+    return bool(cfg.dlc_reddit_active)
 
 
 def praw_available() -> bool:
@@ -123,7 +121,6 @@ def enough_time_since_last_post(settings: BigBrotherRedditSettings) -> bool:
 
 
 __all__ = [
-    "BB_REDDIT_CORP_ID",
     "RedditModuleStatus",
     "is_reddit_module_visible",
     "praw_available",
