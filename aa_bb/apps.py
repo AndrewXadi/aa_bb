@@ -133,16 +133,16 @@ class AaBbConfig(AppConfig):
                 name="tickets run regular updates",
                 defaults={
                     "interval": schedule,
-                    "task": "aa_bb.tasks_cb.hourly_compliance_check",
+                    "task": "aa_bb.tasks_tickets.hourly_compliance_check",
                     "enabled": False,  # only on creation
                 },
             )
 
             if not created_tickets:
                 updated_tickets = False
-                if task_tickets.interval != schedule or task_tickets.task != "aa_bb.tasks_cb.hourly_compliance_check":
+                if task_tickets.interval != schedule or task_tickets.task != "aa_bb.tasks_tickets.hourly_compliance_check":
                     task_tickets.interval = schedule
-                    task_tickets.task = "aa_bb.tasks_cb.hourly_compliance_check"
+                    task_tickets.task = "aa_bb.tasks_tickets.hourly_compliance_check"
                     task_tickets.save()
                     updated_tickets = True
                 if updated_tickets:
@@ -420,4 +420,3 @@ class AaBbConfig(AppConfig):
                     logger.info("🗑️ Removed reddit periodic tasks because corp gate is not satisfied")
         except (OperationalError, ProgrammingError) as e:
             logger.warning(f"Could not register periodic task yet: {e}")
-
