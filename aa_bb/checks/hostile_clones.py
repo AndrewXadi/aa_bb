@@ -1,3 +1,10 @@
+"""
+Clone location analysis helpers.
+
+Similar to the hostile asset check, these routines find home/jump clones,
+resolve who owns each system, and flag anything that sits in hostile space.
+"""
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -26,10 +33,11 @@ def get_clones(user_id: int) -> Dict[int, Optional[str]]:
     system_map: Dict[int, Optional[str]] = {}
 
     def add_location(system_obj, loc_id):
-        if system_obj:
+        """Store system name/id for the clone location."""
+        if system_obj:  # Clone located in a known system—store the friendly name.
             # use .pk for primary key, map to its name
             system_map[system_obj.pk] = system_obj.name
-        elif loc_id is not None:
+        elif loc_id is not None:  # Fallback when EveLocation missing but ID available.
             # fallback for unnamed systems
             system_map[loc_id] = None
 
@@ -88,7 +96,7 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
             "name": display_name
         })
 
-        if not owner_info:
+        if not owner_info:  # Unresolved sovereignty, mark as unresolvable entry.
             # fully unresolvable
             hostile_map[display_name] = "Unresolvable"
             #logger.debug(f"No owner info for clone in {display_name}; marked Unresolvable")
@@ -98,7 +106,7 @@ def get_hostile_clone_locations(user_id: int) -> Dict[str, str]:
         oname = owner_info["owner_name"] or f"ID {oid}"
 
         # include only hostile or unresolvable owners
-        if oid in hostile_ids or "Unresolvable" in oname:
+        if oid in hostile_ids or "Unresolvable" in oname:  # Alert when clone sits in hostile or unknown space.
             hostile_map[display_name] = oname
             logger.info(f"Hostile clone: {display_name} owned by {oname} ({oid})")
 
@@ -112,7 +120,7 @@ def render_clones(user_id: int) -> Optional[str]:
     and labeling & highlighting Unresolvable owners appropriately.
     """
     systems = get_clones(user_id)  # returns Dict[int, Optional[str]]
-    if not systems:
+    if not systems:  # No clones to report.
         return None
 
     hostile_str = BigBrotherConfig.get_solo().hostile_alliances or ""
@@ -137,15 +145,15 @@ def render_clones(user_id: int) -> Optional[str]:
             hostile = oid in hostile_ids or "Unresolvable" in oname
             unresolvable = False
         else:
-            oname = "Unresolvable"
+            oname = "Unresolvable"  # No sovereignty info returned.
             hostile = False
             unresolvable = True
 
-        if hostile:
+        if hostile:  # Highlight hostile entries in red.
             row_tpl = '<tr><td>{}</td><td class="text-danger">{}</td></tr>'
-        elif unresolvable:
+        elif unresolvable:  # Use warning styling for unknown owners.
             row_tpl = '<tr><td>{}</td><td class="text-warning"><em>{}</em></td></tr>'
-        else:
+        else:  # Neutral owners get normal formatting.
             row_tpl = '<tr><td>{}</td><td>{}</td></tr>'
 
         html.append(
