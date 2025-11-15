@@ -36,6 +36,7 @@ import traceback
 from . import __version__
 from .tasks_cb import *
 from .tasks_ct import *
+from .tasks_tickets import *
 # Persist update-check timing in DB via singleton model
 from .modelss import BBUpdateState
 
