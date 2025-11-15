@@ -51,7 +51,7 @@ class AaBbConfig(AppConfig):
         try:
             for msg_name in PREDEFINED_MESSAGE_TYPES:
                 obj, created = MessageType.objects.get_or_create(name=msg_name)
-                if created:  # Log whenever we insert a missing message type.
+                if created:  # Log whenever a predefined message type is inserted.
                     logger.info(f"✅ Added predefined MessageType: {msg_name}")
         except (OperationalError, ProgrammingError):
             # Database not ready (e.g., during migrate)
@@ -82,7 +82,7 @@ class AaBbConfig(AppConfig):
                     task.task = "aa_bb.tasks.BB_run_regular_updates"
                     task.save()
                     updated = True
-                if updated:  # Surface when we had to modify the periodic task.
+                if updated:  # Surface when the periodic task required modification.
                     logger.info("✅ Updated ‘BB run regular updates’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB run regular updates’ periodic task already exists and is up to date")
@@ -133,7 +133,7 @@ class AaBbConfig(AppConfig):
                     task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
                     task_ct.save()
                     updated_ct = True
-                if updated_ct:  # Report when we had to tweak the stored task.
+                if updated_ct:  # Report when the stored task required tweaks.
                     logger.info("✅ Updated ‘BB kickstart stale CT modules’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB kickstart stale CT modules’ periodic task already exists and is up to date")
@@ -349,7 +349,7 @@ class AaBbConfig(AppConfig):
                         if not existing_task.enabled:  # Reactivate disabled tasks when the feature toggles on.
                             existing_task.enabled = True
                             updated = True
-                        if updated:  # Only hit the DB/logs when we adjusted the entry.
+                        if updated:  # Only hit the DB/logs when an entry was adjusted.
                             existing_task.save()
                             logger.info(f"✅ Updated '{name}' periodic task")
                         else:
@@ -422,7 +422,7 @@ class AaBbConfig(AppConfig):
                     if reddit_reply_task.task != "aa_bb.tasks_reddit.monitor_reddit_replies":  # Keep task path current.
                         reddit_reply_task.task = "aa_bb.tasks_reddit.monitor_reddit_replies"
                         updated = True
-                    if updated:  # Save/log only when we touched the record.
+                    if updated:  # Save/log only when the record changed.
                         reddit_reply_task.save()
                         logger.info("✅ Updated 'BB reddit reply watcher' periodic task")
             else:
