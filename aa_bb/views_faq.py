@@ -80,13 +80,13 @@ def manual_modules(request: WSGIRequest):
     reddit_cfg_error = None
     reddit_messages_error = None
     reddit_messages_count = 0
-    reddit_entitled = bool(cfg.dlc_reddit_active)
+    reddit_entitled = bool(cfg.dlc_reddit_active)  # Only load Reddit info when DLC purchased.
     if reddit_entitled:
         try:
             reddit_cfg = BigBrotherRedditSettings.get_solo()
         except (OperationalError, ProgrammingError) as exc:
             reddit_cfg_error = str(exc)
-        else:
+        else:  # Config exists, so count available recruitment messages.
             try:
                 reddit_messages_count = BigBrotherRedditMessage.objects.count()
             except (OperationalError, ProgrammingError) as exc:
@@ -103,12 +103,14 @@ def manual_modules(request: WSGIRequest):
     modules = []
 
     def code(name: str):
+        """Wrap a label/value in <code> for easier reading."""
         return format_html("<code>{}</code>", name)
 
     def register_issue(issues: list, actions: list, condition: bool, issue_text, action_text=None):
-        if condition:
+        """Append issue/action entries when the guard condition is met."""
+        if condition:  # Only record when the configuration check failed.
             issues.append(issue_text)
-            if action_text and action_text not in actions:
+            if action_text and action_text not in actions:  # Actions deduped to avoid noise.
                 actions.append(action_text)
 
     def register_module_guard(
@@ -118,6 +120,7 @@ def manual_modules(request: WSGIRequest):
         module_label: str,
         field_label: str,
     ):
+        """Generic helper to report disabled DLC toggles."""
         register_issue(
             issues,
             actions,
@@ -134,15 +137,16 @@ def manual_modules(request: WSGIRequest):
         )
 
     def make_module(name, summary, issues, actions, info=None, active_override=None, cta=None):
+        """Build a dict consumed by the FAQ template."""
         info = info or []
         issues = list(dict.fromkeys(issues))
         actions = list(dict.fromkeys(actions))
         active = active_override if active_override is not None else (len(issues) == 0)
-        if issues:
+        if issues:  # When problems exist, show them plus any informational notes.
             details = issues + info
         else:
             details = [format_html("{}", _("All requirements satisfied."))] + info
-        if not actions:
+        if not actions:  # Provide default CTA messaging when nothing actionable supplied.
             actions = [format_html("{}", _("No action needed."))] if not issues else [format_html("{}", _("Review configuration and retry the checks."))]
         return {
             "name": name,
@@ -176,7 +180,7 @@ def manual_modules(request: WSGIRequest):
         format_html("Celery periodic task {} is missing.", code(task_name)),
         format_html("Create the periodic task in Django admin → Periodic tasks and restart Celery workers."),
     )
-    if periodic_task is not None:
+    if periodic_task is not None:  # Provide status info only when the scheduled task exists.
         register_issue(
             core_issues,
             core_actions,
@@ -184,7 +188,7 @@ def manual_modules(request: WSGIRequest):
             format_html("Celery periodic task {} exists but is disabled.", code(task_name)),
             format_html("Enable the task in Django admin → Periodic tasks and restart Celery workers."),
         )
-        if periodic_task.last_run_at:
+        if periodic_task.last_run_at:  # Surface last successful execution timestamp.
             core_info.append(
                 format_html(
                     "Last successful update: {} UTC.",
@@ -211,7 +215,7 @@ def manual_modules(request: WSGIRequest):
         _("CorpBrother"),
         "BigBrotherConfig.dlc_corp_brother_active",
     )
-    if corp_purchase:
+    if corp_purchase:  # Only list corp-specific warnings when DLC is enabled.
         register_issue(
             corp_issues,
             corp_actions,
@@ -233,7 +237,7 @@ def manual_modules(request: WSGIRequest):
             format_html("Dependency {} is not installed.", code("charlink")),
             format_html("Install allianceauth-charlink and add it to {}.", code("INSTALLED_APPS")),
         )
-        if corptools_installed:
+        if corptools_installed:  # Track positive signals separately for the info list.
             corp_info.append(format_html("{} detected.", code("corptools")))
         if charlink_installed:
             corp_info.append(format_html("{} detected.", code("charlink")))
@@ -257,7 +261,7 @@ def manual_modules(request: WSGIRequest):
         _("Leave of Absence"),
         "BigBrotherConfig.dlc_loa_active",
     )
-    if loa_purchase:
+    if loa_purchase:  # Only evaluate LoA toggles when DLC active.
         register_issue(
             loa_issues,
             loa_actions,
@@ -265,7 +269,7 @@ def manual_modules(request: WSGIRequest):
             format_html("{} is disabled.", code("BigBrotherConfig.is_loa_active")),
             format_html("Enable the toggle in BigBrotherConfig and restart AllianceAuth."),
         )
-        if not discordbot_installed:
+        if not discordbot_installed:  # Discord alerts depend on aadiscordbot being installed.
             register_issue(
                 loa_issues,
                 loa_actions,
@@ -273,7 +277,7 @@ def manual_modules(request: WSGIRequest):
                 format_html("{} app is not installed; Discord notifications will fail.", code("aadiscordbot")),
                 format_html("Install and configure aadiscordbot for ticket and LoA notifications."),
             )
-        if cfg.loawebhook:
+        if cfg.loawebhook:  # Show configured webhook for easy verification.
             loa_info.append(format_html("LoA webhook configured: {}", cfg.loawebhook))
     modules.append(
         make_module(
@@ -295,7 +299,7 @@ def manual_modules(request: WSGIRequest):
         _("PAP Statistics"),
         "BigBrotherConfig.dlc_pap_active",
     )
-    if pap_purchase:
+    if pap_purchase:  # PAP-specific checks only relevant when DLC enabled.
         register_issue(
             paps_issues,
             paps_actions,
@@ -310,7 +314,7 @@ def manual_modules(request: WSGIRequest):
             format_html("Dependency {} is not installed.", code("corptools")),
             format_html("Install allianceauth-corptools and add it to {}.", code("INSTALLED_APPS")),
         )
-        if paps_cfg:
+        if paps_cfg:  # Display configured thresholds when table exists.
             paps_info.append(
                 format_html("Required PAPs per month: {}", paps_cfg.required_paps)
             )
@@ -355,7 +359,7 @@ def manual_modules(request: WSGIRequest):
         _("Daily Notifications"),
         "BigBrotherConfig.dlc_daily_messages_active",
     )
-    if daily_purchase:
+    if daily_purchase:  # Only run daily notification checks when DLC active.
         register_issue(
             daily_issues,
             daily_actions,
@@ -385,7 +389,7 @@ def manual_modules(request: WSGIRequest):
                 format_html("{} app is not installed; daily Discord posts will fail.", code("aadiscordbot")),
                 format_html("Install and configure aadiscordbot."),
             )
-        if cfg.dailyschedule:
+        if cfg.dailyschedule:  # Capture schedule detail when present.
             daily_info.append(format_html("Schedule: {}", cfg.dailyschedule))
     modules.append(
         make_module(
@@ -413,7 +417,7 @@ def manual_modules(request: WSGIRequest):
             stream_name,
             "BigBrotherConfig.dlc_daily_messages_active",
         )
-        if daily_purchase:
+        if daily_purchase:  # Additional optional streams share the same DLC entitlement.
             if not flag:
                 register_issue(
                     issues,
@@ -422,7 +426,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("{} is disabled.", code(f"are_opt_messages{idx}_active")),
                     format_html("Enable the toggle if you want to send this stream."),
                 )
-            if flag and not webhook:
+            if flag and not webhook:  # Enabled stream without webhook is misconfigured.
                 register_issue(
                     issues,
                     actions,
@@ -430,7 +434,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("{} is empty.", code(f"optwebhook{idx}")),
                     format_html("Set a Discord webhook URL in {}.", code(f"optwebhook{idx}")),
                 )
-            if flag and schedule is None:
+            if flag and schedule is None:  # Enabled stream without schedule cannot run.
                 register_issue(
                     issues,
                     actions,
@@ -438,7 +442,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("{} is not linked to a schedule.", code(f"optschedule{idx}")),
                     format_html("Assign a crontab/interval schedule to {}.", code(f"optschedule{idx}")),
                 )
-            if flag and not discordbot_installed:
+            if flag and not discordbot_installed:  # Discord posts require the bot app.
                 register_issue(
                     issues,
                     actions,
@@ -446,7 +450,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("{} app is not installed; Discord posts will fail.", code("aadiscordbot")),
                     format_html("Install and configure aadiscordbot."),
                 )
-            if flag and webhook:
+            if flag and webhook:  # Provide quick success info when configured.
                 info.append(format_html("Webhook configured."))
             if flag and schedule:
                 info.append(format_html("Schedule: {}", schedule))
@@ -472,7 +476,7 @@ def manual_modules(request: WSGIRequest):
         _("LoA inactivity alerts"),
         "BigBrotherConfig.dlc_loa_active",
     )
-    if afk_purchase:
+    if afk_purchase:  # Only show AFK ticket guidance when LoA DLC is enabled.
         tickets_purchase = cfg.dlc_tickets_active
         register_module_guard(
             afk_issues,
@@ -481,7 +485,7 @@ def manual_modules(request: WSGIRequest):
             _("Ticket automation"),
             "BigBrotherConfig.dlc_tickets_active",
         )
-        if tickets_purchase:
+        if tickets_purchase:  # Ticket automation must also be installed/enabled.
             register_issue(
                 afk_issues,
                 afk_actions,
@@ -489,7 +493,7 @@ def manual_modules(request: WSGIRequest):
                 format_html("{} must be enabled for LoA inactivity monitoring.", code("BigBrotherConfig.is_loa_active")),
                 format_html("Enable the LoA module in BigBrotherConfig."),
             )
-            if ticket_cfg is None:
+            if ticket_cfg is None:  # Cannot proceed when TicketToolConfig missing.
                 register_issue(
                     afk_issues,
                     afk_actions,
@@ -497,7 +501,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("TicketToolConfig could not be loaded ({}).", ticket_cfg_error or _("database schema mismatch")),
                     format_html("Run {} to apply pending migrations.", format_html("<code>manage.py migrate aa_bb</code>")),
                 )
-            else:
+            else:  # Ticket config exists, so validate individual settings.
                 register_issue(
                     afk_issues,
                     afk_actions,
@@ -512,7 +516,7 @@ def manual_modules(request: WSGIRequest):
                     format_html("{} should be greater than zero.", code("TicketToolConfig.Max_Afk_Days")),
                     format_html("Set a sensible threshold (e.g. 7) in TicketToolConfig."),
                 )
-                if not discordbot_installed:
+                if not discordbot_installed:  # LoA inactivity notices also require Aad Discord bot.
                     register_issue(
                         afk_issues,
                         afk_actions,
