@@ -1,3 +1,10 @@
+"""
+Celery beat configuration for aa_bb.
+
+Each entry mirrors the tasks created in AppConfig.ready so installations that
+prefer static CELERY_BEAT_SCHEDULE definitions can reuse this module.
+"""
+
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
