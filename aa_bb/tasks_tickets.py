@@ -1,3 +1,5 @@
+"""Celery tasks and helpers that manage compliance tickets and reminders."""
+
 import logging
 from typing import Optional
 
@@ -22,13 +24,14 @@ User = get_user_model()
 
 
 def corp_check(user) -> bool:
-    if not TicketToolConfig.get_solo().corp_check_enabled:
+    """
+    Determine whether the user passes the corp compliance filter.
+
+    Returns True whenever the corp check feature is disabled or when the current
+    ComplianceFilter evaluates truthy for the account.
+    """
+    if not TicketToolConfig.get_solo().corp_check_enabled:  # Feature disabled -> automatically compliant.
         return True
-    """
-    Return True if the given user is compliant according to the currently
-    selected ComplianceFilter in TicketToolConfig (all chars must comply).
-    If no config or no filter is set, default to True (treat as compliant).
-    """
     try:
         cfg: Optional[TicketToolConfig] = TicketToolConfig.get_solo()
     except Exception:
@@ -36,8 +39,7 @@ def corp_check(user) -> bool:
         logger.warning("TicketToolConfig.get_solo() failed; treating user as compliant.")
         return True
 
-    if not cfg or not cfg.compliance_filter:
-        # No filter chosen -> treat everyone as compliant
+    if not cfg or not cfg.compliance_filter:  # Missing configuration leaves everyone compliant.
         return True
 
     try:
@@ -48,33 +50,43 @@ def corp_check(user) -> bool:
         # Misconfiguration or unexpected error: log and be lenient.
         logger.exception("Error while running compliance filter for user id=%s", user.id)
         return True
+
+
 def paps_check(user):
-    if not TicketToolConfig.get_solo().paps_check_enabled:
+    """
+    Inspect PAP compliance state for the user, honoring LoA in-progress status.
+
+    Returns True when PAP checks are disabled, the user has an LoA pending, or
+    their PapCompliance row indicates compliance.
+    """
+    if not TicketToolConfig.get_solo().paps_check_enabled:  # Globally disabled -> compliant.
         return True
     lr_qs = LeaveRequest.objects.filter(
             user=user,
             status="in_progress",
         ).exists()
-    if lr_qs:
+    if lr_qs:  # Active LoA suppresses PAP enforcement.
         return True
-    """
-    Check PAP compliance for a given User.
-    - If no PapCompliance row exists for their profile -> treat as compliant (True).
-    - If row exists and pap_compliant > 0 -> compliant (True).
-    - If row exists and pap_compliant == 0 -> non-compliant (False).
-    """
     try:
         profile = user.profile  # thanks to related_name='profile'
     except UserProfile.DoesNotExist:
-        return True  # no profile at all, treat as compliant
+        return True  # No profile at all, treat as compliant
 
     pc = PapCompliance.objects.filter(user_profile=profile).first()
-    if not pc:
+    if not pc:  # Without compliance data the check cannot fail the user.
         return True
 
     return pc.pap_compliant > 0
+
+
 def afk_check(user):
-    if not TicketToolConfig.get_solo().afk_check_enabled:
+    """
+    Evaluate AFK compliance based on most recent logoff among the user's alts.
+
+    Returns False if no logoff data exists, the main is missing, or the latest
+    logout exceeds the configured max AFK days.
+    """
+    if not TicketToolConfig.get_solo().afk_check_enabled:  # Disabled toggle => user passes check.
         return True
     tcfg = TicketToolConfig.get_solo()
     max_afk_days = tcfg.Max_Afk_Days
@@ -82,10 +94,10 @@ def afk_check(user):
             user=user,
             status="in_progress",
         ).exists()
-    if lr_qs:
+    if lr_qs:  # LoA overrides AFK failures.
         return True
     profile = UserProfile.objects.get(user=user)
-    if not profile:
+    if not profile:  # Missing profile prevents further evaluation.
         return False
     try:
         main_id = profile.main_character.character_id
@@ -94,7 +106,7 @@ def afk_check(user):
 
     # Load main character
     ec = EveCharacter.objects.filter(character_id=main_id).first()
-    if not ec:
+    if not ec:  # Cannot determine AFK if the main character record is missing.
         return False
 
     # Find the most recent logoff among all alts
@@ -102,33 +114,38 @@ def afk_check(user):
     for char in get_alts_queryset(ec):
         audit = getattr(char, "characteraudit", None)
         ts = getattr(audit, "last_known_logoff", None) if audit else None
-        if ts and (latest_logoff is None or ts > latest_logoff):
+        if ts and (latest_logoff is None or ts > latest_logoff):  # Track the newest timestamp.
             latest_logoff = ts
 
-    if not latest_logoff:
+    if not latest_logoff:  # No logoff information means fail the AFK check.
         return False
 
     # Compute days since that logoff
     days_since = (timezone.now() - latest_logoff).days
-    if days_since >= max_afk_days:
+    if days_since >= max_afk_days:  # Too many days inactive triggers failure.
         return False
     return True
 
+
 def discord_check(user):
-    if not TicketToolConfig.get_solo().discord_check_enabled:
+    """
+    Ensure the user has authenticated a Discord account if the feature is enabled.
+    """
+    if not TicketToolConfig.get_solo().discord_check_enabled:  # Disabled toggle permits everyone.
         return True
     try:
         discord_id = get_discord_user_id(user)
     except NotAuthenticated:
-        return False
+        return False  # Missing Discord auth fails the check.
     return True
 
 
 
 @shared_task
 def hourly_compliance_check():
+    """Run the top-of-hour audit that enforces compliance rules and reminders."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.dlc_tickets_active:
+    if not cfg.dlc_tickets_active:  # DLC disabled means no background enforcement.
         logger.info("Ticket DLC disabled; skipping hourly_compliance_check.")
         return
     tcfg = TicketToolConfig.get_solo()
@@ -169,11 +186,11 @@ def hourly_compliance_check():
     # 1. Check compliance reasons
     for UserProfil in get_user_profiles():
         user = UserProfil.user
-        if user in tcfg.excluded_users.all():
+        if user in tcfg.excluded_users.all():  # Skip users explicitly excluded from checks.
             continue
         for reason, (checker, msg_template) in reason_checkers.items():
             checked = checker(user)
-            if not checked:
+            if not checked:  # Non-compliant result requires a ticket/ensuring existing one.
                 logger.info(f"user{user},reason{reason},checked{checked}")
                 ensure_ticket(user, reason)
 
@@ -181,9 +198,9 @@ def hourly_compliance_check():
     for ticket in ComplianceTicket.objects.all():
         reason = ticket.reason
 
-        if reason == "char_removed" or reason == "awox_kill":
+        if reason == "char_removed" or reason == "awox_kill":  # These rely on manual resolution flow.
             logger.info(f"reason:{reason}, resolved:{ticket.is_resolved}")
-            if ticket.is_resolved:
+            if ticket.is_resolved:  # Completed ticket can be closed out and announced.
                 logger.info(f"reason:{reason}")
                 close_ticket(ticket)
                 send_message(f"ticket for <@{ticket.discord_user_id}> resolved")
@@ -192,28 +209,28 @@ def hourly_compliance_check():
         checker, _ = reason_checkers[reason]
 
         # resolved?
-        if ticket.user and checker(ticket.user):
+        if ticket.user and checker(ticket.user):  # Condition cleared, close and notify.
             close_ticket(ticket)
             send_message(f"ticket for <@{ticket.discord_user_id}> resolved")
             continue
 
-        if ticket.user not in allowed_users:
+        if ticket.user not in allowed_users:  # User left the org, close ticket and alert.
             close_ticket(ticket)
             send_message(f"User <@{ticket.discord_user_id}> is no longer a member, closing ticket")
             continue
 
-        if not ticket.user:
+        if not ticket.user:  # Missing auth user entirely, close ticket.
             close_ticket(ticket)
             send_message(f"ticket for <@{ticket.discord_user_id}> closed due to missing auth user")
             continue
 
         # Reminder logic with per-reason frequency + max-days cap
         days_elapsed = (now - ticket.created_at).days
-        if days_elapsed <= 0:
+        if days_elapsed <= 0:  # Do not send reminders on the same day ticket was created.
             continue  # don't ping on creation day
 
         max_dayss = max_days.get(reason, 30)
-        if days_elapsed > max_dayss:
+        if days_elapsed > max_dayss:  # Escalate when overdue beyond max window.
             # escalation: ping staff role to kick the user
             mention = f"<@&{tcfg.Role_ID}>"           # role mention
             user_mention = f"<@{ticket.discord_user_id}>"
@@ -230,17 +247,17 @@ def hourly_compliance_check():
             )
             continue
 
-        # last_reminder_sent acts as "last day number we pinged"
+        # last_reminder_sent stores the last day number that was pinged
         freq_days = reminder_frequency.get(reason, 1)
         last_day_pinged = ticket.last_reminder_sent or 0
-        if (days_elapsed - last_day_pinged) < freq_days:
+        if (days_elapsed - last_day_pinged) < freq_days:  # Respect reminder spacing.
             continue  # not time to remind yet
 
         # Build the message: mention the user + role + days left
         days_left = max_dayss - days_elapsed
         mention = f"{ticket.discord_user_id}"
         template = reminder_messages[reason]  # must support {namee}, {role}, {days}
-        if reason == "paps_check":
+        if reason == "paps_check":  # PAP reminder template only uses {days}.
             msg = template.format(days=days_left)
         else:
             msg = template.format(namee=mention, role=tcfg.Role_ID, days=days_left)
@@ -254,7 +271,7 @@ def hourly_compliance_check():
             }
         )
 
-        # Mark today as reminded so we don't ping again today
+        # Mark today as reminded so the system does not ping again today
         ticket.last_reminder_sent = days_elapsed
         ticket.save(update_fields=["last_reminder_sent"])
 
@@ -273,6 +290,12 @@ def hourly_compliance_check():
 
 
 def ensure_ticket(user, reason):
+    """
+    Guarantee there is an open compliance ticket for the given user/reason pair.
+
+    Handles Discord lookup, fallbacks, and message templating before delegating
+    the actual ticket creation to the bot worker.
+    """
     tcfg = TicketToolConfig.get_solo()
     max_afk_days = tcfg.Max_Afk_Days
     reason_checkers = {
@@ -285,9 +308,9 @@ def ensure_ticket(user, reason):
         discord_id = get_discord_user_id(user)
         username = ""
         _, msg_template = reason_checkers[reason]
-        if reason == "afk_check":
+        if reason == "afk_check":  # AFK templates expect {days}.
             ticket_message = msg_template.format(namee=discord_id, role=tcfg.Role_ID, days=max_afk_days)
-        elif reason == "discord_check":
+        elif reason == "discord_check":  # Discord-specific template uses username, not Discord mention.
             username = user.username
             ticket_message = msg_template.format(namee=username, role=tcfg.Role_ID, days=max_afk_days)
         else:
@@ -299,34 +322,34 @@ def ensure_ticket(user, reason):
         discord_user = None
 
         # Prefer a superuser with a linked Discord account
-        if superusers.exists():
+        if superusers.exists():  # Only check DiscordUser table when any superuser exists.
             discord_user = DiscordUser.objects.filter(user__in=superusers).first()
 
         # If no superuser exists or none have Discord linked, try the first configured Discord admin
-        if not discord_user:
+        if not discord_user:  # Fallback to admins defined in aadiscordbot settings.
             try:
                 admin_uids = get_admins() or []
             except Exception:
                 admin_uids = []
 
-            if admin_uids:
+            if admin_uids:  # Only query DiscordUser when admin list is non-empty.
                 discord_user = DiscordUser.objects.filter(uid__in=admin_uids).first()
 
         # If still nothing, log and notify, then stop
-        if not discord_user:
+        if not discord_user:  # There is no reasonable recipient—alert staff and bail.
             logger.error(f"Failed to create a {reason} ticket for {username}. No eligible fallback found: no superuser or Discord admin with Discord linked.")
             send_message(f"Failed to create a {reason} ticket for {username}. No eligible fallback found: no superuser or Discord admin with Discord linked.")
             return
 
         discord_id = discord_user.uid
         _, msg_template = reason_checkers[reason]
-        if reason == "afk_check":
+        if reason == "afk_check":  # Fallback message includes manual warning text.
             ticket_message = (
                 f"⚠️ Compliance issue for **{user.username}** "
                 f"(no Discord linked!)\n\n"
                 f"{msg_template.format(namee=user.username, role=tcfg.Role_ID, days=max_afk_days)}"
             )
-        elif reason == "discord_check":
+        elif reason == "discord_check":  # Discord issues share the same format as AFK fallback.
             ticket_message = (
                 f"⚠️ Compliance issue for **{user.username}** "
                 f"(no Discord linked!)\n\n"
@@ -343,7 +366,7 @@ def ensure_ticket(user, reason):
     exists = ComplianceTicket.objects.filter(
         user=user, reason=reason, is_resolved=False
     ).exists()
-    if not exists:
+    if not exists:  # Only emit side effects when a new ticket is needed.
         send_message(f"ticket for {user.username} created, reason - {reason}")
         run_task_function.apply_async(
             args=["aa_bb.tasks_bot.create_compliance_ticket"],
@@ -355,6 +378,7 @@ def ensure_ticket(user, reason):
 
 
 def close_ticket(ticket):
+    """Close the Discord compliance ticket and delete it locally."""
     run_task_function.delay(
         "aa_bb.tasks_bot.close_ticket_channel",
         task_args=[ticket.discord_channel_id],
@@ -362,6 +386,8 @@ def close_ticket(ticket):
     )
     ticket.delete()
 
+
 def close_char_removed_ticket(ticket):
+    """Mark a char_removed ticket resolved without deleting it (legacy behavior)."""
     ticket.is_resolved = True
     ticket.save()

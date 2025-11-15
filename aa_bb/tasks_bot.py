@@ -1,4 +1,10 @@
-# example/bot_task.py
+"""
+Discord ticket helper utilities used by BigBrother.
+
+The functions here are called from Celery tasks as well as slash commands to
+create/rebalance compliance ticket channels.
+"""
+
 import discord
 import re
 from django.utils import timezone
@@ -12,8 +18,9 @@ from aadiscordbot.cogs.utils.decorators import sender_is_admin
 from discord.commands import slash_command
 
 def get_staff_roles():
+    """Parse the comma-separated list of Discord role IDs allowed on tickets."""
     cfg = TicketToolConfig.get_solo()
-    if not cfg.staff_roles:
+    if not cfg.staff_roles:  # no staff roles configured → return empty list
         return []
     return [int(r.strip()) for r in cfg.staff_roles.split(",") if r.strip().isdigit()]
 
@@ -64,7 +71,7 @@ async def create_compliance_ticket(bot, user_id, discord_user_id: int, reason: s
 async def send_ticket_reminder(bot, channel_id: int, user_id: int, message: str):
     channel = bot.get_channel(channel_id)
     member = channel.guild.get_member(user_id)
-    if channel and member:
+    if channel and member:  # only send reminders when both channel and member resolve
         await channel.send(message)
 
 async def close_ticket_channel(bot, channel_id: int):
@@ -87,6 +94,7 @@ def get_next_ticket_number():
     return formatted
 
 class CharRemovedCommands(commands.Cog):
+    """Slash-command cog for operators handling character removal tickets."""
     def __init__(self, bot):
         self.bot = bot
 
@@ -97,7 +105,7 @@ class CharRemovedCommands(commands.Cog):
     @sender_is_admin()
     async def resolve_char_removed(self, ctx: discord.ApplicationContext):
         channel = ctx.channel
-        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):  # ensure the command is run inside a ticket channel
             await ctx.respond("Use this in a ticket text channel.", ephemeral=True)
             return
 
@@ -106,11 +114,11 @@ class CharRemovedCommands(commands.Cog):
             is_resolved=False,
         ).first()
 
-        if not ticket:
+        if not ticket:  # no matching ticket entry for this channel
             await ctx.respond("No open ticket found for this channel.", ephemeral=True)
             return
 
-        if ticket.reason != "char_removed" and ticket.reason != "awox_kill":
+        if ticket.reason != "char_removed" and ticket.reason != "awox_kill":  # limit to supported ticket reasons
             await ctx.respond("This command only works for 'char_removed' and 'awox_kill' tickets.", ephemeral=True)
             return
 
@@ -134,7 +142,7 @@ def _parse_family_suffix(base_name: str, candidate_name: str) -> int | None:
     Return the numeric suffix for a candidate category in the same family as base_name.
     Base category => 1, clones => 2, 3, ...; None if not in family.
     """
-    if candidate_name == base_name:
+    if candidate_name == base_name:  # exact match → treat as suffix 1
         return 1
     # Match exact base name followed by dash and a positive integer
     m = re.fullmatch(rf"{re.escape(base_name)}-(\d+)", candidate_name)
@@ -142,7 +150,7 @@ def _parse_family_suffix(base_name: str, candidate_name: str) -> int | None:
         return None
     try:
         n = int(m.group(1))
-        if n >= 2:
+        if n >= 2:  # only treat "-2"/"-3"/... as valid
             return n
     except Exception:
         pass
@@ -157,7 +165,7 @@ def _get_family_categories(guild: discord.Guild, base_category: discord.Category
     base_name = base_category.name
     for cat in guild.categories:
         suf = _parse_family_suffix(base_name, cat.name)
-        if suf is not None:
+        if suf is not None:  # only include categories that follow the naming convention
             fam.append((suf, cat))
     fam.sort(key=lambda x: x[0])
     return fam
@@ -177,12 +185,11 @@ async def ensure_ticket_category_with_capacity(guild: discord.Guild, base_catego
         try:
             if len(cat.channels) < CATEGORY_LIMIT:
                 return cat
-        except Exception:
-            # Defensive: if anything odd, skip
+        except Exception:  # defensive guard in case Discord returns odd data
             continue
 
     # All full: create next clone
-    next_suffix = (family[-1][0] + 1) if family else 2
+    next_suffix = (family[-1][0] + 1) if family else 2  # base missing → start at -2
     name = f"{base.name}-{next_suffix}"
     # Copy overwrites from base
     overwrites = base.overwrites
@@ -209,13 +216,13 @@ async def rebalance_ticket_categories(bot):
     ticket channels leftwards. Delete empty overflow categories (suffix >= 2).
     """
     cfg = TicketToolConfig.get_solo()
-    if not cfg.Category_ID:
+    if not cfg.Category_ID:  # nothing configured → nothing to rebalance
         return
-    if not bot.guilds:
+    if not bot.guilds:  # ensure the bot is connected to at least one guild
         return
     guild = bot.guilds[0]
     base = guild.get_channel(int(cfg.Category_ID))
-    if not isinstance(base, discord.CategoryChannel):
+    if not isinstance(base, discord.CategoryChannel):  # invalid configuration
         return
 
     family = _get_family_categories(guild, base)
@@ -233,7 +240,7 @@ async def rebalance_ticket_categories(bot):
 
     # Fill earlier categories from later ones
     for idx in range(1, len(cats)):
-        if moves >= MOVE_LIMIT:
+        if moves >= MOVE_LIMIT:  # avoid shuffling too many channels per invocation
             break
         left = cats[idx - 1]
         right = cats[idx]
@@ -251,13 +258,12 @@ async def rebalance_ticket_categories(bot):
                 moves += 1
                 # Track it in left collection if needed for subsequent steps
                 tickets_by_cat.setdefault(left.id, []).append(ch)
-            except discord.HTTPException:
-                # Skip problematic channel
+            except discord.HTTPException:  # skip problematic/missing channel gracefully
                 continue
 
     # Delete empty overflow categories (suffix >= 2)
     for suffix, cat in reversed(family):
-        if suffix >= 2 and len(cat.channels) == 0:
+        if suffix >= 2 and len(cat.channels) == 0:  # remove empty overflow categories
             try:
                 await cat.delete(reason="Removing empty ticket overflow category")
             except discord.HTTPException:

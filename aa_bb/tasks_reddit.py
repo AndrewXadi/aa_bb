@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _render_template(template: str, context: Dict[str, str], fallback: str) -> str:
+    """Format a template with context, falling back when keys are missing."""
     base = template or fallback
     try:
         return base.format(**context)
@@ -31,6 +32,7 @@ def _render_template(template: str, context: Dict[str, str], fallback: str) -> s
 
 
 def _get_settings() -> BigBrotherRedditSettings | None:
+    """Return the singleton reddit settings or None when unavailable."""
     try:
         return BigBrotherRedditSettings.get_solo()
     except (BigBrotherRedditSettings.DoesNotExist, OperationalError, ProgrammingError):
@@ -40,20 +42,21 @@ def _get_settings() -> BigBrotherRedditSettings | None:
 
 @shared_task
 def post_reddit_recruitment() -> str:
-    if not is_reddit_module_visible():
+    """Pick a recruitment message and submit it to Reddit if the module allows it."""
+    if not is_reddit_module_visible():  # Hidden module -> skip all posting.
         return "reddit module hidden"
 
     settings = _get_settings()
-    if settings is None or not settings.enabled:
+    if settings is None or not settings.enabled:  # Missing or disabled configuration.
         return "reddit module disabled"
 
-    if not settings.last_submission_at:
+    if not settings.last_submission_at:  # First post ever—just log informationally.
         logger.info("Reddit module will post its first message.")
-    elif not enough_time_since_last_post(settings):
+    elif not enough_time_since_last_post(settings):  # Cooldown not yet expired.
         return "cooldown"
 
     message = pick_reddit_message()
-    if message is None:
+    if message is None:  # No unused messages available to post.
         logger.warning("No reddit messages available for posting.")
         return "no-messages"
 
@@ -93,7 +96,7 @@ def post_reddit_recruitment() -> str:
     ])
 
     webhook = settings.reddit_webhook
-    if webhook:
+    if webhook:  # Only notify Discord when a hook has been configured.
         template = settings.reddit_webhook_message
         shortlink = getattr(submission, "shortlink", full_permalink)
         content = _render_template(
@@ -114,7 +117,8 @@ def post_reddit_recruitment() -> str:
 
 @shared_task
 def monitor_reddit_replies() -> str:
-    if not is_reddit_module_visible():
+    """Poll the last submission for replies and broadcast them via webhook."""
+    if not is_reddit_module_visible():  # Respect feature visibility toggle.
         return "reddit module hidden"
 
     settings = _get_settings()
@@ -123,6 +127,7 @@ def monitor_reddit_replies() -> str:
         or not settings.enabled
         or not settings.last_submission_id
     ):
+        # Without config/enabled flag/last submission context there is nothing to poll.
         return "idle"
 
     try:
@@ -142,10 +147,10 @@ def monitor_reddit_replies() -> str:
     new_comments = []
     for comment in submission.comments.list():
         created = datetime.fromtimestamp(getattr(comment, "created_utc", 0), tz=datetime_timezone.utc)
-        if created > last_checked:
+        if created > last_checked:  # Only track replies newer than the checkpoint.
             new_comments.append((created, comment))
 
-    if not new_comments:
+    if not new_comments:  # Update checkpoint even if nothing new to report.
         settings.last_reply_checked_at = timezone.now()
         settings.save(update_fields=["last_reply_checked_at"])
         return "no-updates"

@@ -1,3 +1,10 @@
+"""
+Corptools integration tasks (CT = Corptools).
+
+These helpers mirror the upstream corptools modules but add BigBrother-specific
+logging, throttling, and message notifications.
+"""
+
 import datetime
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence
@@ -41,52 +48,63 @@ logger = get_extension_logger(__name__)
 
 @dataclass(frozen=True)
 class ModuleRule:
+    """Definition of a CT module, its gating attributes, and tasks to execute."""
+
     name: str
-    enabled_flag: Optional[str]            
-    runtime_disable_attr: Optional[str]    
-    last_update_fields: Sequence[str]      
-    required_scopes: Sequence[str]         
+    enabled_flag: Optional[str]
+    runtime_disable_attr: Optional[str]
+    last_update_fields: Sequence[str]
+    required_scopes: Sequence[str]
     tasks: Sequence[Callable]
     extra_predicate: Optional[Callable[[], bool]] = None
 
+
 def _safe_identity_refresh(char_id: int):
+    """Ensure the EveCharacter identity cache is refreshed without exploding."""
     try:
         EveCharacter.objects.update_character(char_id)
     except Exception as e:
         logger.warning(f"Identity refresh failed for {char_id}: {e}", exc_info=True)
 
+
 def _is_enabled(flag_name: Optional[str]) -> bool:
-    if not flag_name:
+    """Check whether a module flag is globally enabled."""
+    if not flag_name:  # No flag configured, treat module as enabled by default.
         return True
     return bool(getattr(app_settings, flag_name, False))
 
 
 def _not_temp_disabled(conf: CorptoolsConfiguration, attr: Optional[str]) -> bool:
-    if not attr:
+    """Inspect runtime toggle on CorptoolsConfiguration to see if module paused."""
+    if not attr:  # No runtime toggle specified, nothing to disable here.
         return True
     return bool(getattr(conf, attr, False) is False)
 
 
 def _available_fields(audit: CharacterAudit, fields: Iterable[str]) -> List[str]:
+    """Return the subset of last-update fields that the audit record actually has."""
     return [f for f in fields if hasattr(audit, f)]
 
 
 def _is_stale_value(dt, cutoff) -> bool:
+    """Determine whether a timestamp is missing or older than the cutoff."""
     return (dt is None) or (dt <= cutoff)
 
 
 def _any_available_field_stale(audit: CharacterAudit, fields: Iterable[str], cutoff) -> bool:
+    """Check whether any available last-update field is stale."""
     avail = _available_fields(audit, fields)
-    if not avail:
+    if not avail:  # If audit lacks these fields, the entry is not considered stale.
         return False
     return any(_is_stale_value(getattr(audit, f, None), cutoff) for f in avail)
 
 
 def _has_valid_token_with_scopes(char_id: int, scopes: Sequence[str]) -> bool:
-    if not scopes:
+    """Confirm the character has a valid token with the requested scopes."""
+    if not scopes:  # Some modules have no scope requirement (e.g. local caches).
         return True
     token = Token.get_token(char_id, scopes)
-    if not token:
+    if not token:  # Cannot run tasks without a token satisfying required scopes.
         return False
     try:
         return bool(token.valid_access_token())
@@ -222,6 +240,17 @@ RULES: List[ModuleRule] = [
 
 @shared_task
 def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None, dry_run: bool = False) -> str:
+    """
+    Iterate audits and queue CT module tasks for any characters with stale data.
+
+    Args:
+        days_stale: Age threshold for stale module data.
+        limit: Optional cap on number of audits to inspect.
+        dry_run: When True, log intended actions instead of enqueueing.
+
+    Returns:
+        Summary string announcing what was queued (and optionally posted to chat).
+    """
     conf = CorptoolsConfiguration.get_solo()
     cutoff = timezone.now() - datetime.timedelta(days=days_stale)
     cutoff_really_stale = timezone.now() - datetime.timedelta(days=days_stale, hours=6)
@@ -230,7 +259,7 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
         character__character_ownership__isnull=False
     ).select_related("character")
 
-    if limit:
+    if limit:  # Honor caller-provided limit to avoid scanning the entire table.
         qs = qs[: int(limit)]
 
     total_chars = 0
@@ -247,18 +276,18 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
 
         for rule in RULES:
             really_stale = _any_available_field_stale(audit, rule.last_update_fields, cutoff_really_stale)
-            if not _is_enabled(rule.enabled_flag):
+            if not _is_enabled(rule.enabled_flag):  # Skip modules turned off in settings.
                 continue
-            if not _not_temp_disabled(conf, rule.runtime_disable_attr):
+            if not _not_temp_disabled(conf, rule.runtime_disable_attr):  # Honor runtime pause switches.
                 continue
-            if rule.extra_predicate and not rule.extra_predicate():
+            if rule.extra_predicate and not rule.extra_predicate():  # Allow ad-hoc guards (e.g. paused contracts).
                 continue
-            if not _has_valid_token_with_scopes(char_id, rule.required_scopes):
+            if not _has_valid_token_with_scopes(char_id, rule.required_scopes):  # Cannot update without the scopes.
                 continue
-            if not _any_available_field_stale(audit, rule.last_update_fields, cutoff):
+            if not _any_available_field_stale(audit, rule.last_update_fields, cutoff):  # Fresh data needs no action.
                 continue
 
-            if not kickedcharactermodel and really_stale and not dry_run:
+            if not kickedcharactermodel and really_stale and not dry_run:  # Refresh identity once for badly stale chars.
                 _safe_identity_refresh(char_id)
                 kickedcharactermodel = True
 
@@ -267,10 +296,10 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                 que.append(sig)
                 total_tasks += 1
 
-        if que:
+        if que:  # Only proceed if at least one CT module task was assembled.
             updated_names.append(audit.character.character_name)
 
-            if dry_run:
+            if dry_run:  # Only log the plan—do not enqueue tasks in dry-run mode.
                 logger.info(
                     f"[DRY-RUN] Would submit chain of {len(que)} task(s) "
                     f"for {audit.character.character_name} ({char_id})"
@@ -292,7 +321,7 @@ def kickstart_stale_ct_modules(days_stale: int = 2, limit: Optional[int] = None,
                                 audit.character.character_name, char_id, getattr(e, 'args', [None])[0])
 
     # Build summary + optional message
-    if updated_names:
+    if updated_names:  # Send a digest if something was queued so staff gets visibility.
         names_str = ", ".join(updated_names)
         summary = (
             f"## CT audit complete:\n"
