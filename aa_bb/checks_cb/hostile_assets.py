@@ -1,3 +1,10 @@
+"""
+Corporate-level asset ownership checks.
+
+These helpers inspect corp audits to find the systems where corp assets
+live and highlight systems owned by alliances on the hostile list.
+"""
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -26,7 +33,8 @@ def get_asset_locations(corp_id: int) -> Dict[int, Optional[str]]:
     system_map: Dict[int, Optional[str]] = {}
 
     def add_system(system_obj):
-        if system_obj:
+        """Track the system when the asset resolves to a solar system."""
+        if system_obj:  # Skip placeholder corp assets with missing solar system.
             key = getattr(system_obj, 'pk', None)
             system_map[key] = system_obj.name
 
@@ -45,16 +53,16 @@ def get_asset_locations(corp_id: int) -> Dict[int, Optional[str]]:
     )
     return dict(sorted_items)
 
-def get_corp_hostile_asset_locations(user_id: int) -> Dict[str, str]:
+def get_corp_hostile_asset_locations(corp_id: int) -> Dict[str, str]:
     """
-    Returns a dict of system display name → owning alliance name
-    for systems where the user's characters have assets in space,
-    including only those owned by hostile alliances or that are
-    unresolvable.
+    Return {system name -> owner name} entries for hostile corp asset locations.
+
+    Only systems that cannot be resolved or that belong to a hostile alliance
+    are included in the response.
     """
     # get_asset_locations now returns Dict[int, Optional[str]]
-    systems = get_asset_locations(user_id)
-    if not systems:
+    systems = get_asset_locations(corp_id)
+    if not systems:  # No corp assets means nothing to audit.
         return {}
 
     # parse hostile alliance IDs
@@ -74,8 +82,7 @@ def get_corp_hostile_asset_locations(user_id: int) -> Dict[str, str]:
             "name": display_name
         })
 
-        if not owner_info:
-            # treat fully missing owner info as unresolvable
+        if not owner_info:  # Treat missing sovereignty as an unresolved owner.
             hostile_map[display_name] = "Unresolvable"
             #logger.debug(f"No ownership info for assets in {display_name}; marked Unresolvable")
             continue
@@ -89,7 +96,7 @@ def get_corp_hostile_asset_locations(user_id: int) -> Dict[str, str]:
         oname = owner_info.get("owner_name") or (f"ID {oid}" if oid is not None else "Unresolvable")
 
         # include only hostile or unresolvable owners
-        if oid in hostile_ids or "Unresolvable" in oname:
+        if oid in hostile_ids or "Unresolvable" in oname:  # Persist only hostile or unresolved sovereignty holders.
             hostile_map[display_name] = oname
             logger.info(f"Hostile asset system: {display_name} owned by {oname} ({oid})")
 
@@ -98,12 +105,14 @@ def get_corp_hostile_asset_locations(user_id: int) -> Dict[str, str]:
 
 def render_assets(corp_id: int) -> Optional[str]:
     """
-    Returns an HTML table listing each system where the user's characters have assets,
-    the system's sovereign owner, and highlights in red any owner on the hostile list.
+    Render an HTML table of systems where the corporation owns assets in space.
+
+    The table mirrors the member-level view but operates on corp audits and
+    highlights hostile sovereignty holders in red.
     """
     systems = get_asset_locations(corp_id)
     logger.info(f"corp id {corp_id}, systems {len(systems)}")
-    if not systems:
+    if not systems:  # Short-circuit when no corp assets exist.
         return None
 
     # Parse hostile IDs into a set of ints
@@ -120,29 +129,31 @@ def render_assets(corp_id: int) -> Optional[str]:
             "id":   system_id,
             "name": system_name or f"Unknown ({system_id})"
         })
-        if owner_info:
-            try:
-                # owner_id might be '' or None
-                oid = int(owner_info["owner_id"]) if owner_info["owner_id"] else None
-            except (ValueError, TypeError):
+        if owner_info:  # Only resolve sovereignty details when SDE returns something.
+            raw_owner_id = owner_info.get("owner_id")
+            if raw_owner_id:  # Convert IDs to ints when present.
+                try:
+                    oid = int(raw_owner_id)
+                except (ValueError, TypeError):
+                    oid = None
+            else:
                 oid = None
 
-            if oid is not None:
-                oname = owner_info["owner_name"] or f"ID {oid}"
+            if oid is not None:  # Positive ID gives us a name/hostile lookup.
+                oname = owner_info.get("owner_name") or f"ID {oid}"
                 hostile = oid in hostile_ids or "Unresolvable" in oname
-            else:
+            else:  # Placeholder dash for missing owner IDs.
                 oname = "—"
                 hostile = False
-        else:
+        else:  # Unresolvable owner data falls back to dashes.
             oname = "—"
             hostile = False
 
         # ← THIS must be indented inside the loop!
-        row_tpl = (
-            '<tr><td>{}</td><td style="color: red;">{}</td></tr>'
-            if hostile
-            else '<tr><td>{}</td><td>{}</td></tr>'
-        )
+        if hostile:  # Paint hostile ownership red for attention.
+            row_tpl = '<tr><td>{}</td><td style="color: red;">{}</td></tr>'
+        else:  # Neutral owners get default styling.
+            row_tpl = '<tr><td>{}</td><td>{}</td></tr>'
         html += format_html(row_tpl, system_name, oname)
 
     html += "</tbody></table>"
