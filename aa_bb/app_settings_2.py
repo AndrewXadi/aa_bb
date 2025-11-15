@@ -95,7 +95,7 @@ def get_corp_info(corp_id):
         member_count = result.get("member_count", 0)
     except HTTPNotModified as exc:
         set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
-        if cached_entry:  # Serve stale cache when ESI returns 304 and we still have data.
+        if cached_entry:  # Serve stale cache when ESI returns 304 and cached data exists.
             data = {
                 "name": cached_entry["name"],
                 "alliance_id": cached_entry["alliance_id"],
@@ -267,7 +267,7 @@ def install_package_and_migrate(link: str) -> bool:
                 manage_path = p
                 break
 
-        if manage_path is None:  # Give up when we still cannot find manage.py.
+        if manage_path is None:  # Give up when manage.py cannot be located.
             raise FileNotFoundError("manage.py not found under project path(s)")
 
         mig = subprocess.run(
@@ -342,7 +342,7 @@ def send_message(message: str, hook: str = None):
         """Send a payload with retry/backoff logic for rate limits or hiccups."""
         payload = {"content": content}
         while True:
-            _throttle()  # ensure we stay under our proactive limits
+            _throttle()  # Ensure proactive rate limits are honored before sending.
             try:
                 response = requests.post(webhook_url, json=payload)
                 response.raise_for_status()
