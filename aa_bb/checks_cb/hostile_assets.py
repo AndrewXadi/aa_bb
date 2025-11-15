@@ -139,7 +139,7 @@ def render_assets(corp_id: int) -> Optional[str]:
             else:
                 oid = None
 
-            if oid is not None:  # Positive ID gives us a name/hostile lookup.
+            if oid is not None:  # Positive ID enables a name/hostile lookup.
                 oname = owner_info.get("owner_name") or f"ID {oid}"
                 hostile = oid in hostile_ids or "Unresolvable" in oname
             else:  # Placeholder dash for missing owner IDs.

@@ -239,7 +239,7 @@ def get_user_hostile_transactions(user_id: int) -> Dict[int, str]:
         rows = get_user_transactions(new_qs)
         for eid, tx in rows.items():
             pt, created = ProcessedTransaction.objects.get_or_create(entry_id=eid)
-            if not created:  # Another worker beat us to it; skip duplicates.
+            if not created:  # Another worker finished first; skip duplicates.
                 continue
             if not is_transaction_hostile(tx):  # Notes persist only for hostile entries.
                 continue

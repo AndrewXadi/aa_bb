@@ -348,7 +348,7 @@ def send_message(message: str, hook: str = None):
                 response.raise_for_status()
                 return  # success
             except requests.exceptions.HTTPError:
-                if response.status_code == 429:  # Discord rate-limited us; honor Retry-After.
+                if response.status_code == 429:  # Discord rate-limited the request; honor Retry-After.
                     # obey Discord's Retry-After header
                     retry_after = response.headers.get("Retry-After")
                     try:
