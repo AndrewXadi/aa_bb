@@ -1,3 +1,10 @@
+"""
+Contract intelligence helpers.
+
+The functions in this module normalize Contract ORM rows, highlight hostile
+counterparties, and persist short notes for reuse in notifications.
+"""
+
 import html
 import logging
 
@@ -28,24 +35,27 @@ logger.setLevel(logging.DEBUG)
 
 
 def _find_employment_at(employment: list, date: datetime) -> Optional[dict]:
+    """Utility kept for backwards compatibility; returns corp during date."""
     for i, rec in enumerate(employment):
         start = rec.get('start_date')
         end = rec.get('end_date')
-        if start and start <= date and (end is None or date < end):
+        if start and start <= date and (end is None or date < end):  # Match when date falls inside this employment window.
             return rec
     return None
 
 
 def _find_alliance_at(history: list, date: datetime) -> Optional[int]:
+    """Find the alliance a corp belonged to at the given point in time."""
     for i, rec in enumerate(history):
         start = rec.get('start_date')
         next_start = history[i+1]['start_date'] if i+1 < len(history) else None
-        if start and start <= date and (next_start is None or date < next_start):
+        if start and start <= date and (next_start is None or date < next_start):  # Same overlap check for alliance periods.
             return rec.get('alliance_id')
     return None
 
 
 def gather_user_contracts(user_id: int):
+    """Return a queryset with every contract involving the user's characters."""
     user_chars = get_user_characters(user_id)
     user_ids = set(user_chars.keys())
     qs = Contract.objects.filter(
@@ -75,7 +85,7 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
         iinfo = get_entity_info(issuer_id, timeee)
 
         # -- assignee --
-        if c.assignee_id != 0:
+        if c.assignee_id != 0:  # Contracts addressed to a corp/character use assignee_id; otherwise fall back to acceptor.
             assignee_id = c.assignee_id
         else:
             assignee_id = c.acceptor_id
@@ -107,44 +117,48 @@ def get_user_contracts(qs) -> Dict[int, Dict]:
     return result
 
 def get_cell_style_for_contract_row(column: str, row: dict) -> str:
+    """
+    Inline styling helper shared by renderers and exports to make every
+    hostile party show up in red regardless of where the data lands.
+    """
     if column == 'issuer_name':
         cid = row.get("issuer_id")
-        if check_char_corp_bl(cid):
+        if check_char_corp_bl(cid):  # Issuer appears on blacklist.
             return 'color: red;'
         else:
             return ''
         
     if column == 'assignee_name':
         cid = row.get("assignee_id")
-        if check_char_corp_bl(cid):
+        if check_char_corp_bl(cid):  # Assignee appears on blacklist.
             return 'color: red;'
         else:
             return ''
 
     if column == 'issuer_corporation':
         aid = row.get("issuer_corporation_id")
-        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_corporations:
+        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_corporations:  # Issuer corp is flagged hostile.
             return 'color: red;'
         else:
             return ''
 
     if column == 'issuer_alliance':
         coid = row.get("issuer_alliance_id")
-        if coid and str(coid) in BigBrotherConfig.get_solo().hostile_alliances:
+        if coid and str(coid) in BigBrotherConfig.get_solo().hostile_alliances:  # Issuer alliance flagged hostile.
             return 'color: red;'
         else:
             return ''
 
     if column == 'assignee_corporation':
         aid = row.get("assignee_corporation_id")
-        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_corporations:
+        if aid and str(aid) in BigBrotherConfig.get_solo().hostile_corporations:  # Assignee corp flagged hostile.
             return 'color: red;'
         else:
             return ''
 
     if column == 'assignee_alliance':
         coid = row.get("assignee_alliance_id")
-        if coid and str(coid) in BigBrotherConfig.get_solo().hostile_alliances:
+        if coid and str(coid) in BigBrotherConfig.get_solo().hostile_alliances:  # Assignee alliance flagged hostile.
             return 'color: red;'
         else:
             return ''
@@ -153,20 +167,20 @@ def get_cell_style_for_contract_row(column: str, row: dict) -> str:
 
 def is_contract_row_hostile(row: dict) -> bool:
     """Returns True if the row matches hostile corp/char/alliance criteria."""
-    if check_char_corp_bl(row.get("issuer_id")):
+    if check_char_corp_bl(row.get("issuer_id")):  # Issuer character/alt is blacklisted.
         return True
-    if check_char_corp_bl(row.get("assignee_id")):
+    if check_char_corp_bl(row.get("assignee_id")):  # Assignee/acceptor is blacklisted.
         return True
 
     solo = BigBrotherConfig.get_solo()
 
-    if row.get("issuer_corporation_id") and str(row["issuer_corporation_id"]) in solo.hostile_corporations:
+    if row.get("issuer_corporation_id") and str(row["issuer_corporation_id"]) in solo.hostile_corporations:  # Issuer corp hostile.
         return True
-    if row.get("issuer_alliance_id") and str(row["issuer_alliance_id"]) in solo.hostile_alliances:
+    if row.get("issuer_alliance_id") and str(row["issuer_alliance_id"]) in solo.hostile_alliances:  # Issuer alliance hostile.
         return True
-    if row.get("assignee_corporation_id") and str(row["assignee_corporation_id"]) in solo.hostile_corporations:
+    if row.get("assignee_corporation_id") and str(row["assignee_corporation_id"]) in solo.hostile_corporations:  # Assignee corp hostile.
         return True
-    if row.get("assignee_alliance_id") and str(row["assignee_alliance_id"]) in solo.hostile_alliances:
+    if row.get("assignee_alliance_id") and str(row["assignee_alliance_id"]) in solo.hostile_alliances:  # Assignee alliance hostile.
         return True
 
     return False
@@ -181,7 +195,7 @@ def render_contracts(user_id: int) -> str:
     """
     contracts = get_user_contracts(gather_user_contracts(user_id))
     logger.info(f"Number of contracts: {len(contracts)}")
-    if not contracts:
+    if not contracts:  # No contracts in corptools yet.
         return '<p>No contracts found.</p>'
 
     # Sort rows by issue date descending
@@ -198,7 +212,7 @@ def render_contracts(user_id: int) -> str:
     total = len(hostile_rows)
     logger.info(f"found {total} hostile contracts")
     limit = 50
-    if total == 0:
+    if total == 0:  # After filtering no hostile rows remain.
         return '<p>No hostile contracts found.</p>'
 
     display_rows = hostile_rows[:limit]
@@ -240,7 +254,7 @@ def render_contracts(user_id: int) -> str:
     html_parts.append('</table>')
 
     # Indicate skipped rows
-    if skipped > 0:
+    if skipped > 0:  # Inform the user that the list was truncated.
         html_parts.append(
             f'<p>Showing {limit} of {total} hostile contracts; '
             f'skipped {skipped} older contracts.</p>'
@@ -252,6 +266,12 @@ def render_contracts(user_id: int) -> str:
 
 
 def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
+    """
+    Persist and return a mapping of hostile contract id -> formatted note.
+
+    This keeps background notifications idempotent while still allowing the
+    UI to show both new and previously seen alerts.
+    """
     cfg = BigBrotherConfig.get_solo()
     hostile_corps = cfg.hostile_corporations
     hostile_allis = cfg.hostile_alliances
@@ -267,7 +287,7 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
     notes: Dict[int, str] = {}
     new_ids = [cid for cid in all_ids if cid not in seen_ids]
 
-    if new_ids:
+    if new_ids:  # Only hydrate/stash contracts that have not been seen before.
         # 3) Hydrate only new contracts
         new_qs = all_qs.filter(contract_id__in=new_ids)
         new_rows = get_user_contracts(new_qs)
@@ -275,11 +295,11 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
         for cid, c in new_rows.items():
             # only create ProcessedContract if it doesn't already exist
             pc, created = ProcessedContract.objects.get_or_create(contract_id=cid)
-            # if we've processed it before, skip the rest
+            # Another worker already processed this contract.
             if not created:
                 continue
 
-            if not is_contract_row_hostile(c):
+            if not is_contract_row_hostile(c):  # Skip benign contracts entirely.
                 continue
 
             flags: List[str] = []
@@ -316,7 +336,7 @@ def get_user_hostile_contracts(user_id: int) -> Dict[int, str]:
             notes[cid] = note_text
 
     # 4) Pull in old notes
-    for scn in SusContractNote.objects.filter(user_id=user_id):
+    for scn in SusContractNote.objects.filter(user_id=user_id):  # Merge past notes so UI shows history.
         notes[scn.contract.contract_id] = scn.note
 
     return notes
