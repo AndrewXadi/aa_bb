@@ -8,7 +8,6 @@ from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from .models import Alliance_names, BigBrotherConfig
-from .modelss import CorporationInfoCache
 import re
 import os
 import time
@@ -26,17 +25,6 @@ import logging
 logger = logging.getLogger(__name__)
 TTL_SHORT = timedelta(hours=4)
 
-def get_main_corp_id():
-    """Best-effort lookup of the primary corp id using the first superuser alt."""
-    from allianceauth.eveonline.models import EveCharacter
-    try:
-        char = EveCharacter.objects.filter(character_ownership__user__is_superuser=True).first()
-        if char:  # Prefer the first superuser's main corp when available.
-            return char.corporation_id
-    except Exception:
-        pass
-    return 123456789888888  # Fallback
-
 def get_owner_name():
     """Return the character name used to sign API requests / dashboards."""
     from allianceauth.eveonline.models import EveCharacter
@@ -48,90 +36,6 @@ def get_owner_name():
         pass
     return None  # Fallback
 
-def get_corp_info(corp_id):
-    """Cached corp info fetcher that falls back to ESI on misses."""
-    if not (1_000_000 <= corp_id < 3_000_000_000):  # Valid range for known corp IDs
-        logger.warning(f"Skipping invalid corp_id: {corp_id}")
-        return {
-            "name": f"Invalid Corp ({corp_id})",
-            "alliance_id": None
-        }
-
-    expiry_key = expiry_cache_key("corp_info", corp_id)
-    expiry_hint = get_cached_expiry(expiry_key)
-
-    # Try DB cache first
-    cached_entry = None
-    try:
-        entry = CorporationInfoCache.objects.get(pk=corp_id)
-        now_ts = timezone.now()
-        if expiry_hint and expiry_hint > now_ts:  # Cache still valid per redis hint.
-            return {"name": entry.name, "alliance_id": getattr(entry, "alliance_id", None)}
-        if expiry_hint is None and now_ts - entry.updated < TTL_SHORT:  # DB entry still fresh without redis hint.
-            return {"name": entry.name, "alliance_id": getattr(entry, "alliance_id", None)}
-        else:
-            cached_entry = {
-                "name": entry.name,
-                "alliance_id": getattr(entry, "alliance_id", None),
-                "member_count": entry.member_count,
-            }
-            entry.delete()
-    except CorporationInfoCache.DoesNotExist:
-        pass
-
-    # Fetch from ESI
-    member_count = 0
-    try:
-        #logger.debug(f"Fetching corp info for corp_id {corp_id}")
-        operation = esi.client.Corporation.GetCorporationsCorporationId(
-            corporation_id=corp_id
-        )
-        result, expires_at = call_result(operation)
-        set_cached_expiry(expiry_key, expires_at)
-        data = {
-            "name": result.get("name", f"Unknown ({corp_id})"),
-            "alliance_id": result.get("alliance_id"),
-        }
-        member_count = result.get("member_count", 0)
-    except HTTPNotModified as exc:
-        set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
-        if cached_entry:  # Serve stale cache when ESI returns 304 and cached data exists.
-            data = {
-                "name": cached_entry["name"],
-                "alliance_id": cached_entry["alliance_id"],
-            }
-            member_count = cached_entry.get("member_count", 0)
-        else:
-            try:
-                result, expires_at = call_result(operation, use_etag=False)
-                set_cached_expiry(expiry_key, expires_at)
-                data = {
-                    "name": result.get("name", f"Unknown ({corp_id})"),
-                    "alliance_id": result.get("alliance_id"),
-                }
-                member_count = result.get("member_count", 0)
-            except Exception as e:
-                logger.warning(f"Error fetching corp {corp_id} after 304: {e}")
-                data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
-                member_count = 0
-    except (HTTPClientError, HTTPServerError) as e:
-        logger.warning(f"ESI error fetching corp {corp_id}: {e}")
-        data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
-    except (RequestError, requests.exceptions.RequestException) as e:
-        logger.warning(f"Network error fetching corp {corp_id}: {e}")
-        data = {"name": f"Unknown Corp ({corp_id})", "alliance_id": None}
-
-    # Store/update DB cache
-    try:
-        CorporationInfoCache.objects.update_or_create(
-            corp_id=corp_id,
-            defaults={"name": data["name"], "member_count": member_count},
-        )
-    except Exception:
-        pass
-
-    return data
-    
 def get_alliance_name(alliance_id):
     """Resolve an alliance id to its name with DB/ESI caching."""
     if not alliance_id:  # Allow callers to pass None when corp not in alliance.
@@ -210,84 +114,6 @@ def afat_active():
     """Return True when the AFAT plugin is loaded in this deployment."""
     return apps.is_installed("afat")
 
-
-def install_package_and_migrate(link: str) -> bool:
-    """
-    Install a package from `link`, run migrations, and report via webhook.
-
-    The helper tries in-process `call_command` first and falls back to running
-    the project’s manage.py with the same interpreter if needed.
-    """
-    from .app_settings import send_message, get_pings
-    import sys
-    import subprocess
-    from pathlib import Path
-
-    send_message(f"Starting package update from link: {link}")
-
-    # 1) Install in the same environment as this process
-    try:
-        pip_cmd = [sys.executable, "-m", "pip", "install", link]
-        res = subprocess.run(pip_cmd, capture_output=True, text=True)
-        if res.returncode != 0:  # pip install failed; log tail and abort.
-            tail = (res.stderr or res.stdout or "").splitlines()[-20:]
-            logger.error("pip install failed: %s", res.stderr)
-            send_message(f"#{get_pings('Error')} pip install failed:\n```{os.linesep.join(tail)}```")
-            return False
-    except Exception as e:
-        logger.exception("pip install raised exception")
-        send_message(f"#{get_pings('Error')} pip install raised an exception:\n```{e}```")
-        return False
-
-    # 2) Run migrations, prefer in-process call_command
-    try:
-        from django.core.management import call_command
-        call_command("migrate", interactive=False, verbosity=1)
-        send_message("Migrations completed successfully, make sure to restart AA.")
-        return True
-    except Exception as e:
-        logger.warning("call_command('migrate') failed; trying manage.py fallback: %s", e)
-
-    # 3) Fallback: locate manage.py and run it with the same interpreter
-    try:
-        from django.conf import settings
-        base = Path(getattr(settings, "BASE_DIR", ".")).resolve()
-        manage_path = None
-
-        # Common locations relative to BASE_DIR
-        for candidate in (base, base.parent, base.parent.parent):
-            cand = candidate / "manage.py"
-            if cand.exists():  # Use the first manage.py found near BASE_DIR.
-                manage_path = cand
-                break
-
-        # Last resort: shallow search up one level
-        if manage_path is None:  # Expand search one level up when common paths failed.
-            for p in base.parent.glob("**/manage.py"):
-                manage_path = p
-                break
-
-        if manage_path is None:  # Give up when manage.py cannot be located.
-            raise FileNotFoundError("manage.py not found under project path(s)")
-
-        mig = subprocess.run(
-            [sys.executable, str(manage_path), "migrate", "--noinput"],
-            capture_output=True,
-            text=True,
-        )
-        if mig.returncode != 0:  # manage.py migrate failed; capture output and abort.
-            tail = (mig.stderr or mig.stdout or "").splitlines()[-40:]
-            logger.error("manage.py migrate failed: %s", mig.stderr)
-            send_message(f"#{get_pings('Error')} manage.py migrate failed:\n```{os.linesep.join(tail)}```")
-            return False
-
-        send_message("Migrations completed successfully, make sure to restart AA.")
-        return True
-
-    except Exception as e2:
-        logger.exception("Fallback manage.py migrate failed")
-        send_message(f"#{get_pings('Error')} Could not run migrations:\n```{e2}```")
-        return False
 
 
 

@@ -9,6 +9,12 @@ from django.db.models import JSONField
 
 
 class BigBrotherRedditSettings(SingletonModel):
+    """
+    Stores OAuth credentials, scheduling, and webhook templates for the Reddit
+    recruitment publisher. The numerous fields map directly to the admin UI
+    (client id/secret, scopes, target subreddit, cadence, Discord notifications,
+    and the stored tokens/permalinks fetched during runtime).
+    """
     enabled = models.BooleanField(
         default=False,
         help_text="Toggle after configuration to allow reddit automation to run."
@@ -124,6 +130,7 @@ class BigBrotherRedditSettings(SingletonModel):
 
 
 class BigBrotherRedditMessage(models.Model):
+    """Queue of Markdown job ads reused by the Reddit autoposter."""
     used_in_cycle = models.BooleanField(
         default=False,
         help_text="Automatically toggled once the message is used in a cycle."
@@ -148,6 +155,7 @@ class BigBrotherRedditMessage(models.Model):
 
 
 class PapCompliance(models.Model):
+    """Per-user PAP compliance score (cached for dashboards and tickets)."""
     user_profile = models.ForeignKey(
         UserProfile,
         on_delete=models.CASCADE,
@@ -161,6 +169,21 @@ class PapCompliance(models.Model):
 
 
 class TicketToolConfig(SingletonModel):
+    """
+    Configuration that drives the Discord compliance ticket automation.
+
+    Major sections:
+    - compliance_filter: optional charlink filter to scope the population.
+    - ticket_counter: sequential number used for naming ticket channels.
+    - *_check_enabled, *_check, *_check_frequency, *_reason, *_reminder:
+      toggles and thresholds for the corp token compliance, PAP compliance,
+      AFK monitoring, and Discord link checks.
+    - Max_Afk_Days / afk_check: trailing max and post-ticket grace period.
+    - discord_check fields: mirror the AFK logic but for Discord link status.
+    - Category_ID / staff_roles / Role_ID: Discord metadata controlling which
+      category hosts the ticket, which roles gain access, and which role is pinged.
+    - excluded_users: AllianceAuth users that should never receive automated tickets.
+    """
     compliance_filter = models.ForeignKey(
         ComplianceFilter,
         related_name="compliance_filter",
@@ -419,6 +442,17 @@ class AwoxKillsCache(models.Model):
             models.Index(fields=["last_accessed"]),
         ]
 class LeaveRequest(models.Model):
+    """
+    Leave of Absence request stored in Auth so staff can audit time away.
+
+    Fields:
+    - user: AllianceAuth user submitting the request.
+    - main_character: snapshot of the main character name at submission time.
+    - start_date / end_date: requested AFK window.
+    - reason: free-form explanation supplied by the user.
+    - status: workflow flag (pending → approved/in_progress/finished/denied).
+    - created_at: timestamp when the request was filed.
+    """
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
@@ -444,6 +478,15 @@ class LeaveRequest(models.Model):
     
 
 class CorporationInfoCache(models.Model):
+    """
+    24h TTL cache of ESI corporation info.
+
+    Fields:
+    - corp_id: primary key / EVE corporation id.
+    - name: most recently fetched corp name.
+    - member_count: current member count snapshot.
+    - updated: Django-managed timestamp refreshed on save.
+    """
     corp_id = models.BigIntegerField(primary_key=True)
     name = models.CharField(max_length=255)
     member_count = models.IntegerField(default=0)
@@ -462,6 +505,14 @@ class CorporationInfoCache(models.Model):
     
 
 class AllianceHistoryCache(models.Model):
+    """
+    Cached alliance membership timeline per corporation.
+
+    Fields:
+    - corp_id: corporation used for the alliance history fetch.
+    - history: serialized list of {alliance_id, start_date} entries.
+    - updated: auto timestamp.
+    """
     corp_id = models.BigIntegerField(primary_key=True)
     history = JSONField()  # store list of {alliance_id, start_date}
     updated = models.DateTimeField(auto_now=True)
@@ -479,6 +530,7 @@ class AllianceHistoryCache(models.Model):
     
 
 class SovereigntyMapCache(models.Model):
+    """Single-row cache storing the ESI sovereignty map JSON."""
     id = models.PositiveSmallIntegerField(primary_key=True, default=1)  # single row
     data = models.JSONField()
     updated = models.DateTimeField(auto_now=True)
@@ -491,6 +543,7 @@ class SovereigntyMapCache(models.Model):
         return timezone.now() - self.updated < timedelta(hours=24)
     
 class CharacterAccountState(models.Model):
+    """Persistent record of whether a character is Alpha, Omega, or Unknown."""
     ALPHA = "alpha"
     OMEGA = "omega"
     UNKNOWN = "unknown"
@@ -510,6 +563,17 @@ class CharacterAccountState(models.Model):
     
 
 class ComplianceTicket(models.Model):
+    """
+    Discord ticket metadata for compliance automation.
+
+    Fields:
+    - user: AllianceAuth user (may be null if deleted).
+    - discord_user_id / discord_channel_id / ticket_id: Discord identifiers that receive the ticket.
+    - reason: which compliance rule fired (corp/pap/afk/discord/etc.).
+    - created_at: timestamp for when the ticket was opened.
+    - last_reminder_sent: how many reminders have gone out.
+    - is_resolved: boolean to stop further reminders.
+    """
     REASONS = [
         ("corp_check", "Corp Compliance"),
         ("paps_check", "PAP Requirements"),
