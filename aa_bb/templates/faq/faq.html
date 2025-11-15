@@ -1,3 +1,6 @@
+<!--
+  FAQ entries for common deployment questions—kept lightweight on purpose.
+-->
 {% extends 'faq/base.html' %}
 {% load i18n %}
 
@@ -11,7 +14,7 @@
 <dl>
   <dt>{% translate "Does the cache warmer run for every single user?" %}</dt>
   <dd>
-    {% blocktrans %}The first time you load a pilot it gathers contracts, mails, and transactions and stores the results for about two months. Subsequent visits are instant until the cache expires. For large corps we still suggest setting your gunicorn timeout to 0; the warmer is a best-effort helper but heavy streams can still be killed by strict timeouts.{% endblocktrans %}
+    {% blocktrans %}The first time you load a pilot it gathers contracts, mails, and transactions and stores the results for about two months. Subsequent visits are instant until the cache expires. Large corps should still set gunicorn timeouts to 0; the warmer is a best-effort helper but heavy streams can still be killed by strict timeouts.{% endblocktrans %}
   </dd>
 
   <dt>{% translate "We still see cards stalling after warming. Any tips?" %}</dt>
@@ -34,6 +37,6 @@
 </dl>
 
 <p class="text-muted small">
-  {% translate "Still stuck? Contact support so we can grow this list." %}
+  {% translate "Still stuck? Contact support so this list can grow." %}
 </p>
 {% endblock %}

@@ -1,3 +1,8 @@
+<!--
+  Corp Brother dashboard landing page.
+  Renders the corp selector, placeholders for async card content, and the JS
+  needed to stream/load each intelligence card without reloading the page.
+-->
 {% extends 'aa_cb/base.html' %}
 {% load i18n %}
 {% load humanize %}
@@ -301,7 +306,7 @@ async function loadAll(option) {
              <thead><tr id="contracts-header"></tr></thead>
              <tbody id="contracts-body"></tbody>
            </table>`,
-          true // assume clean until we see a hostile contract
+          true // assume clean until a hostile contract is detected
         );
 
         // 2) Stream the contracts; returns allClean flag

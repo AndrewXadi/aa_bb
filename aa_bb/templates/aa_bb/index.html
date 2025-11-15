@@ -1,3 +1,8 @@
+<!--
+  Main Big Brother dashboard for individual members.
+  Provides the account selector, result placeholders, and front-end logic that
+  loads each check card asynchronously from the Django JSON endpoints.
+-->
 {% extends 'aa_bb/base.html' %}
 {% load i18n %}
 {% load humanize %}
@@ -240,7 +245,7 @@ async function loadSuspiciousMails(option, idx) {
     source.addEventListener('done', () => {
       source.close();
       hideContract();
-      // If we never saw any hostile, ensure the icon is green
+      // If no hostile entries were seen, ensure the icon is green
       const clean = hostileCount === 0;
       if (clean) {
         updateCardStatus(idx, true);
@@ -372,7 +377,7 @@ async function loadAll(option) {
              <thead><tr id="contracts-header"></tr></thead>
              <tbody id="contracts-body"></tbody>
            </table>`,
-          true // assume clean until we see a hostile contract
+          true // assume clean until a hostile contract is detected
         );
 
         // 2) Stream the contracts; returns allClean flag
