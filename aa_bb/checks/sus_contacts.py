@@ -33,7 +33,7 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
     Fetch and filter contacts for a user, excluding NPCs and self-contacts,
     and annotate each with standing, grouping support.
     """
-    # 1. Get our chars as a dict { character_id: character_name }
+    # 1. Build a dict of the user's characters { character_id: character_name }
     user_chars = get_user_characters(user_id)
     user_char_ids = set(user_chars.keys())
 
@@ -48,7 +48,7 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
         cid = cc.contact_id
         ctype = cc.contact_type
 
-        # skip NPC entries and our own characters
+        # skip NPC entries and characters owned by the user
         if ctype == 'npc' or cid in user_char_ids:  # Ignore NPC entries or self-references.
             continue
 
@@ -111,7 +111,7 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
                 'alliance':          alli_name,
             }
 
-        # record which of our chars saw this contact
+        # record which of the user's characters saw this contact
         host_char_id = cc.character.character.character_id
         contacts[cid]['characters'].add(user_chars[host_char_id])
 

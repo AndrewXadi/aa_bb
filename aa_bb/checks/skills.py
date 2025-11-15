@@ -222,7 +222,7 @@ def render_user_skills_html(user_id: int) -> str:
             '<tbody>'
         )
 
-        # One row per skill_id, in the order of our global list
+        # One row per skill_id, following the global list order
         for sid in skill_ids:
             levels = info.get(sid, {"trained": 0, "active": 0})
             trained = levels["trained"]
