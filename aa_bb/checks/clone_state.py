@@ -2,7 +2,7 @@
 Determine whether each of a user's characters is currently Alpha or Omega.
 
 This module centralizes the heuristics for deciding a character's state so
-that we can reuse the same logic both in HTML renderings and in background
+the same logic can be reused both in HTML renderings and in background
 tasks that persist the findings.
 """
 
@@ -23,9 +23,9 @@ def determine_character_state(user_id, save: bool = False):
     """
     Inspect every owned character's skill levels and infer Alpha/Omega status.
 
-    We try to respect the user's previous manual override (CharacterAccountState),
-    then progressively evaluate alpha-locked skills, and finally fall back to
-    a brute-force scan of all known skills. Passing `save=True` will persist
+    The flow respects the user's previous manual override (CharacterAccountState),
+    then progressively evaluates alpha-locked skills, and finally falls back to
+    a brute-force scan of all known skills. Passing `save=True` persists
     the findings so that later runs can reuse the stored state immediately.
     """
     alpha_skills_file = os.path.join(BASE_DIR, "alpha_skills.json")
