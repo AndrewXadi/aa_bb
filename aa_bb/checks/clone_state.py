@@ -1,3 +1,11 @@
+"""
+Determine whether each of a user's characters is currently Alpha or Omega.
+
+This module centralizes the heuristics for deciding a character's state so
+that we can reuse the same logic both in HTML renderings and in background
+tasks that persist the findings.
+"""
+
 from .skills import get_user_skill_info
 from aa_bb.modelss import CharacterAccountState
 from aa_bb.app_settings import resolve_character_name, get_user_characters
@@ -12,6 +20,14 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def determine_character_state(user_id, save: bool = False):
+    """
+    Inspect every owned character's skill levels and infer Alpha/Omega status.
+
+    We try to respect the user's previous manual override (CharacterAccountState),
+    then progressively evaluate alpha-locked skills, and finally fall back to
+    a brute-force scan of all known skills. Passing `save=True` will persist
+    the findings so that later runs can reuse the stored state immediately.
+    """
     alpha_skills_file = os.path.join(BASE_DIR, "alpha_skills.json")
     all_skills_file = os.path.join(BASE_DIR, "skills.json")
 
@@ -25,7 +41,7 @@ def determine_character_state(user_id, save: bool = False):
         all_skills_data = json.load(f)
     all_skill_ids = set()
     for category, entries in all_skills_data.items():
-        if len(entries) < 2:
+        if len(entries) < 2:  # Expect two-value tuples (metadata, skill map); skip malformed categories.
             continue
         skill_map = entries[1]
         for skill_id_str in skill_map:
@@ -44,7 +60,8 @@ def determine_character_state(user_id, save: bool = False):
 
     # Helper to get skill info and cache it
     def get_skill_info_cached(skill_id):
-        if skill_id not in skill_cache:
+        """Cached wrapper around get_user_skill_info to avoid repeated ESI hits."""
+        if skill_id not in skill_cache:  # Populate cache lazily per skill ID.
             skill_cache[skill_id] = get_user_skill_info(user_id, skill_id)
         return skill_cache[skill_id]
 
@@ -57,23 +74,23 @@ def determine_character_state(user_id, save: bool = False):
         db_record = char_db_records.get(char_id)
 
         # 1. Check DB skill first
-        if db_record and db_record.skill_used:
+        if db_record and db_record.skill_used:  # Reuse previously saved skill to shortcut classification.
             skill_id = db_record.skill_used
             skill_data_all_chars = get_skill_info_cached(skill_id)
             skill_data = skill_data_all_chars.get(char_id, {})
             trained = skill_data.get("trained_skill_level", 0)
             active = skill_data.get("active_skill_level", 0)
 
-            if active > alpha_caps.get(skill_id, 5):
+            if active > alpha_caps.get(skill_id, 5):  # Active level beyond alpha cap implies Omega.
                 state = "omega"
-            elif trained > active:
+            elif trained > active:  # Trained but inactive levels indicate Alpha clone restrictions.
                 state = "alpha"
 
-            if state:
+            if state:  # Track which skill led to the decision for future reuse.
                 skill_used = skill_id
 
         # 2. Check alpha skills if state still unknown
-        if state is None:
+        if state is None:  # Fallback to checking known alpha-limited skills.
             for skill in alpha_skills:
                 skill_id = skill["id"]
                 cap = skill["cap"]
@@ -82,17 +99,17 @@ def determine_character_state(user_id, save: bool = False):
                 trained = skill_data.get("trained_skill_level", 0)
                 active = skill_data.get("active_skill_level", 0)
 
-                if active > cap:
+                if active > cap:  # Exceeding alpha cap => Omega.
                     state = "omega"
                     skill_used = skill_id
                     break
-                elif trained > active:
+                elif trained > active:  # Having trained but inactive levels => Alpha.
                     state = "alpha"
                     skill_used = skill_id
                     break
 
         # 3. Check remaining skills only if still unknown
-        if state is None:
+        if state is None:  # As a last resort, brute-force check all remaining skills.
             remaining_skill_ids = all_skill_ids - set(alpha_caps.keys())
             for skill_id in remaining_skill_ids:
                 skill_data_all_chars = get_skill_info_cached(skill_id)
@@ -100,13 +117,13 @@ def determine_character_state(user_id, save: bool = False):
                 trained = skill_data.get("trained_skill_level", 0)
                 active = skill_data.get("active_skill_level", 0)
 
-                if trained > active:
+                if trained > active:  # Alpha clones cannot train beyond active level.
                     state = "alpha"
                     skill_used = skill_id
                     break
 
 
-        if state is None:
+        if state is None:  # Some characters may lack data entirely—mark as unknown.
             state = "unknown"
             skill_used = None
 
@@ -118,7 +135,7 @@ def determine_character_state(user_id, save: bool = False):
         }
 
         # Save or update DB record
-        if save:
+        if save:  # Persist the derived state for future fast lookup (inside transaction for safety).
             with transaction.atomic():
                 CharacterAccountState.objects.update_or_create(
                     char_id=char_id,
@@ -152,9 +169,9 @@ def render_character_states_html(user_id: int) -> str:
 
         # state formatting
         state_val = info.get("state", "unknown")
-        if state_val == "omega":
+        if state_val == "omega":  # Style Omega entries in red for visibility.
             state_val_html = mark_safe('<span style="color:red;">Omega</span>')
-        elif state_val == "alpha":
+        elif state_val == "alpha":  # Style Alpha entries in green.
             state_val_html = mark_safe('<span style="color:green;">Alpha</span>')
         else:
             state_val_html = "Unknown"
