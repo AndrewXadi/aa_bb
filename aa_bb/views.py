@@ -29,7 +29,6 @@ from aa_bb.checks.hostile_assets import render_assets
 from aa_bb.checks.hostile_clones import render_clones
 from aa_bb.checks.imp_blacklist import generate_blacklist_links
 from aa_bb.checks.lawn_blacklist import get_user_character_names_lawn
-from aa_bb.checks.notifications import game_time, skill_injected
 from aa_bb.checks.sus_contacts import render_contacts
 from aa_bb.checks.sus_mails import (
     get_user_mails,
@@ -107,21 +106,23 @@ CARD_DEFINITIONS = [
 
 
 def get_available_cards():
+    """Return card configurations filtered by alliance permissions."""
     cards = CARD_DEFINITIONS
     try:
         cfg = BigBrotherConfig.get_solo()
     except BigBrotherConfig.DoesNotExist:
         return cards
 
-    if cfg.main_alliance_id != ALLOWED_LAWN_ALLIANCE_ID:
+    if cfg.main_alliance_id != ALLOWED_LAWN_ALLIANCE_ID:  # Only LAWN proper sees the LAWN blacklist card.
         cards = [card for card in cards if card["key"] != "lawn_bl"]
 
-    if cfg.main_alliance_id not in ALLOWED_IMP_ALLIANCE_IDS:
+    if cfg.main_alliance_id not in ALLOWED_IMP_ALLIANCE_IDS:  # Restrict IMP blacklist to IMP alliances.
         cards = [card for card in cards if card["key"] != "imp_bl"]
     return cards
 
 
 def get_user_id(character_name):
+    """Resolve an auth user ID from a main character name."""
     try:
         ownership = CharacterOwnership.objects.select_related('user') \
             .get(character__character_name=character_name)
@@ -129,18 +130,16 @@ def get_user_id(character_name):
     except CharacterOwnership.DoesNotExist:
         return None
 
-def get_mail_keywords():
-    return BigBrotherConfig.get_solo().mail_keywords
-
 # Single-card loader
 @login_required
 @permission_required("aa_bb.basic_access")
 def load_card(request):
+    """Return the rendered HTML for a single dashboard card."""
     option = request.GET.get("option")
     idx    = request.GET.get("index")
     cards = get_available_cards()
 
-    if option is None or idx is None:
+    if option is None or idx is None:  # Card fetches require both parameters.
         return HttpResponseBadRequest("Missing parameters")
 
     try:
@@ -152,12 +151,12 @@ def load_card(request):
     key   = card_def["key"]
     title = card_def["title"]
     logger.info(key)
-    if key in ("sus_contr", "sus_mail","sus_tra"):
+    if key in ("sus_contr", "sus_mail","sus_tra"):  # Paginated cards handled separately via SSE/ajax.
         # handled via paginated endpoints
         return JsonResponse({"key": key, "title": title})
 
     target_user_id = get_user_id(option)
-    if target_user_id is None:
+    if target_user_id is None:  # Unknown character selection.
         return JsonResponse({"error": "Unknown account"}, status=404)
 
     content, status = get_card_data(request, target_user_id, key)
@@ -172,6 +171,7 @@ def load_card(request):
 @login_required
 @permission_required("aa_bb.basic_access")
 def load_cards(request: WSGIRequest) -> JsonResponse:
+    """Bulk-load every card for a selected user (fallback for legacy UI)."""
     selected_option = request.GET.get("option")
     user_id = get_user_id(selected_option)
     warm_entity_cache_task.delay(user_id)
@@ -203,7 +203,7 @@ def warm_entity_cache_task(self, user_id):
     except WarmProgress.DoesNotExist:
         progress = None
 
-    if progress and progress.total > 0:
+    if progress and progress.total > 0:  # Another warm job is in-flight for this pilot.
         first_current = progress.current
         logger.info(f"[{user_main}] detected in-progress run (current={first_current}); probing…")
         time.sleep(20)
@@ -216,7 +216,7 @@ def warm_entity_cache_task(self, user_id):
             second_current = None
 
         # Now *abort* if there *was* progress; otherwise continue
-        if second_current != first_current:
+        if second_current != first_current:  # Existing job advanced, so bail out to avoid duplicate work.
             logger.info(
                 f"[{user_main}] progress advanced from {first_current} to {second_current}; aborting new task."
             )
@@ -256,7 +256,7 @@ def warm_entity_cache_task(self, user_id):
     )
 
     for candidate in candidates:
-        if candidate not in existing:
+        if candidate not in existing:  # Only fetch entity info when cache lacks the tuple.
             entries.append(candidate)
 
     total = len(entries)
@@ -285,11 +285,11 @@ def warm_cache(request):
     Endpoint to kick off warming for a given character name (option).
     Immediately registers a WarmProgress row so queued tasks also appear.
     """
-    if not BigBrotherConfig.get_solo().is_warmer_active:
+    if not BigBrotherConfig.get_solo().is_warmer_active:  # Allow admins to disable the warmer
         return JsonResponse({"error": "Warmer disabled"}, status=403)
     option  = request.GET.get("option", "")
     user_id = get_user_id(option)
-    if not user_id:
+    if not user_id:  # Invalid character selection.
         return JsonResponse({"error": "Unknown account"}, status=400)
 
     # Pre-create progress record so queued jobs show up
@@ -337,24 +337,25 @@ def get_warm_progress(request):
 @login_required
 @permission_required("aa_bb.basic_access")
 def index(request: WSGIRequest):
+    """Render the dashboard shell plus dropdown options for authorized recruiters."""
     dropdown_options = []
     task_name = 'BB run regular updates'
     task = PeriodicTask.objects.filter(name=task_name).first()
-    if not BigBrotherConfig.get_solo().is_active or (task and not task.enabled):
+    if not BigBrotherConfig.get_solo().is_active or (task and not task.enabled):  # Guard against misconfigured BB.
         msg = (
             "Big Brother is currently inactive; please fill settings and enable the task"
         )
         return render(request, "aa_bb/disabled.html", {"message": msg})
 
-    if request.user.has_perm("aa_bb.full_access"):
+    if request.user.has_perm("aa_bb.full_access"):  # Full-access sees every main character.
         qs = UserProfile.objects.exclude(main_character=None)
-    elif request.user.has_perm("aa_bb.recruiter_access"):
+    elif request.user.has_perm("aa_bb.recruiter_access"):  # Recruiters see only guest states.
         guest_states = BigBrotherConfig.get_solo().bb_guest_states.all()
         qs = UserProfile.objects.filter(state__in=guest_states).exclude(main_character=None)
     else:
         qs = None
 
-    if qs is not None:
+    if qs is not None:  # Build dropdown choices only when the viewer has visibility.
         dropdown_options = (
             qs.values_list("main_character__character_name", flat=True)
               .order_by("main_character__character_name")
@@ -378,7 +379,7 @@ def list_contract_ids(request):
     """
     option = request.GET.get("option")
     user_id = get_user_id(option)
-    if user_id is None:
+    if user_id is None:  # Target selection must map to a known auth user.
         return JsonResponse({"error": "Unknown account"}, status=404)
 
     user_chars = get_user_characters(user_id)
@@ -405,13 +406,13 @@ def check_contract_batch(request):
     start  = int(request.GET.get("start", 0))
     limit  = int(request.GET.get("limit", 10))
     user_id = get_user_id(option)
-    if user_id is None:
+    if user_id is None:  # Unknown selection -> 404.
         return JsonResponse({"error": "Unknown account"}, status=404)
 
-    # 1) Ensure we have the full QuerySet
+    # 1) Ensure the full QuerySet is available
     cache_key = f"contract_qs_{user_id}"
     qs_all = cache.get(cache_key)
-    if qs_all is None:
+    if qs_all is None:  # Cache miss, gather the entire contract queryset now.
         qs_all = gather_user_contracts(user_id)
         cache.set(cache_key, qs_all, 300)
 
@@ -429,7 +430,7 @@ def check_contract_batch(request):
 
     hostile = []
     for cid, row in batch_map.items():
-        if is_contract_row_hostile(row):
+        if is_contract_row_hostile(row):  # Only return rows flagged as hostile.
             # build style map for visible columns
             style_map = {
                 col: get_cell_style_for_contract_row(col, row)
@@ -452,9 +453,10 @@ def check_contract_batch(request):
 @login_required
 @permission_required("aa_bb.basic_access")
 def stream_contracts_sse(request: WSGIRequest):
+    """Push suspicious contract rows to the browser using server-sent events."""
     option = request.GET.get("option", "")
     user_id = get_user_id(option)
-    if not user_id:
+    if not user_id:  # SSE requires a valid user context.
         return HttpResponseBadRequest("Unknown account")
 
     qs    = gather_user_contracts(user_id)
@@ -466,8 +468,8 @@ def stream_contracts_sse(request: WSGIRequest):
         yield ": ok\n\n"
         processed = hostile_count = 0
 
-        if total == 0:
-            # tell client we're done with zero hostile
+        if total == 0:  # Nothing to scan, emit done immediately.
+            # Notify client that processing completed with zero hostile hits
             yield "event: done\ndata:0\n\n"
             return
 
@@ -480,7 +482,7 @@ def stream_contracts_sse(request: WSGIRequest):
             issuer_id = c.issuer_name.eve_id
             yield ": ping\n\n"
             cid = c.contract_id
-            if c.assignee_id != 0:
+            if c.assignee_id != 0:  # Contracts may target assignee or acceptor; prefer assignee when set.
                 assignee_id = c.assignee_id
             else:
                 assignee_id = c.acceptor_id
@@ -521,7 +523,7 @@ def stream_contracts_sse(request: WSGIRequest):
             yield ": ping\n\n"
             row['cell_styles'] = style_map
 
-            if is_contract_row_hostile(row):
+            if is_contract_row_hostile(row):  # Emit rows that match hostile heuristics.
                 hostile_count += 1
                 tr_html = _render_contract_row_html(row)
                 yield f"event: contract\ndata:{json.dumps(tr_html)}\n\n"
@@ -566,11 +568,11 @@ def _render_contract_row_html(row: dict) -> str:
 
     # for any visible header like "issuer_name", map its ID column:
     def id_for(col):
-        if col.endswith("_name"):
+        if col.endswith("_name"):  # Visible name columns pair with *_id fields.
             return col[:-5] + "_id"
-        elif col.endswith("_corporation"):
+        elif col.endswith("_corporation"):  # Map corp label to corp_id.
             return col[:-12] + "_corporation_id"
-        elif col.endswith("_alliance"):
+        elif col.endswith("_alliance"):  # Map alliance label to alliance_id.
             return col[:-9] + "_alliance_id"
         return None
 
@@ -584,7 +586,7 @@ def _render_contract_row_html(row: dict) -> str:
         style = style_map.get(col, "") or ""
 
         # render the cell
-        if style:
+        if style:  # Inline styles highlight hostile issuers/assignees.
             cells.append(f'<td style="{style}">{text}</td>')
         else:
             cells.append(f'<td>{text}</td>')
@@ -602,19 +604,19 @@ def _render_mail_row_html(row: dict) -> str:
     for col in VISIBLE:
         val = row.get(col, "")
         # recipients come as lists
-        if isinstance(val, list):
+        if isinstance(val, list):  # Expand recipient arrays to comma-separated spans.
             spans = []
             for i, item in enumerate(val):
                 style = ""
-                if col == "recipient_names":
+                if col == "recipient_names":  # Hostile recipients get red styling.
                     rid = row["recipient_ids"][i]
                     if check_char_corp_bl(rid):
                         style = "color:red;"
-                elif col == "recipient_corps":
+                elif col == "recipient_corps":  # Hostile corps -> red label.
                     cid = row["recipient_corp_ids"][i]
                     if cid and str(cid) in cfg.hostile_corporations:
                         style = "color:red;"
-                elif col == "recipient_alliances":
+                elif col == "recipient_alliances":  # Hostile alliances -> red label.
                     aid = row["recipient_alliance_ids"][i]
                     if aid and str(aid) in cfg.hostile_alliances:
                         style = "color:red;"
@@ -628,13 +630,13 @@ def _render_mail_row_html(row: dict) -> str:
         else:
             # single-valued columns: subject, content, sender_*
             style = ""
-            if col.startswith("sender_"):
+            if col.startswith("sender_"):  # Sender cells use existing cell style helper.
                 style = get_cell_style_for_mail_cell(col, row, None)
             if col == "sender_name":
                 for key in ["GM ","CCP "]:
-                    if key in str(row["sender_name"]):
+                    if key in str(row["sender_name"]):  # Highlight official senders (GM/CCP) in red to stand out.
                         style = "color:red;"
-            if style:
+            if style:  # Apply span styling when a highlight was requested.
                 cell_html = f'<span style="{style}">{html.escape(str(val))}</span>'
             else:
                 cell_html = html.escape(str(val))
@@ -648,7 +650,7 @@ def stream_mails_sse(request):
     """Stream hostile mails one row at a time via SSE, hydrating sender+recipients."""
     option  = request.GET.get("option", "")
     user_id = get_user_id(option)
-    if not user_id:
+    if not user_id:  # Clients must specify a valid account to inspect.
         return HttpResponseBadRequest("Unknown account")
 
     qs    = gather_user_mails(user_id)
@@ -660,8 +662,8 @@ def stream_mails_sse(request):
         yield ": ok\n\n"
         processed = hostile_count = 0
 
-        if total == 0:
-            # tell client we're done with zero hostile
+        if total == 0:  # Nothing to stream -> immediately finish.
+            # Notify client that streaming finished without hostile mails
             yield "event: done\ndata:0\n\n"
             return
 
@@ -698,7 +700,7 @@ def stream_mails_sse(request):
                 recipient_alliances.append(rinfo["alli_name"])
                 recipient_alliance_ids.append(rinfo["alli_id"])
 
-            # build our single-mail row dict
+            # build the single-mail row dict
             row = {
                 "message_id":              m.id_key,
                 "sent_date":               sent,
@@ -719,7 +721,7 @@ def stream_mails_sse(request):
             }
 
             # 3) check hostility and, if hostile, stream the <tr>
-            if is_mail_row_hostile(row):
+            if is_mail_row_hostile(row):  # Emit only hostile mail rows.
                 hostile_count += 1
                 tr = _render_mail_row_html(row)
                 yield f"event: mail\ndata:{json.dumps(tr)}\n\n"
@@ -750,7 +752,7 @@ def stream_transactions_sse(request):
     """
     option  = request.GET.get("option", "")
     user_id = get_user_id(option)
-    if not user_id:
+    if not user_id:  # Reject SSE connection when the pilot is unknown.
         return HttpResponseBadRequest("Unknown account")
 
     qs    = gather_user_transactions(user_id)
@@ -769,15 +771,15 @@ def stream_transactions_sse(request):
         yield ": ok\n\n"                # initial heartbeat
         processed = hostile_count = 0
 
-        if total == 0:
-            # tell client we're done with zero hostile
+        if total == 0:  # No transactions -> stop immediately.
+            # Notify client that processing ended without hostile entries
             yield "event: done\ndata:0\n\n"
             return
 
         # Determine headers from a single hydrated row (after empty check)
         sample_map = get_user_transactions(qs[:1])
         sample_row = next(iter(sample_map.values()), None)
-        if sample_row:
+        if sample_row:  # Derive headers from real data when available.
             headers = [h for h in sample_row.keys() if h not in HIDDEN]
         else:
             # Fallback to a safe default when sampling finds nothing
@@ -803,7 +805,7 @@ def stream_transactions_sse(request):
             # hydrate this one entry
             row = get_user_transactions([entry])[entry.entry_id]
 
-            if is_transaction_hostile(row):
+            if is_transaction_hostile(row):  # Only push rows that meet hostility rules.
                 hostile_count += 1
 
                 # build the <tr> using same style logic as render_transactions()
@@ -857,28 +859,29 @@ def stream_transactions_sse(request):
 # Card data helper
 
 def get_card_data(request, target_user_id: int, key: str):
-    if key == "awox":
+    """Return card HTML and status tuple for the specified key."""
+    if key == "awox":  # Highlight kills where corp mates attacked each other.
         content = render_awox_kills_html(target_user_id)
         status  = content is None
 
-    elif key == "freq_corp":
+    elif key == "freq_corp":  # Show frequent corporation changes timeline.
         content = get_frequent_corp_changes(target_user_id)
         status  = "red" not in content
 
-    elif key == "sus_clones":
+    elif key == "sus_clones":  # Flag clones located in hostile space.
         content = render_clones(target_user_id)
         status  = not (content and any(w in content for w in ("danger", "warning")))
 
-    elif key == "sus_asset":
+    elif key == "sus_asset":  # Summarize assets currently stranded in hostile systems.
         content = render_assets(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "imp_bl":
+    elif key == "imp_bl":  # Link to IMP blacklist lookups for all linked chars.
         links   = generate_blacklist_links(target_user_id)
         content = "<br>".join(links)
         status  = False
 
-    elif key == "lawn_bl":
+    elif key == "lawn_bl":  # Provide LAWN blacklist instructions for each character.
         names   = get_user_character_names_lawn(target_user_id)
         content = (
             "Go <a href='https://auth.lawnalliance.space/blacklist/blacklist/'>"
@@ -886,36 +889,36 @@ def get_card_data(request, target_user_id: int, key: str):
         )
         status  = False
 
-    elif key == "corp_bl":
+    elif key == "corp_bl":  # Inline corp blacklist check (with add links).
         issuer_id = request.user.id
         content   = get_corp_blacklist_html(request, issuer_id, target_user_id)
         status    = not (content and "🚩" in content)
 
-    elif key == "sus_conta":
+    elif key == "sus_conta":  # Suspicious contacts list card.
         content = render_contacts(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "sus_mail":
+    elif key == "sus_mail":  # Suspicious mail preview card.
         content = render_mails(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "sus_tra":
+    elif key == "sus_tra":  # Suspicious transaction summary card.
         content = render_transactions(target_user_id)
         status  = not content
 
-    elif key == "cyno":
+    elif key == "cyno":  # Cyno readiness / history panel.
         content = render_user_cyno_info_html(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "skills":
+    elif key == "skills":  # Training gaps summary.
         content = render_user_skills_html(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "compliance":
+    elif key == "compliance":  # Role/token compliance overview.
         content = render_user_roles_tokens_html(target_user_id)
         status  = not (content and "red" in content)
 
-    elif key == "clone_states":
+    elif key == "clone_states":  # Clone state availability (alpha/omega).
         content = render_character_states_html(target_user_id)
         status  = not (content and "red" in content)
 
@@ -929,6 +932,7 @@ def get_card_data(request, target_user_id: int, key: str):
 @require_POST
 @permission_required("can_blacklist_characters")
 def add_blacklist_view(request):
+    """POST endpoint to add all of a target's characters to the corp blacklist."""
     issuer_id = int(request.POST["issuer_user_id"])
     target_id = int(request.POST["target_user_id"])
     reason    = request.POST.get("reason", "")
@@ -946,8 +950,9 @@ def add_blacklist_view(request):
 @login_required
 @permission_required("aa_bb.can_access_loa")
 def loa_loa(request):
+    """Display the LoA dashboard for the requesting user."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.is_loa_active:
+    if not cfg.is_loa_active:  # Feature toggle to hide LoA entirely.
         return render(request, "loa/disabled.html")
     user_requests = LeaveRequest.objects.filter(user=request.user).order_by('-created_at')
     return render(request, "loa/index.html", {"loa_requests": user_requests})
@@ -955,17 +960,18 @@ def loa_loa(request):
 @login_required
 @permission_required("aa_bb.can_view_all_loa")
 def loa_admin(request):
+    """Administrative LoA queue view with filtering."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.is_loa_active:
+    if not cfg.is_loa_active:  # Hide admin view when LoA disabled globally.
         return render(request, "loa/disabled.html")
     # Filtering
     qs = LeaveRequest.objects.select_related('user').order_by('-created_at')
     user_filter   = request.GET.get('user')
     status_filter = request.GET.get('status')
 
-    if user_filter:
+    if user_filter:  # Narrow to a single user's requests.
         qs = qs.filter(user__id=user_filter)
-    if status_filter:
+    if status_filter:  # Filter by request status (pending/approved/etc).
         qs = qs.filter(status=status_filter)
 
     # Build dropdown options from existing requests
@@ -987,13 +993,14 @@ def loa_admin(request):
 @login_required
 @permission_required("aa_bb.can_access_loa")
 def loa_request(request):
+    """Handle LoA request creation form (GET/POST)."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.is_loa_active:
+    if not cfg.is_loa_active:  # Respect feature toggle.
         return render(request, "loa/disabled.html")
 
-    if request.method == 'POST':
+    if request.method == 'POST':  # Form submission branch.
         form = LeaveRequestForm(request.POST)
-        if form.is_valid():
+        if form.is_valid():  # Save request and ping staff.
             main_char = get_main_character_name(request.user.id)
             # 2) save with main_character
             lr = form.save(commit=False)
@@ -1016,11 +1023,12 @@ def loa_request(request):
 @login_required
 @permission_required("aa_bb.can_access_loa")
 def delete_request(request, pk):
-    if request.method == 'POST':
+    """Allow a user to delete their own pending LoA."""
+    if request.method == 'POST':  # Only accept POST to mutate state.
         lr = get_object_or_404(LeaveRequest, pk=pk, user=request.user)
-        if lr.user != request.user:
+        if lr.user != request.user:  # Safety net in case of tampering.
             return HttpResponseForbidden("You may only delete your own requests.")
-        elif lr.status == 'pending':
+        elif lr.status == 'pending':  # Only pending requests may be removed.
             lr.delete()
             hook = BigBrotherConfig.get_solo().loawebhook
             send_message(f"##{get_pings('LoA Changed Status')} {lr.main_character} deleted their LOA:\n- from **{lr.start_date}**\n- to **{lr.end_date}**\n- reason: **{lr.reason}**", hook)
@@ -1029,7 +1037,8 @@ def delete_request(request, pk):
 @login_required
 @permission_required("aa_bb.can_manage_loa")
 def delete_request_admin(request, pk):
-    if request.method == 'POST':
+    """Admin-only delete path for any LoA request."""
+    if request.method == 'POST':  # Guard mutation behind POST.
         lr = get_object_or_404(LeaveRequest, pk=pk, user=request.user)
         lr.delete()
         hook = BigBrotherConfig.get_solo().loawebhook
@@ -1040,7 +1049,8 @@ def delete_request_admin(request, pk):
 @login_required
 @permission_required("aa_bb.can_manage_loa")
 def approve_request(request, pk):
-    if request.method == 'POST':
+    """Mark an LoA approved and notify Discord."""
+    if request.method == 'POST':  # Only process POST actions.
         lr = get_object_or_404(LeaveRequest, pk=pk)
         lr.status = 'approved'
         lr.save()
@@ -1052,7 +1062,8 @@ def approve_request(request, pk):
 @login_required
 @permission_required("aa_bb.can_manage_loa")
 def deny_request(request, pk):
-    if request.method == 'POST':
+    """Mark an LoA denied and notify Discord."""
+    if request.method == 'POST':  # Only mutate via POST requests.
         lr = get_object_or_404(LeaveRequest, pk=pk)
         lr.status = 'denied'
         lr.save()
