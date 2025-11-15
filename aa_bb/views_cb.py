@@ -78,10 +78,11 @@ from allianceauth.eveonline.models import EveCorporationInfo
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def index(request: WSGIRequest):
+    """Render the CorpBrother dashboard with corp dropdown options."""
     dropdown_options = []
     task_name = 'BB run regular updates'
     task = PeriodicTask.objects.filter(name=task_name).first()
-    if not BigBrotherConfig.get_solo().is_active or (task and not task.enabled):
+    if not BigBrotherConfig.get_solo().is_active or (task and not task.enabled):  # Inactive BB -> show disabled page.
         msg = (
             "Corp Brother is currently inactive; please fill settings and enable the task"
         )
@@ -92,12 +93,10 @@ def index(request: WSGIRequest):
             corporation_id__in=ignored_ids).distinct()
     logger.info(f"ignored ids: {str(ignored_ids)}, corps {len(ignored_corps)}")
 
-    if request.user.has_perm("aa_bb.full_access_cb"):
-        # Full access: all registered corporations
+    if request.user.has_perm("aa_bb.full_access_cb"):  # Full-access sees every corp in the system.
         qs = EveCorporationInfo.objects.all()
 
-    elif request.user.has_perm("aa_bb.recruiter_access_cb"):
-        # Recruiter: corps with tokens added by guest-state users
+    elif request.user.has_perm("aa_bb.recruiter_access_cb"):  # Recruiters only see guest-state corp tokens.
         guest_states = BigBrotherConfig.get_solo().bb_guest_states.all()
         qs = EveCorporationInfo.objects.filter(
             corporation_id__in=Token.objects.filter(
@@ -109,7 +108,7 @@ def index(request: WSGIRequest):
     else:
         qs = None
 
-    if qs is not None:
+    if qs is not None:  # Build dropdown when user has any corp visibility.
         qsa = qs.exclude(corporation_id__in=ignored_corps.values_list("corporation_id", flat=True))
         qsa = qsa.filter(
             corporationaudit__isnull=False,
@@ -130,6 +129,7 @@ def index(request: WSGIRequest):
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def load_cards(request: WSGIRequest) -> JsonResponse:
+    """Legacy bulk loader that fetches every CorpBrother card for a corp."""
     corp_id = request.GET.get("option")  # now contains corporation_id
     warm_entity_cache_task.delay(corp_id)
     cards = []
@@ -145,6 +145,7 @@ def load_cards(request: WSGIRequest) -> JsonResponse:
 
 
 def get_user_id(character_name):
+    """Lookup an auth user ID from a character name."""
     try:
         ownership = CharacterOwnership.objects.select_related('user') \
             .get(character__character_name=character_name)
@@ -152,13 +153,10 @@ def get_user_id(character_name):
     except CharacterOwnership.DoesNotExist:
         return None
 
-def get_mail_keywords():
-    return BigBrotherConfig.get_solo().mail_keywords
-
-
 def get_card_data(request, corp_id: int, key: str):
+    """Return CorpBrother card content/status pairs."""
     logger.warning("get_card_data")
-    if key == "sus_asset":
+    if key == "sus_asset":  # Only the asset card is currently implemented.
         content = render_assets(corp_id)
         status  = not (content and "red" in content)
 
@@ -172,10 +170,11 @@ def get_card_data(request, corp_id: int, key: str):
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def load_card(request):
+    """Return a single CorpBrother card payload for the selected corp."""
     corp_id = request.GET.get("option")
     idx    = request.GET.get("index")
 
-    if corp_id is None or idx is None:
+    if corp_id is None or idx is None:  # Both selection parameters required.
         return HttpResponseBadRequest("Missing parameters")
 
     try:
@@ -187,7 +186,7 @@ def load_card(request):
     key   = card_def["key"]
     title = card_def["title"]
     logger.info(key)
-    if key in ("sus_contr","sus_tra"):
+    if key in ("sus_contr","sus_tra"):  # Paginated cards handled elsewhere.
         # handled via paginated endpoints
         return JsonResponse({"key": key, "title": title})
 
@@ -218,7 +217,7 @@ def warm_entity_cache_task(self, user_id):
     except WarmProgress.DoesNotExist:
         progress = None
 
-    if progress and progress.total > 0:
+    if progress and progress.total > 0:  # Abort if another job is already processing this corp.
         first_current = progress.current
         logger.info(f"[{user_main}] detected in-progress run (current={first_current}); probing…")
         time.sleep(20)
@@ -231,7 +230,7 @@ def warm_entity_cache_task(self, user_id):
             second_current = None
 
         # Now *abort* if there *was* progress; otherwise continue
-        if second_current != first_current:
+        if second_current != first_current:  # Progress moved, so exit to avoid duplicate run.
             logger.info(
                 f"[{user_main}] progress advanced from {first_current} to {second_current}; aborting new task."
             )
@@ -266,7 +265,7 @@ def warm_entity_cache_task(self, user_id):
     )
 
     for candidate in candidates:
-        if candidate not in existing:
+        if candidate not in existing:  # Only fetch entity info that is missing from cache.
             entries.append(candidate)
 
     total = len(entries)
@@ -292,16 +291,16 @@ def warm_entity_cache_task(self, user_id):
 @permission_required("aa_bb.basic_access_cb")
 def warm_cache(request):
     """
-    Endpoint to kick off warming for a given character name (option).
+    Endpoint to kick off warming for a given corporation ID.
     Immediately registers a WarmProgress row so queued tasks also appear.
     """
-    if not BigBrotherConfig.get_solo().is_warmer_active:
+    if not BigBrotherConfig.get_solo().is_warmer_active:  # Allow admins to disable heavy warm jobs.
         return
     logger.warning(f"warm triggered")
     option  = request.GET.get("option", "")
     user_id = option
     logger.warning(f"uid2:{user_id}")
-    if not user_id:
+    if not user_id:  # Require a corp selection.
         return JsonResponse({"error": "Unknown account"}, status=400)
 
     # Pre-create progress record so queued jobs show up
@@ -319,6 +318,7 @@ def warm_cache(request):
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def get_warm_progress(request):
+    """AJAX helper returning progress for corp cache warm jobs."""
     try:
         qs = WarmProgress.objects.all()
         users = [
@@ -354,7 +354,7 @@ def list_contract_ids(request):
     """
     option = request.GET.get("option")
     user_id = get_user_id(option)
-    if user_id is None:
+    if user_id is None:  # Unknown corp selection.
         return JsonResponse({"error": "Unknown account"}, status=404)
 
     user_chars = get_user_characters(user_id)
@@ -381,13 +381,13 @@ def check_contract_batch(request):
     start  = int(request.GET.get("start", 0))
     limit  = int(request.GET.get("limit", 10))
     user_id = get_user_id(option)
-    if user_id is None:
+    if user_id is None:  # Need a valid account to inspect.
         return JsonResponse({"error": "Unknown account"}, status=404)
 
-    # 1) Ensure we have the full QuerySet
+    # 1) Ensure the full QuerySet is available
     cache_key = f"contract_qs_{user_id}"
     qs_all = cache.get(cache_key)
-    if qs_all is None:
+    if qs_all is None:  # Cache miss, gather and store for 5 minutes.
         qs_all = gather_user_contracts(user_id)
         cache.set(cache_key, qs_all, 300)
 
@@ -405,7 +405,7 @@ def check_contract_batch(request):
 
     hostile = []
     for cid, row in batch_map.items():
-        if is_contract_row_hostile(row):
+        if is_contract_row_hostile(row):  # Only emit rows that match hostile heuristics.
             # build style map for visible columns
             style_map = {
                 col: get_cell_style_for_contract_row(col, row)
@@ -428,15 +428,16 @@ def check_contract_batch(request):
 @login_required
 @permission_required("aa_bb.basic_access_cb")
 def stream_contracts_sse(request: WSGIRequest):
+    """Push suspicious corp contracts over SSE for the recruiter dashboard."""
     option = request.GET.get("option", "")
     user_id = option
-    if not user_id:
+    if not user_id:  # Require a corp identifier.
         return HttpResponseBadRequest("Unknown account")
 
     qs    = gather_user_contracts(user_id)
     total = qs.count()
     connection.close()
-    if total == 0:
+    if total == 0:  # Nothing to stream -> send a simple HTML response.
         return StreamingHttpResponse(
             "<p>No contracts found.</p>",
             content_type="text/html"
@@ -449,8 +450,8 @@ def stream_contracts_sse(request: WSGIRequest):
             yield ": ok\n\n"
             processed = hostile_count = 0
 
-            if total == 0:
-                # tell client we're done with zero hostile
+            if total == 0:  # Immediately finish if the queryset is empty.
+                # Notify client that streaming completed without hostile entries
                 yield "event: done\ndata:0\n\n"
                 return
 
@@ -464,7 +465,7 @@ def stream_contracts_sse(request: WSGIRequest):
                     issuer_id = get_character_id(c.issuer_name)
                     yield ": ping\n\n"
                     cid = c.contract_id
-                    if c.assignee_id != 0:
+                    if c.assignee_id != 0:  # Prefer assignee when present; fallback to acceptor.
                         assignee_id = c.assignee_id
                     else:
                         assignee_id = c.acceptor_id
@@ -505,7 +506,7 @@ def stream_contracts_sse(request: WSGIRequest):
                     yield ": ping\n\n"
                     row['cell_styles'] = style_map
 
-                    if is_contract_row_hostile(row):
+                    if is_contract_row_hostile(row):  # Emit only hostile rows.
                         hostile_count += 1
                         tr_html = _render_contract_row_html(row)
                         yield f"event: contract\ndata:{json.dumps(tr_html)}\n\n"
@@ -541,7 +542,7 @@ def stream_contracts_sse(request: WSGIRequest):
         except Exception:
             tb_str = traceback.format_exc()
             logger.exception(f"Unexpected error in contract SSE generator\n{tb_str}")
-            # best effort to tell client
+            # Best effort to notify the client
             try:
                 yield f"event: error\ndata:{json.dumps('Unexpected server error')}\n\n"
             except Exception:
@@ -613,13 +614,13 @@ def stream_transactions_sse(request):
     """
     option  = request.GET.get("option", "")
     user_id = option
-    if not user_id:
+    if not user_id:  # Need a corp selection for SSE.
         return HttpResponseBadRequest("Unknown account")
 
     qs    = gather_user_transactions(user_id)
     total = qs.count()
     connection.close()
-    if total == 0:
+    if total == 0:  # No transactions -> return short HTML.
         return StreamingHttpResponse(
             "<p>No transactions found.</p>",
             content_type="text/html"
@@ -656,7 +657,7 @@ def stream_transactions_sse(request):
             # hydrate this one entry
             row = get_user_transactions([entry])[entry.entry_id]
 
-            if is_transaction_hostile(row):
+            if is_transaction_hostile(row):  # Emit rows matching suspicious checks.
                 hostile_count += 1
 
                 # build the <tr> using same style logic as render_transactions()
