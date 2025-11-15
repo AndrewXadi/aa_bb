@@ -252,7 +252,7 @@ def get_character_id(name: str) -> int | None:
             .order_by("-updated")
             .first()
         )
-        if fallback:  # Use cached name if ESI fails but we have history.
+        if fallback:  # Cached name available when ESI fails; reuse stored entry.
             fallback.updated = timezone.now()
             fallback.save()
             return fallback.id
@@ -278,7 +278,7 @@ def get_character_id(name: str) -> int | None:
     # Proactively fix any duplicate rows left over with the same name but different IDs
     try:
         stale_qs = Character_names.objects.filter(name=name).exclude(id=char_id)
-        if stale_qs.exists():  # Clean up duplicates only when we detect them.
+        if stale_qs.exists():  # Duplicate rows detected; clean them up.
             try:
                 # Resolve correct names for stale IDs using ESI
                 stale_ids = [int(s.id) for s in stale_qs]
