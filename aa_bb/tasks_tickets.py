@@ -48,10 +48,6 @@ def corp_check(user) -> bool:
         # Misconfiguration or unexpected error: log and be lenient.
         logger.exception("Error while running compliance filter for user id=%s", user.id)
         return True
-def lawn_check(user):
-    if not TicketToolConfig.get_solo().lawn_check_enabled:
-        return True
-    return True
 def paps_check(user):
     if not TicketToolConfig.get_solo().paps_check_enabled:
         return True
@@ -138,7 +134,6 @@ def hourly_compliance_check():
     tcfg = TicketToolConfig.get_solo()
     max_days = {
         "corp_check": tcfg.corp_check,
-        "lawn_check": tcfg.lawn_check,
         "paps_check": tcfg.paps_check,
         "afk_check": tcfg.afk_check,
         "discord_check": tcfg.discord_check,
@@ -147,7 +142,6 @@ def hourly_compliance_check():
     # Per-reason reminder frequency (in days)
     reminder_frequency = {
         "corp_check": tcfg.corp_check_frequency,
-        "lawn_check": tcfg.lawn_check_frequency,
         "paps_check": tcfg.paps_check_frequency,
         "afk_check": tcfg.afk_check_frequency,
         "discord_check": tcfg.discord_check_frequency,
@@ -155,7 +149,6 @@ def hourly_compliance_check():
 
     reason_checkers = {
         "corp_check": (corp_check, tcfg.corp_check_reason),
-        "lawn_check": (lawn_check, tcfg.lawn_check_reason),
         "paps_check": (paps_check, tcfg.paps_check_reason),
         "afk_check": (afk_check, tcfg.afk_check_reason),
         "discord_check": (discord_check, tcfg.discord_check_reason),
@@ -163,7 +156,6 @@ def hourly_compliance_check():
 
     reminder_messages = {
         "corp_check": tcfg.corp_check_reminder,
-        "lawn_check": tcfg.lawn_check_reminder,
         "paps_check": tcfg.paps_check_reminder,
         "afk_check": tcfg.afk_check_reminder,
         "discord_check": tcfg.discord_check_reminder,
@@ -285,7 +277,6 @@ def ensure_ticket(user, reason):
     max_afk_days = tcfg.Max_Afk_Days
     reason_checkers = {
         "corp_check": (corp_check, tcfg.corp_check_reason),
-        "lawn_check": (lawn_check, tcfg.lawn_check_reason),
         "paps_check": (paps_check, tcfg.paps_check_reason),
         "afk_check": (afk_check, tcfg.afk_check_reason),
         "discord_check": (discord_check, tcfg.discord_check_reason),

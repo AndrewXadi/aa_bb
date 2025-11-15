@@ -46,8 +46,8 @@ def index(request):
                 continue
             player_name = " ".join(parts[:-2])
             try:
-                lawn = int(parts[-2])
-                imp  = int(parts[-1])
+                alliance = int(parts[-2])
+                coalition  = int(parts[-1])
             except ValueError:
                 error_messages.append(player_name)
                 continue
@@ -59,8 +59,8 @@ def index(request):
 
             # Save PAPs to POST fields so table inputs get prefilled
             request.POST = request.POST.copy()
-            request.POST[f"lawn_paps_{profile.user.id}"] = lawn
-            request.POST[f"imperium_paps_{profile.user.id}"] = imp
+            request.POST[f"alliance_paps_{profile.user.id}"] = alliance
+            request.POST[f"coalition_paps_{profile.user.id}"] = coalition
 
     # Build table data
     for profile in profiles:
@@ -70,8 +70,8 @@ def index(request):
         user_id = profile.user.id
         characters = get_user_characters(user_id)
         corp_paps = 0
-        lawn_paps = 0
-        imperium_paps = 0
+        alliance_paps = 0
+        coalition_paps = 0
         user_groups = profile.user.groups.values_list("name", flat=True)
         auth_groups = PapsConfig.get_solo().group_paps.all()
         excluded_groups = PapsConfig.get_solo().excluded_groups.all()
@@ -131,14 +131,14 @@ def index(request):
         # Override with POSTed values (manual or bulk)
         if request.method == "POST":
             corp_paps = int(request.POST.get(f"corp_paps_{user_id}", corp_paps))
-            lawn_paps = int(request.POST.get(f"lawn_paps_{user_id}", lawn_paps))
-            imperium_paps = int(request.POST.get(f"imperium_paps_{user_id}", imperium_paps))
+            alliance_paps = int(request.POST.get(f"alliance_paps_{user_id}", alliance_paps))
+            coalition_paps = int(request.POST.get(f"coalition_paps_{user_id}", coalition_paps))
 
         users_data.append({
             "user": profile,
             "corp_paps": corp_paps,
-            "lawn_paps": lawn_paps,
-            "imperium_paps": imperium_paps,
+            "alliance_paps": alliance_paps,
+            "coalition_paps": coalition_paps,
         })
 
     return render(
@@ -208,8 +208,8 @@ def generate_pap_chart(request):
         user_id = profile.user.id
         corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 
         corp_paps = min(corp_raw, conf.max_corp_paps)  # cap at 4
-        lawn_paps = int(request.POST.get(f"lawn_paps_{user_id}", 0)) * conf.lawn_modifier     # double lawn
-        imperium_paps = int(request.POST.get(f"imperium_paps_{user_id}", 0)) * conf.imp_modifier
+        alliance_paps = int(request.POST.get(f"alliance_paps_{user_id}", 0)) * conf.alliance_modifier
+        coalition_paps = int(request.POST.get(f"coalition_paps_{user_id}", 0)) * conf.coalition_modifier
         corp_ab = corp_raw - conf.max_corp_paps
         if corp_ab < 0:
             corp_ab = 0
@@ -217,8 +217,8 @@ def generate_pap_chart(request):
             "name": profile.main_character.character_name,
             "corp": corp_paps,
             "corp_ab": corp_ab,
-            "lawn": lawn_paps,
-            "imperium": imperium_paps,
+            "alliance": alliance_paps,
+            "coalition": coalition_paps,
         })
         # ✅ Update PapCompliance
         if max_compliance != 0:
@@ -226,7 +226,7 @@ def generate_pap_chart(request):
                 user_profile=profile,
                 defaults={"pap_compliant": starting_compliance},
             )
-            total_capped = corp_paps + lawn_paps + imperium_paps
+            total_capped = corp_paps + alliance_paps + coalition_paps
             if total_capped >= conf.required_paps:
                 pc.pap_compliant = min(pc.pap_compliant + 1, max_compliance)
             else:
@@ -248,24 +248,24 @@ def generate_pap_chart(request):
     names = [u["name"] for u in users_data]
     corp = [u["corp"] for u in users_data]
     corp_abo = [u["corp_ab"] for u in users_data]
-    lawn = [u["lawn"] for u in users_data]
-    imp  = [u["imperium"] for u in users_data]
+    alliance = [u["alliance"] for u in users_data]
+    coalition  = [u["coalition"] for u in users_data]
 
     x = range(len(names))
     corp_m = conf.corp_modifier
     corp_max = conf.max_corp_paps
-    lawn_m = conf.lawn_modifier
-    imp_m = conf.imp_modifier
+    alliance_m = conf.alliance_modifier
+    coalition_m = conf.coalition_modifier
 
     
 
 
-    # Bottom: Lawn
-    ax.bar(x, lawn, label=f"Lawn Paps(x{lawn_m})", color="#58D68D")
+    # Bottom: Alliance
+    ax.bar(x, alliance, label=f"Alliance Paps(x{alliance_m})", color="#58D68D")
 
-    # Next: Imperium
-    ax.bar(x, imp, bottom=lawn, label=f"Imperium Paps(x{imp_m})", color="#F5B041")
-    bottom_stack = [l + im for l, im in zip(lawn, imp)]
+    # Next: Coalition
+    ax.bar(x, coalition, bottom=alliance, label=f"Coalition Paps(x{coalition_m})", color="#F5B041")
+    bottom_stack = [l + im for l, im in zip(alliance, coalition)]
 
     # Next: Corp (capped part)
     ax.bar(x, corp, bottom=bottom_stack, label=f"Corp Paps(x{corp_m}, max {corp_max})", color="#5DADE2")
@@ -297,14 +297,14 @@ def generate_pap_chart(request):
     ax.legend(loc='upper right', facecolor='#4B4B4B', edgecolor='white', labelcolor='white')
 
     # Add labels above the stacked bars
-    for i, (l, im, c) in enumerate(zip(lawn, imp, corp)):
+    for i, (l, im, c) in enumerate(zip(alliance, coalition, corp)):
         total = l + im + c
         coll = 'red'
         if total >= conf.required_paps:
             coll = 'white'
         ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
 
-    for i, (l, im, c, ca) in enumerate(zip(lawn, imp, corp, corp_abo)):
+    for i, (l, im, c, ca) in enumerate(zip(alliance, coalition, corp, corp_abo)):
         total = l + im + c
         total_c = total + ca
         coll = 'white'
@@ -312,7 +312,7 @@ def generate_pap_chart(request):
             ax.text(i, total_c, str(total_c), ha='center', va='bottom', color=coll, fontsize=10)
 
     # Determine the max total height of stacked bars
-    max_total = max([l + im + c + ca for l, im, c, ca in zip(lawn, imp, corp, corp_abo)])
+    max_total = max([l + im + c + ca for l, im, c, ca in zip(alliance, coalition, corp, corp_abo)])
     if max_total < conf.required_paps:
         max_total = conf.required_paps
 

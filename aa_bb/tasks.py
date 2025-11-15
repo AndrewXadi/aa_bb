@@ -5,14 +5,11 @@ import logging
 from .app_settings import (
     resolve_character_name,
     uninstall,
-    validate_token_with_server,
     send_message,
     get_users,
     get_user_id,
     get_character_id,
     get_pings,
-    install_package_and_migrate,
-    fetch_token_module_status,
 )
 from aa_bb.checks.awox import  get_awox_kill_links
 from aa_bb.checks.cyno import get_user_cyno_info, get_current_stint_days_in_corp
@@ -29,18 +26,12 @@ from aa_bb.checks.sus_mails import get_user_hostile_mails
 from aa_bb.checks.sus_trans import get_user_hostile_transactions
 from aa_bb.checks.clone_state import determine_character_state
 from aa_bb.checks.corp_changes import time_in_corp
-from datetime import datetime, timedelta
 from django.utils import timezone
 import time
 import traceback
-from . import __version__
 from .tasks_cb import *
 from .tasks_ct import *
 from .tasks_tickets import *
-# Persist update-check timing in DB via singleton model
-from .modelss import BBUpdateState
-
-timer_duration = timedelta(days=7)
 
 logger = logging.getLogger(__name__)
 
@@ -71,142 +62,14 @@ def BB_run_regular_updates():
             instance.main_alliance_id = alliance_id
             instance.main_alliance = alliance_name
 
-            # 🔐 Validation
-            token = instance.token
-            client_version = __version__
-            self_des = None
-            self_des_reas = None
-
-            result = validate_token_with_server(
-                token,
-                client_version=client_version,
-                self_des=self_des,
-                self_des_reas=self_des_reas
-            )
-
-            modules = {}
-            dlc_message_pending = False
-            if isinstance(result, str) and not result.startswith("self_destruct"):
-                modules = fetch_token_module_status(token)
-                if modules:
-                    changed_flags = instance.apply_module_status(modules)
-                    changed_to_true = [
-                        field for field in changed_flags if getattr(instance, field, False)
-                    ]
-                    dlc_message_pending = bool(changed_to_true)
-
-            if result.startswith("self_destruct"):
-                reasons = {
-                    "self_destruct": "Missing expected arguments",
-                    "self_destruct_ti": "Invalid token",
-                    "self_destruct_tr": "Token was revoked",
-                    "self_destruct_i": "Client IP mismatch",
-                    "self_destruct_ni": "Token had no assigned IP",
-                }
-                uninstall_reason = reasons.get(result, "Unspecified self-destruct reason.")
-                instance.is_active = False
-                self_des = "initializing"
-                self_des_reas = uninstall_reason
-                validate_token_with_server(
-                    token,
-                    client_version=client_version,
-                    self_des=self_des,
-                    self_des_reas=self_des_reas
-                )
-                instance.is_active = False
-                uninstall(uninstall_reason)
-                self_des = "complete"
-                validate_token_with_server(
-                    token,
-                    client_version=client_version,
-                    self_des=self_des,
-                    self_des_reas=self_des_reas
-                )
-                return
-
-
-
-            elif result.startswith("v="):
-                latest_version = result.split("=")[1]
-                now = timezone.now()
-
-                # Use persistent singleton state
-                state = BBUpdateState.get_solo()
-                
-                def format_time_left(delta):
-                    days = delta.days
-                    hours, remainder = divmod(delta.seconds, 3600)
-                    minutes = remainder // 60
-                    return f"{days} days, {hours} hours, {minutes} minutes"
-
-                # First detection of a newer version
-                if not state.update_check_time:
-                    state.update_check_time = now
-                    state.latest_version = latest_version
-                    state.save()
-
-                    time_left = timer_duration
-                    send_message(
-                        f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
-                        f"\nYou have {format_time_left(time_left)} remaining to update."
-                        f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
-                        f'\nAttempting automatic update'
-                    )
-                    install_package_and_migrate(f"http://bb.trpr.space/?token={token}")
-                else:
-                    # If a different newer version appears during an existing grace period,
-                    # reset the window and attempt auto-update once for this new version.
-                    if state.latest_version != latest_version:
-                        state.update_check_time = now
-                        state.latest_version = latest_version
-                        state.save()
-
-                        time_left = timer_duration
-                        send_message(
-                            f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
-                            f"\nYou have {format_time_left(time_left)} remaining to update."
-                            f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
-                            f'\nAttempting automatic update'
-                        )
-                        install_package_and_migrate(f"http://bb.trpr.space/?token={token}")
-                    else:
-                        elapsed = now - state.update_check_time
-                        if elapsed < timer_duration:
-                            time_left = timer_duration - elapsed
-                            send_message(
-                                f"#{get_pings('New Version')} A newer version is available: {latest_version}. "
-                                f"\nYou have {format_time_left(time_left)} remaining to update (or restart AA if BB successfully updated itself)."
-                                f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
-                            )
-                        else:
-                            send_message(
-                                f"#{get_pings('New Version')} The update grace period has ended. The app is now in an inactive state. Please update to {latest_version}."
-                                f'\nAs a reminder, your installation command is: \n```pip install "http://bb.trpr.space/?token={token}"```\nPlease make sure to run \n```manage.py migrate```\n as well'
-                            )
-                            instance.is_active = False
-
-
-            elif result == "OK":
-                logger.info("Token validation successful.")
-                # Purge any persisted update grace state if previously set
-                try:
-                    state = BBUpdateState.get_solo()
-                    if state.update_check_time or state.latest_version:
-                        state.update_check_time = None
-                        state.latest_version = None
-                        state.save()
-                except Exception:
-                    pass
+            for field_name in BigBrotherConfig.DLC_FLAG_MAP.values():
+                setattr(instance, field_name, True)
 
             if alliance_id != 150097440:
                 instance.is_active = False
                 uninstall(f"**Your corp( isn't allowed to run this plugin**(aid:{alliance_id}),cid:{char.corporation_id})")
 
         instance.save()
-        if dlc_message_pending:
-            send_message(
-                f"#{get_pings('Info')} One or more DLC modules were just enabled for this token. Please restart AllianceAuth to load the new features."
-            )
 
         # Check user statuses
         if instance.is_active:
@@ -899,7 +762,7 @@ def BB_run_regular_updates():
         instance.save()
         send_message(
             f"#{get_pings('Error')} Big Brother encountered an unexpected error and disabled itself, "
-            "please forward your aa worker.log and the error below to Andrew Xadi"
+            "please forward your aa worker.log and the error below to support"
         )
 
         tb_str = traceback.format_exc()

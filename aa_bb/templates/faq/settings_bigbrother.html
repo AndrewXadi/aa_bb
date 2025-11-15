@@ -20,10 +20,6 @@
     </thead>
     <tbody>
       <tr>
-        <td><code>token</code></td>
-        <td>{% translate "Install token issued for the BigBrother service. The updater disables the app if validation fails." %}</td>
-      </tr>
-      <tr>
         <td><code>main_corporation_id</code> / <code>main_corporation</code></td>
         <td>{% translate "Populated automatically from the first superuser character detected during the scheduled update task. Identifies your primary corporation." %}</td>
       </tr>
@@ -33,7 +29,7 @@
       </tr>
       <tr>
         <td><code>is_active</code></td>
-        <td>{% translate "Managed by the updater. Turns false if the token self-destructs or the corporation/alliance is not authorised." %}</td>
+        <td>{% translate "Managed by the updater. Turns false if the corporation/alliance is not authorised." %}</td>
       </tr>
     </tbody>
   </table>
@@ -41,7 +37,7 @@
 
 <h2 class="mt-4">{% translate "Module Entitlements" %}</h2>
 <p class="text-muted">
-  {% blocktrans %}These read-only booleans mirror which optional modules are unlocked for your BBAC token. They update automatically after every scheduled “BB run regular updates” task.{% endblocktrans %}
+  {% blocktrans %}These read-only booleans mirror which optional modules are unlocked for your installation. They update automatically after every scheduled “BB run regular updates” task.{% endblocktrans %}
 </p>
 <div class="table-responsive">
   <table class="table table-striped">
@@ -54,7 +50,7 @@
     <tbody>
       <tr>
         <td><code>dlc_corp_brother_active</code></td>
-        <td>{% translate "True when the CorpBrother dashboard is licensed for your token." %}</td>
+        <td>{% translate "True when the CorpBrother dashboard is licensed for your installation." %}</td>
       </tr>
       <tr>
         <td><code>dlc_loa_active</code></td>

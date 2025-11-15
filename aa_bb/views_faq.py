@@ -111,25 +111,26 @@ def manual_modules(request: WSGIRequest):
             if action_text and action_text not in actions:
                 actions.append(action_text)
 
-    def purchase_label(flag: bool):
-        return format_html(
-            "{} {}",
-            _("Purchased:"),
-            _("Yes") if flag else _("No"),
-        )
-
-    purchase_action = "Contact support to enable it."
-
-    def register_purchase_guard(issues: list, actions: list, flag: bool, module_label: str):
+    def register_module_guard(
+        issues: list,
+        actions: list,
+        flag: bool,
+        module_label: str,
+        field_label: str,
+    ):
         register_issue(
             issues,
             actions,
             not flag,
             format_html(
-                "{}",
-                _("{} module is not part of this token.").format(module_label),
+                "{} is disabled; {} features are unavailable.",
+                code(field_label),
+                module_label,
             ),
-            purchase_action,
+            format_html(
+                "Enable {} in BigBrotherConfig and restart AllianceAuth.",
+                code(field_label),
+            ),
         )
 
     def make_module(name, summary, issues, actions, info=None, active_override=None, cta=None):
@@ -203,8 +204,13 @@ def manual_modules(request: WSGIRequest):
     # CorpBrother Dashboard
     corp_issues, corp_actions, corp_info = [], [], []
     corp_purchase = cfg.dlc_corp_brother_active
-    corp_info.append(purchase_label(corp_purchase))
-    register_purchase_guard(corp_issues, corp_actions, corp_purchase, _("CorpBrother"))
+    register_module_guard(
+        corp_issues,
+        corp_actions,
+        corp_purchase,
+        _("CorpBrother"),
+        "BigBrotherConfig.dlc_corp_brother_active",
+    )
     if corp_purchase:
         register_issue(
             corp_issues,
@@ -244,8 +250,13 @@ def manual_modules(request: WSGIRequest):
     # Leave of Absence
     loa_issues, loa_actions, loa_info = [], [], []
     loa_purchase = cfg.dlc_loa_active
-    loa_info.append(purchase_label(loa_purchase))
-    register_purchase_guard(loa_issues, loa_actions, loa_purchase, _("Leave of Absence"))
+    register_module_guard(
+        loa_issues,
+        loa_actions,
+        loa_purchase,
+        _("Leave of Absence"),
+        "BigBrotherConfig.dlc_loa_active",
+    )
     if loa_purchase:
         register_issue(
             loa_issues,
@@ -277,8 +288,13 @@ def manual_modules(request: WSGIRequest):
     # PAP Statistics
     paps_issues, paps_actions, paps_info = [], [], []
     pap_purchase = cfg.dlc_pap_active
-    paps_info.append(purchase_label(pap_purchase))
-    register_purchase_guard(paps_issues, paps_actions, pap_purchase, _("PAP Statistics"))
+    register_module_guard(
+        paps_issues,
+        paps_actions,
+        pap_purchase,
+        _("PAP Statistics"),
+        "BigBrotherConfig.dlc_pap_active",
+    )
     if pap_purchase:
         register_issue(
             paps_issues,
@@ -299,7 +315,7 @@ def manual_modules(request: WSGIRequest):
                 format_html("Required PAPs per month: {}", paps_cfg.required_paps)
             )
             paps_info.append(
-                format_html("Corp modifier: {} / Lawn modifier: {} / IMP modifier: {}", paps_cfg.corp_modifier, paps_cfg.lawn_modifier, paps_cfg.imp_modifier)
+                format_html("Corp modifier: {} / Alliance modifier: {} / Coalition modifier: {}", paps_cfg.corp_modifier, paps_cfg.alliance_modifier, paps_cfg.coalition_modifier)
             )
     modules.append(
         make_module(
@@ -332,8 +348,13 @@ def manual_modules(request: WSGIRequest):
     # Daily notifications
     daily_issues, daily_actions, daily_info = [], [], []
     daily_purchase = cfg.dlc_daily_messages_active
-    daily_info.append(purchase_label(daily_purchase))
-    register_purchase_guard(daily_issues, daily_actions, daily_purchase, _("Daily Notifications"))
+    register_module_guard(
+        daily_issues,
+        daily_actions,
+        daily_purchase,
+        _("Daily Notifications"),
+        "BigBrotherConfig.dlc_daily_messages_active",
+    )
     if daily_purchase:
         register_issue(
             daily_issues,
@@ -385,8 +406,13 @@ def manual_modules(request: WSGIRequest):
         webhook = getattr(cfg, f"optwebhook{idx}")
         schedule = getattr(cfg, f"optschedule{idx}")
 
-        info.append(purchase_label(daily_purchase))
-        register_purchase_guard(issues, actions, daily_purchase, stream_name)
+        register_module_guard(
+            issues,
+            actions,
+            daily_purchase,
+            stream_name,
+            "BigBrotherConfig.dlc_daily_messages_active",
+        )
         if daily_purchase:
             if not flag:
                 register_issue(
@@ -439,11 +465,22 @@ def manual_modules(request: WSGIRequest):
     # LoA inactivity alerts (AFK tickets)
     afk_issues, afk_actions, afk_info = [], [], []
     afk_purchase = cfg.dlc_loa_active
-    afk_info.append(purchase_label(afk_purchase))
-    register_purchase_guard(afk_issues, afk_actions, afk_purchase, _("LoA inactivity alerts"))
+    register_module_guard(
+        afk_issues,
+        afk_actions,
+        afk_purchase,
+        _("LoA inactivity alerts"),
+        "BigBrotherConfig.dlc_loa_active",
+    )
     if afk_purchase:
         tickets_purchase = cfg.dlc_tickets_active
-        register_purchase_guard(afk_issues, afk_actions, tickets_purchase, _("Ticket automation"))
+        register_module_guard(
+            afk_issues,
+            afk_actions,
+            tickets_purchase,
+            _("Ticket automation"),
+            "BigBrotherConfig.dlc_tickets_active",
+        )
         if tickets_purchase:
             register_issue(
                 afk_issues,
@@ -497,8 +534,13 @@ def manual_modules(request: WSGIRequest):
     # Ticket automation (general)
     ticket_issues, ticket_actions, ticket_info = [], [], []
     tickets_purchase = cfg.dlc_tickets_active
-    ticket_info.append(purchase_label(tickets_purchase))
-    register_purchase_guard(ticket_issues, ticket_actions, tickets_purchase, _("Ticket automation"))
+    register_module_guard(
+        ticket_issues,
+        ticket_actions,
+        tickets_purchase,
+        _("Ticket automation"),
+        "BigBrotherConfig.dlc_tickets_active",
+    )
     if tickets_purchase:
         if ticket_cfg is None:
             register_issue(
@@ -574,8 +616,13 @@ def manual_modules(request: WSGIRequest):
     summary = _("Automated posts to r/evejobs plus reply monitoring.")
     reddit_setup_action = None
 
-    reddit_info.append(purchase_label(reddit_entitled))
-    register_purchase_guard(reddit_issues, reddit_actions, reddit_entitled, _("Reddit recruitment"))
+    register_module_guard(
+        reddit_issues,
+        reddit_actions,
+        reddit_entitled,
+        _("Reddit recruitment"),
+        "BigBrotherConfig.dlc_reddit_active",
+    )
 
     if reddit_entitled:
         if reddit_cfg is None:

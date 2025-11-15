@@ -187,7 +187,7 @@ def CB_run_regular_updates():
         instance.save()
         send_message(
             f"#{get_pings('Error')} Corp Brother encountered an unexpected error and disabled itself, "
-            "please forward your aa worker.log and the error below to Andrew Xadi"
+            "please forward your aa worker.log and the error below to support"
         )
 
         tb_str = traceback.format_exc()

@@ -71,6 +71,22 @@ from aa_bb.checks.skills import render_user_skills_html
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
+ALLOWED_LAWN_ALLIANCE_ID = 150097440
+ALLOWED_IMP_ALLIANCE_IDS = {
+    99003214,
+    99009163,
+    99012042,
+    150097440,
+    1354830081,
+    131511956,
+    99003995,
+    99010877,
+    99009331,
+    99001969,
+    99011162,
+    99011223,
+}
+
 CARD_DEFINITIONS = [
     {"title": 'Compliance', "key": "compliance"},
     {"title": 'IMP Blacklist', "key": "imp_bl"},
@@ -90,6 +106,21 @@ CARD_DEFINITIONS = [
 ]
 
 
+def get_available_cards():
+    cards = CARD_DEFINITIONS
+    try:
+        cfg = BigBrotherConfig.get_solo()
+    except BigBrotherConfig.DoesNotExist:
+        return cards
+
+    if cfg.main_alliance_id != ALLOWED_LAWN_ALLIANCE_ID:
+        cards = [card for card in cards if card["key"] != "lawn_bl"]
+
+    if cfg.main_alliance_id not in ALLOWED_IMP_ALLIANCE_IDS:
+        cards = [card for card in cards if card["key"] != "imp_bl"]
+    return cards
+
+
 def get_user_id(character_name):
     try:
         ownership = CharacterOwnership.objects.select_related('user') \
@@ -107,13 +138,14 @@ def get_mail_keywords():
 def load_card(request):
     option = request.GET.get("option")
     idx    = request.GET.get("index")
+    cards = get_available_cards()
 
     if option is None or idx is None:
         return HttpResponseBadRequest("Missing parameters")
 
     try:
         idx      = int(idx)
-        card_def = CARD_DEFINITIONS[idx]
+        card_def = cards[idx]
     except (ValueError, IndexError):
         return HttpResponseBadRequest("Invalid card index")
 
@@ -144,7 +176,7 @@ def load_cards(request: WSGIRequest) -> JsonResponse:
     user_id = get_user_id(selected_option)
     warm_entity_cache_task.delay(user_id)
     cards = []
-    for card in CARD_DEFINITIONS:
+    for card in get_available_cards():
         content, status = get_card_data(request, user_id, card["key"])
         cards.append({
             "title":   card["title"],

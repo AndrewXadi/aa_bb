@@ -47,8 +47,8 @@
         <tr>
           <th>Member</th>
           <th>Corp Paps</th>
-          <th>Lawn Paps</th>
-          <th>Imp Paps</th>
+          <th>Alliance Paps</th>
+          <th>Coalition Paps</th>
         </tr>
       </thead>
       <tbody>
@@ -60,12 +60,12 @@
                      value="{{ entry.corp_paps }}" class="form-control form-control-sm" step="1">
             </td>
             <td>
-              <input type="number" name="lawn_paps_{{ entry.user.id }}" 
-                     value="{{ entry.lawn_paps }}" class="form-control form-control-sm" step="1">
+              <input type="number" name="alliance_paps_{{ entry.user.id }}" 
+                     value="{{ entry.alliance_paps }}" class="form-control form-control-sm" step="1">
             </td>
             <td>
-              <input type="number" name="imperium_paps_{{ entry.user.id }}" 
-                     value="{{ entry.imperium_paps }}" class="form-control form-control-sm" step="1">
+              <input type="number" name="coalition_paps_{{ entry.user.id }}" 
+                     value="{{ entry.coalition_paps }}" class="form-control form-control-sm" step="1">
             </td>
           </tr>
         {% endfor %}

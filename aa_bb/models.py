@@ -219,14 +219,14 @@ class PapsConfig(SingletonModel):
         help_text="How many Corp PAPs will count?"
     )
 
-    lawn_modifier = models.PositiveIntegerField(
+    alliance_modifier = models.PositiveIntegerField(
         default=1,  
-        help_text="How many PAPs is a lawn PAP worth?"
+        help_text="How many PAPs is an alliance PAP worth?"
     )
 
-    imp_modifier = models.PositiveIntegerField(
+    coalition_modifier = models.PositiveIntegerField(
         default=1,  
-        help_text="How many PAPs is an imp PAP worth?"
+        help_text="How many PAPs is a coalition PAP worth?"
     )
 
     group_paps = models.ManyToManyField(
@@ -318,12 +318,6 @@ class PapsConfig(SingletonModel):
 
 
 class BigBrotherConfig(SingletonModel):
-    token = models.CharField(
-        max_length=255,
-        blank=False,
-        help_text="Input the token you were provided to install this app"
-    )
-    
     pingroleID = models.CharField(
         max_length=255,
         null=True,
@@ -383,7 +377,7 @@ class BigBrotherConfig(SingletonModel):
     )
 
     hostile_alliances = models.TextField(
-        default="1900696668,741557221,154104258,99013231,495729389,99002685,99001317,99012770,99010281,99009977,498125261,99007203,99003581,99005338,1042504553,1727758877,386292982,99011983,99012617,917526329,99009927,99006941,1411711376,99003557,99006411,98718891,99011312,99007887,99010735,99000285,99007629,1988009451,1220922756,99011990,99011416,99011268,933731581,99005874",
+        default="",
         blank=True,
         null=True,
         help_text="List of alliance IDs considered hostile, separated by ','"
@@ -569,37 +563,37 @@ class BigBrotherConfig(SingletonModel):
 
     dlc_corp_brother_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the Corp Brother module is enabled for this token."
     )
 
     dlc_loa_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the Leave of Absence module is enabled for this token."
     )
 
     dlc_pap_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the PAP module is enabled for this token."
     )
 
     dlc_tickets_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the Tickets module is enabled for this token."
     )
 
     dlc_reddit_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the Reddit module is enabled for this token."
     )
 
     dlc_daily_messages_active = models.BooleanField(
         default=False,
-        editable=False,
+        editable=True,
         help_text="Read-only flag showing if the Daily Messages module is enabled for this token."
     )
 

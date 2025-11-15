@@ -224,36 +224,6 @@ class TicketToolConfig(SingletonModel):
         help_text="Message to send with {role}, {namee} and {days} variables"
     )
 
-    lawn_check_enabled = models.BooleanField(
-        default=False,
-        editable=True,
-        help_text="Do you want to check for lawn auth compliance?"
-    )
-
-    lawn_check = models.PositiveIntegerField(
-        default=30, 
-        help_text="How many days can a user be non compliant on Lawn Auth before he should get kicked?"
-    )
-
-    lawn_check_frequency = models.PositiveIntegerField(
-        default=1, 
-        help_text="How often should a user be reminded (in days)"
-    )
-
-    lawn_check_reason = models.TextField(
-        default="<@&{role}>,<@{namee}>\nSome of your characters are missing a valid token on lawn auth, go fix it",
-        blank=True,
-        null=True,
-        help_text="Message to send with {role} and {namee} variables"
-    )
-
-    lawn_check_reminder = models.TextField(
-        default="<@&{role}>,<@{namee}>, your compliance issue is still unresolved, you have {days} day(s) to fix it or you'll be kicked out.",
-        blank=True,
-        null=True,
-        help_text="Message to send with {role}, {namee} and {days} variables"
-    )
-
     paps_check_enabled = models.BooleanField(
         default=False,
         editable=True,
@@ -542,7 +512,6 @@ class CharacterAccountState(models.Model):
 class ComplianceTicket(models.Model):
     REASONS = [
         ("corp_check", "Corp Compliance"),
-        ("lawn_check", "LAWN Compliance"),
         ("paps_check", "PAP Requirements"),
         ("afk_check", "Inactivity"),
         ("discord_check", "User is not on discord"),
