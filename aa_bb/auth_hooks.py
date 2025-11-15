@@ -17,7 +17,7 @@ class CorpBrotherMenuItem(MenuItemHook):
     """This class ensures only authorized users will see the menu entry"""
 
     def __init__(self):
-        # setup menu entry for sidebar
+        """Initialize the sidebar link for CorpBrother."""
         MenuItemHook.__init__(
             self,
             _("Corp Brother"),
@@ -34,10 +34,10 @@ class CorpBrotherMenuItem(MenuItemHook):
         except BigBrotherConfig.DoesNotExist:
             cfg = None
 
-        if not cfg or not cfg.dlc_corp_brother_active:
+        if not cfg or not cfg.dlc_corp_brother_active:  # Hide when DLC disabled.
             return ""
 
-        if request.user.has_perm("aa_bb.basic_access_cb"):
+        if request.user.has_perm("aa_bb.basic_access_cb"):  # User has access permission.
             return MenuItemHook.render(self, request)
 
         return ""
@@ -52,6 +52,7 @@ def register_menu_cb():
 
 @hooks.register("url_hook")
 def register_corpbrother_urls():
+    """Expose the CorpBrother URLconf to AllianceAuth."""
     return UrlHook(urls_cb, "CorpBrother", r"^aa_cb/")
 
 
@@ -59,7 +60,7 @@ class BigBrotherMenuItem(MenuItemHook):
     """This class ensures only authorized users will see the menu entry"""
 
     def __init__(self):
-        # setup menu entry for sidebar
+        """Initialize the sidebar link for BigBrother core."""
         MenuItemHook.__init__(
             self,
             _("Big Brother"),
@@ -71,7 +72,7 @@ class BigBrotherMenuItem(MenuItemHook):
     def render(self, request):
         """Render the menu item"""
 
-        if request.user.has_perm("aa_bb.basic_access"):
+        if request.user.has_perm("aa_bb.basic_access"):  # Only show to approved members.
             return MenuItemHook.render(self, request)
 
         return ""
@@ -88,6 +89,7 @@ class BigBrotherManualMenuItem(MenuItemHook):
     """Menu entry for the BigBrother user manual."""
 
     def __init__(self):
+        """Initialize the manual menu entry with all nav targets."""
         super().__init__(
             _("Big Brother Manual"),
             "fas fa-book",
@@ -105,23 +107,28 @@ class BigBrotherManualMenuItem(MenuItemHook):
         )
 
     def render(self, request):
-        if request.user.has_perm("aa_bb.basic_access"):
+        """Show manual link for anyone with standard BB access."""
+        if request.user.has_perm("aa_bb.basic_access"):  # Manual mirrors BB permissions.
             return super().render(request)
         return ""
 
 
 @hooks.register("menu_item_hook")
 def register_bigbrother_manual_menu():
+    """Register the BB manual sidebar entry."""
     return BigBrotherManualMenuItem()
 
 
 @hooks.register("url_hook")
 def register_bigbrother_urls():
+    """Expose the BigBrother URLconf to AllianceAuth."""
     return UrlHook(urls, "BigBrother", r"^aa_bb/")
 
 
 class LoAMenuItem(MenuItemHook):
+    """Menu entry for Leave of Absence tools, gated by DLC + permissions."""
     def __init__(self):
+        """Initialize the LoA entry and nav state."""
         super().__init__(
             _("Leave of Absence"),
             "fas fa-plane",
@@ -129,6 +136,7 @@ class LoAMenuItem(MenuItemHook):
             navactive=["loa:"],
     )
     def render(self, request):
+        """Show LoA entry when DLC + permission is active."""
         # Optional permission check:
         # if not request.user.has_perm("aa_bb.can_access_loa"):
         #     return ""
@@ -137,13 +145,13 @@ class LoAMenuItem(MenuItemHook):
         except BigBrotherConfig.DoesNotExist:
             cfg = None
 
-        if not cfg or not cfg.dlc_loa_active:
+        if not cfg or not cfg.dlc_loa_active:  # Skip when LoA DLC disabled.
             return ""
 
-        if request.user.has_perm("aa_bb.can_access_loa"):
-            if request.user.has_perm("aa_bb.can_view_all_loa"):
+        if request.user.has_perm("aa_bb.can_access_loa"):  # Basic LoA access.
+            if request.user.has_perm("aa_bb.can_view_all_loa"):  # Staff can see pending counters.
                 pending_count = LeaveRequest.objects.filter(status="pending").count()
-                if pending_count:
+                if pending_count:  # Highlight nav badge when there are pending requests.
                     self.count = pending_count
                 return MenuItemHook.render(self, request)
             return MenuItemHook.render(self, request)
@@ -151,15 +159,19 @@ class LoAMenuItem(MenuItemHook):
 
 @hooks.register("menu_item_hook")
 def register_loa_menu():
+    """Register the LOA sidebar entry."""
     return LoAMenuItem()
 
 @hooks.register("url_hook")
 def register_loa_urls():
+    """Expose LOA URLs to AllianceAuth."""
     return UrlHook(urls_loa, "loa", r"^loa/")
 
 
 class PapsMenuItem(MenuItemHook):
+    """Menu entry for PAP statistics, only shown when the module is active."""
     def __init__(self):
+        """Initialize the PAP menu entry and nav state."""
         super().__init__(
             _("PAP Stats"),
             "fas fa-chart-bar",
@@ -167,27 +179,31 @@ class PapsMenuItem(MenuItemHook):
             navactive=["paps:"],
     )
     def render(self, request):
+        """Only show when PAP DLC is enabled and user has permission."""
         try:
             cfg = BigBrotherConfig.get_solo()
         except BigBrotherConfig.DoesNotExist:
             cfg = None
 
-        if not cfg or not cfg.dlc_pap_active:
+        if not cfg or not cfg.dlc_pap_active:  # Hide when PAP DLC disabled.
             return ""
 
-        if request.user.has_perm("aa_bb.can_access_paps"):
+        if request.user.has_perm("aa_bb.can_access_paps"):  # Only show for PAP viewers.
             return super().render(request)
         return ""
 
 @hooks.register("menu_item_hook")
 def register_paps_menu():
+    """Register the PAP stats sidebar entry."""
     return PapsMenuItem()
 
 @hooks.register("url_hook")
 def register_paps_urls():
+    """Wire the PAP URLconf into AllianceAuth."""
     return UrlHook(urls_paps, "paps", r"^paps/")
 
 
 @hooks.register('discord_cogs_hook')
 def register_cogs():
+    """Ensure aa_bb's Discord tasks cog is loaded by the bot runner."""
     return ["aa_bb.tasks_bot"]
