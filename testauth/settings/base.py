@@ -117,13 +117,13 @@ LANGUAGES = (  # Sorted by Language Code alphabetical order + English at top
     ("zh-hans", _("Simplified Chinese")),
 )
 
-# Django's language codes are different from some of the libraries we use,
-# so we need to map them.
+# Django's language codes are different from some of the libraries in use,
+# so mapping is required.
 # When adding a new language, please remember to add it to the mapping
 # and add the language files to their respective directories under `allianceauth/static/allianceauth/libs/`.
 LANGUAGE_MAPPING = {
     # See https://github.com/DataTables/Plugins/tree/master/i18n for available languages
-    # (We use the JSON files)
+    # (JSON files are consumed)
     # `allianceauth/static/allianceauth/libs/DataTables/Plugins/{version}/i18n/` for the files
     "DataTables": {
         "cs-cz": "cs",
