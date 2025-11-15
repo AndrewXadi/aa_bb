@@ -1,3 +1,11 @@
+"""
+Routines related to corporation/alliance history checks.
+
+The functions here produce friendly HTML summaries as well as reusable
+helpers that other sections (e.g. cyno readiness) use to determine how
+long a member has been in corp.
+"""
+
 import logging
 from datetime import timedelta
 from django.utils.html import format_html
@@ -27,10 +35,16 @@ EVESEARCH_ICON  = "https://eve-search.com/favicon.ico"
 
 
 def get_frequent_corp_changes(user_id):
+    """
+    Build (and cache) an HTML report showing each corp membership stint.
+
+    Hostile corps/alliances are highlighted in-line and per-character tables
+    also include convenience links to the typical intel sites.
+    """
     # Try 4h cache first
     try:
         cache = FrequentCorpChangesCache.objects.get(pk=user_id)
-        if timezone.now() - cache.updated < TTL_SHORT:
+        if timezone.now() - cache.updated < TTL_SHORT:  # Serve cached card for ~4h to limit upstream calls.
             try:
                 cache.last_accessed = timezone.now()
                 cache.save(update_fields=["last_accessed"])
@@ -41,8 +55,8 @@ def get_frequent_corp_changes(user_id):
         pass
     # Load hostile lists
     cfg = BigBrotherConfig.get_solo()
-    hostile_corps = {int(cid) for cid in cfg.hostile_corporations.split(',') if cid}
-    hostile_alliances = {int(aid) for aid in cfg.hostile_alliances.split(',') if aid}
+    hostile_corps = {int(cid) for cid in cfg.hostile_corporations.split(',') if cid}  # Precompute hostile corp IDs.
+    hostile_alliances = {int(aid) for aid in cfg.hostile_alliances.split(',') if aid}  # Likewise for alliances.
 
     characters = CharacterOwnership.objects.filter(user__id=user_id)
     html = ""
@@ -81,19 +95,19 @@ def get_frequent_corp_changes(user_id):
 
         for idx, membership in enumerate(history):
             corp_id = membership['corporation_id']
-            if is_npc_corporation(corp_id):
+            if is_npc_corporation(corp_id):  # Skip meaningless entries (NPC corps clutter the table).
                 continue
 
             # Membership window
             start = ensure_datetime(membership['start_date'])
-            end = ensure_datetime(history[idx+1]['start_date']) if idx+1 < len(history) else now()
+            end = ensure_datetime(history[idx+1]['start_date']) if idx+1 < len(history) else now()  # End date = next start or now.
             total_days = (end - start).days
 
             corp_name = get_corporation_info(corp_id)['name']
             membership_range = f"{start.date()} - {end.date()}"
 
             # Corp cell with external site favicons (fetched live)
-            corp_color = 'red' if (hostile_corps and corp_id in hostile_corps) else 'inherit'
+            corp_color = 'red' if (hostile_corps and corp_id in hostile_corps) else 'inherit'  # Highlight hostile corps.
             corp_cell = (
                 f'<span style="color:{corp_color};">{corp_name}</span>'
                 f'<a href="https://zkillboard.com/corporation/{corp_id}/" target="_blank">'
@@ -113,13 +127,13 @@ def get_frequent_corp_changes(user_id):
                 a_end = alliance_history[j+1]['start_date'] if j+1 < len(alliance_history) else None
                 seg_start = max(start, a_start)
                 seg_end = min(end, a_end) if a_end else end
-                if seg_start < seg_end:
+                if seg_start < seg_end:  # Only render overlapping time periods (ignore non-overlaps).
                     aid = ent['alliance_id']
                     aname = get_alliance_name(aid)
                     period = f"{seg_start.date()} - {seg_end.date()}"
 
-                    if aid:
-                        alliance_color = 'red' if (hostile_alliances and aid in hostile_alliances) else 'inherit'
+                    if aid:  # Only render alliance rows when the corp was in an alliance.
+                        alliance_color = 'red' if (hostile_alliances and aid in hostile_alliances) else 'inherit'  # Flag hostile alliances.
                         name_cell = f'<span style="color:{alliance_color};">{aname}</span>'
                         icons = (
                             f'<a href="https://zkillboard.com/alliance/{aid}/" target="_blank">'
@@ -135,12 +149,12 @@ def get_frequent_corp_changes(user_id):
                     alliances_html.append(name_cell + icons)
                     periods_html.append(period)
 
-            if not alliances_html:
+            if not alliances_html:  # When no alliance data, fallback to corp membership range.
                 alliances_html = ['-']
                 periods_html = [membership_range]
 
             # Duration cell coloring only
-            dur_color = 'red' if total_days < 10 else ('orange' if total_days < 30 else 'inherit')
+            dur_color = 'red' if total_days < 10 else ('orange' if total_days < 30 else 'inherit')  # Quick visual for recent corps.
 
             rows.append({
                 'corp_cell': corp_cell,
@@ -177,12 +191,16 @@ def get_frequent_corp_changes(user_id):
     return format_html(html)
 
 def time_in_corp(user_id):
+    """
+    Return the maximum number of days any of the user's characters have been
+    continuously in the configured main corporation.
+    """
     days = 0
     characters = CharacterOwnership.objects.filter(user__id=user_id)
     for char in characters:
         char_id   = char.character.character_id
         c_days = get_current_stint_days_in_corp(char_id, BigBrotherConfig.get_solo().main_corporation_id)
-        if c_days > days:
+        if c_days > days:  # Track the maximum stint across all characters.
             days = c_days
     return days
 
@@ -192,13 +210,13 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
     If the character is not in that corporation right now, return 0.
     """
     try:
-        if is_npc_corporation(corp_id):
+        if is_npc_corporation(corp_id):  # NPC corps don't matter for stint tracking.
             return 0
 
         # 4h cached value
         try:
             cache = CurrentStintCache.objects.get(char_id=char_id, corp_id=corp_id)
-            if timezone.now() - cache.updated < TTL_SHORT:
+            if timezone.now() - cache.updated < TTL_SHORT:  # Serve cached days when fresh.
                 try:
                     cache.last_accessed = timezone.now()
                     cache.save(update_fields=["last_accessed"])
@@ -210,12 +228,12 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
 
         history = get_character_employment(char_id)
 
-        if not history:
+        if not history:  # No employment history returned -> treat as zero.
             return 0
 
         # Latest membership is always at the end of our list
         latest = history[-1]
-        if latest["corporation_id"] != corp_id:
+        if latest["corporation_id"] != corp_id:  # Character left the corp already.
             return 0
 
         start = ensure_datetime(latest["start_date"])
