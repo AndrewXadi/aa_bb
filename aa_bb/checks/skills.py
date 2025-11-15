@@ -145,7 +145,7 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
         # Gather this character's skills into a lookup by skill_id
         skill_lookup = {}
         for s in audit.skill_set.all():
-            if s.skill_id in skill_ids:  # Only map skills that we plan to display.
+            if s.skill_id in skill_ids:  # Only map the subset configured for display.
                 skill_lookup[s.skill_id] = s
 
         # Start with total SP
