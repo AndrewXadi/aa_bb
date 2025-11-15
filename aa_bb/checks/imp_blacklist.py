@@ -7,7 +7,7 @@ import urllib.parse
 
 def generate_blacklist_links(user_id, base_url="https://gice.goonfleet.com/Blacklist", max_url_length=2000):
     """
-    Batch character names into multiple links so we do not exceed the
+    Batch character names into multiple links to avoid exceeding the
     URL length limit enforced by the external blacklist service.
     """
     characters = CharacterOwnership.objects.filter(user__id=user_id)
