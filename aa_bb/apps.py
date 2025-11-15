@@ -1,12 +1,21 @@
+"""
+AppConfig bootstrap for aa_bb.
+
+The AppConfig ensures Django wires up signals, celery tasks, message types,
+and periodic scheduler entries as soon as the app loads.
+"""
+
 from django.apps import AppConfig
 from django.db.utils import OperationalError, ProgrammingError
 
 class AaBbConfig(AppConfig):
+    """App bootstrap that wires signals, tasks, and beat entries."""
     default_auto_field = "django.db.models.BigAutoField"
     name = "aa_bb"
     verbose_name = "aa_bb"
 
     def ready(self):
+        """Register signals and ensure our celery beat tasks/message types exist."""
         import aa_bb.signals
         import aa_bb.tasks_reddit  # noqa: F401  # ensure Celery auto-discovery
         import logging
@@ -42,7 +51,7 @@ class AaBbConfig(AppConfig):
         try:
             for msg_name in PREDEFINED_MESSAGE_TYPES:
                 obj, created = MessageType.objects.get_or_create(name=msg_name)
-                if created:
+                if created:  # Log whenever we insert a missing message type.
                     logger.info(f"✅ Added predefined MessageType: {msg_name}")
         except (OperationalError, ProgrammingError):
             # Database not ready (e.g., during migrate)
@@ -65,14 +74,15 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created:
+            if not created:  # Existing record found; ensure configuration matches expectations.
                 updated = False
-                if task.interval != schedule or task.task != "aa_bb.tasks.BB_run_regular_updates":
+                if task.interval != schedule or task.task != "aa_bb.tasks.BB_run_regular_updates":  # Ensure interval/task stay canonical.
+                    # Realign interval/task bindings to the expected values.
                     task.interval = schedule
                     task.task = "aa_bb.tasks.BB_run_regular_updates"
                     task.save()
                     updated = True
-                if updated:
+                if updated:  # Surface when we had to modify the periodic task.
                     logger.info("✅ Updated ‘BB run regular updates’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB run regular updates’ periodic task already exists and is up to date")
@@ -88,14 +98,15 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_cb:
+            if not created_cb:  # Existing CorpBrother task detected.
                 updated_cb = False
-                if task_cb.interval != schedule or task_cb.task != "aa_bb.tasks_cb.CB_run_regular_updates":
+                if task_cb.interval != schedule or task_cb.task != "aa_bb.tasks_cb.CB_run_regular_updates":  # Keep CB task mapping aligned.
+                    # Bring the CB task settings back to the canonical values.
                     task_cb.interval = schedule
                     task_cb.task = "aa_bb.tasks_cb.CB_run_regular_updates"
                     task_cb.save()
                     updated_cb = True
-                if updated_cb:
+                if updated_cb:  # Only log when changes were saved.
                     logger.info("✅ Updated ‘CB run regular updates’ periodic task")
                 else:
                     logger.info("ℹ️ ‘CB run regular updates’ periodic task already exists and is up to date")
@@ -111,18 +122,18 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_ct:
+            if not created_ct:  # Existing kickstart task found; ensure it matches defaults.
                 updated_ct = False
                 # Clear interval if set
-                if task_ct.crontab is not None:
+                if task_ct.crontab is not None:  # Force interval mode by clearing stale crontab assignments.
                     task_ct.crontab = None
                     updated_ct = True
-                if task_ct.interval != schedule or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":
+                if task_ct.interval != schedule or task_ct.task != "aa_bb.tasks_ct.kickstart_stale_ct_modules":  # Align interval/task fields.
                     task_ct.interval = schedule
                     task_ct.task = "aa_bb.tasks_ct.kickstart_stale_ct_modules"
                     task_ct.save()
                     updated_ct = True
-                if updated_ct:
+                if updated_ct:  # Report when we had to tweak the stored task.
                     logger.info("✅ Updated ‘BB kickstart stale CT modules’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB kickstart stale CT modules’ periodic task already exists and is up to date")
@@ -138,14 +149,14 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_tickets:
+            if not created_tickets:  # Tickets beat already exists; keep it in sync.
                 updated_tickets = False
-                if task_tickets.interval != schedule or task_tickets.task != "aa_bb.tasks_tickets.hourly_compliance_check":
+                if task_tickets.interval != schedule or task_tickets.task != "aa_bb.tasks_tickets.hourly_compliance_check":  # Align interval/task fields.
                     task_tickets.interval = schedule
                     task_tickets.task = "aa_bb.tasks_tickets.hourly_compliance_check"
                     task_tickets.save()
                     updated_tickets = True
-                if updated_tickets:
+                if updated_tickets:  # Log when configuration drift was corrected.
                     logger.info("✅ Updated 'tickets run regular updates’ periodic task")
                 else:
                     logger.info("ℹ️ ‘tickets run regular updates’ periodic task already exists and is up to date")
@@ -170,18 +181,18 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_loa:
+            if not created_loa:  # Existing LoA beat entry; validate scheduling.
                 updated_loa = False
                 # Clear interval if set
-                if task_loa.interval is not None:
+                if task_loa.interval is not None:  # LoA task should rely on crontab, so clear intervals.
                     task_loa.interval = None
                     updated_loa = True
-                if task_loa.crontab != scheduleloa or task_loa.task != "aa_bb.tasks_cb.BB_run_regular_loa_updates":
+                if task_loa.crontab != scheduleloa or task_loa.task != "aa_bb.tasks_cb.BB_run_regular_loa_updates":  # Enforce canonical LoA schedule/task.
                     task_loa.crontab = scheduleloa
                     task_loa.task = "aa_bb.tasks_cb.BB_run_regular_loa_updates"
                     task_loa.save()
                     updated_loa = True
-                if updated_loa:
+                if updated_loa:  # Emit when LoA settings were adjusted.
                     logger.info("✅ Updated ‘BB run regular LoA updates’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB run regular LoA updates’ periodic task already exists and is up to date")
@@ -197,18 +208,18 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_comp:
+            if not created_comp:  # Found existing compliance beat entry; align it.
                 updated_comp = False
                 # Clear interval if set
-                if task_comp.interval is not None:
+                if task_comp.interval is not None:  # Compliance task should be crontab-driven.
                     task_comp.interval = None
                     updated_comp = True
-                if task_comp.crontab != scheduleloa or task_comp.task != "aa_bb.tasks_cb.check_member_compliance":
+                if task_comp.crontab != scheduleloa or task_comp.task != "aa_bb.tasks_cb.check_member_compliance":  # Ensure scheduling matches configuration.
                     task_comp.crontab = scheduleloa
                     task_comp.task = "aa_bb.tasks_cb.check_member_compliance"
                     task_comp.save()
                     updated_comp = True
-                if updated_comp:
+                if updated_comp:  # Notify when compliance beat was updated.
                     logger.info("✅ Updated ‘BB check member compliance’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB check member compliance’ periodic task already exists and is up to date")
@@ -236,18 +247,18 @@ class AaBbConfig(AppConfig):
                 },
             )
 
-            if not created_DB:
+            if not created_DB:  # Existing DB cleanup task, so reconcile settings.
                 updated_DB = False
                 # Clear interval if set
-                if task_DB.interval is not None:
+                if task_DB.interval is not None:  # Cleanup task must be crontab-driven.
                     task_DB.interval = None
                     updated_DB = True
-                if task_DB.crontab != scheduleDB or task_DB.task != "aa_bb.tasks_cb.BB_daily_DB_cleanup":
+                if task_DB.crontab != scheduleDB or task_DB.task != "aa_bb.tasks_cb.BB_daily_DB_cleanup":  # Keep task schedule consistent.
                     task_DB.crontab = scheduleDB
                     task_DB.task = "aa_bb.tasks_cb.BB_daily_DB_cleanup"
                     task_DB.save()
                     updated_DB = True
-                if updated_DB:
+                if updated_DB:  # Provide feedback when the DB task was changed.
                     logger.info("✅ Updated ‘BB run regular DB cleanup’ periodic task")
                 else:
                     logger.info("ℹ️ ‘BB run regular DB cleanup’ periodic task already exists and is up to date")
@@ -317,8 +328,8 @@ class AaBbConfig(AppConfig):
 
                 existing_task = PeriodicTask.objects.filter(name=name).first()
 
-                if is_active:
-                    if existing_task is None:
+                if is_active:  # Only install/update tasks when the DLC toggle is active.
+                    if existing_task is None:  # Nothing scheduled yet, so create it.
                         # Create new periodic task
                         PeriodicTask.objects.create(
                             name=name,
@@ -329,23 +340,23 @@ class AaBbConfig(AppConfig):
                         logger.info(f"✅ Created '{name}' periodic task with enabled=True")
                     else:
                         updated = False
-                        if existing_task.crontab != schedule:
+                        if existing_task.crontab != schedule:  # Update schedule when the config changed.
                             existing_task.crontab = schedule
                             updated = True
-                        if existing_task.task != task_path:
+                        if existing_task.task != task_path:  # Ensure the task points to the correct callable.
                             existing_task.task = task_path
                             updated = True
-                        if not existing_task.enabled:
+                        if not existing_task.enabled:  # Reactivate disabled tasks when the feature toggles on.
                             existing_task.enabled = True
                             updated = True
-                        if updated:
+                        if updated:  # Only hit the DB/logs when we adjusted the entry.
                             existing_task.save()
                             logger.info(f"✅ Updated '{name}' periodic task")
                         else:
                             logger.info(f"ℹ️ '{name}' periodic task already exists and is up to date")
                 else:
                     # Not active - delete the task if exists
-                    if existing_task:
+                    if existing_task:  # Remove stale beat entries when the feature is off.
                         existing_task.delete()
                         logger.info(f"🗑️ Deleted '{name}' periodic task because messages are disabled")
 
@@ -356,7 +367,7 @@ class AaBbConfig(AppConfig):
                 "BB reddit reply watcher",
             ]
 
-            if is_reddit_module_visible():
+            if is_reddit_module_visible():  # Only schedule reddit beat tasks when the module is allowed.
                 reddit_post_schedule, _ = CrontabSchedule.objects.get_or_create(
                     minute="0",
                     hour="13",
@@ -374,15 +385,15 @@ class AaBbConfig(AppConfig):
                         "enabled": False,
                     },
                 )
-                if not created_reddit_post:
+                if not created_reddit_post:  # Task exists; keep schedule and callable synced.
                     updated = False
-                    if reddit_post_task.crontab != reddit_post_schedule:
+                    if reddit_post_task.crontab != reddit_post_schedule:  # Update schedule when configuration changed.
                         reddit_post_task.crontab = reddit_post_schedule
                         updated = True
-                    if reddit_post_task.task != "aa_bb.tasks_reddit.post_reddit_recruitment":
+                    if reddit_post_task.task != "aa_bb.tasks_reddit.post_reddit_recruitment":  # Ensure task path is up to date.
                         reddit_post_task.task = "aa_bb.tasks_reddit.post_reddit_recruitment"
                         updated = True
-                    if updated:
+                    if updated:  # Save/log only if adjustments happened.
                         reddit_post_task.save()
                         logger.info("✅ Updated 'BB reddit evejobs post' periodic task")
 
@@ -403,20 +414,20 @@ class AaBbConfig(AppConfig):
                         "enabled": False,
                     },
                 )
-                if not created_reddit_reply:
+                if not created_reddit_reply:  # Task already existed; resync internals if needed.
                     updated = False
-                    if reddit_reply_task.crontab != reddit_reply_schedule:
+                    if reddit_reply_task.crontab != reddit_reply_schedule:  # Ensure cron schedule matches settings.
                         reddit_reply_task.crontab = reddit_reply_schedule
                         updated = True
-                    if reddit_reply_task.task != "aa_bb.tasks_reddit.monitor_reddit_replies":
+                    if reddit_reply_task.task != "aa_bb.tasks_reddit.monitor_reddit_replies":  # Keep task path current.
                         reddit_reply_task.task = "aa_bb.tasks_reddit.monitor_reddit_replies"
                         updated = True
-                    if updated:
+                    if updated:  # Save/log only when we touched the record.
                         reddit_reply_task.save()
                         logger.info("✅ Updated 'BB reddit reply watcher' periodic task")
             else:
                 deleted, _ = PeriodicTask.objects.filter(name__in=reddit_task_names).delete()
-                if deleted:
+                if deleted:  # Inform ops when stale reddit tasks were purged.
                     logger.info("🗑️ Removed reddit periodic tasks because corp gate is not satisfied")
         except (OperationalError, ProgrammingError) as e:
             logger.warning(f"Could not register periodic task yet: {e}")
