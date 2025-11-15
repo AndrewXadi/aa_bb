@@ -96,6 +96,26 @@ class General(models.Model):
             )
         
 class UserStatus(models.Model):
+    """
+    Cached snapshot of every per-user signal displayed on BigBrother.
+
+    Fields:
+    - user: AllianceAuth user whose data is tracked.
+    - has_awox_kills / awox_kill_links: whether friendly-fire kills were found and the link payload.
+    - has_cyno / cyno: readiness summary for cyno-capable characters.
+    - has_skills / skills: results from the skill checklist (SP, ratios, etc.).
+    - has_hostile_assets / hostile_assets: systems where the user owns assets in hostile space.
+    - has_hostile_clones / hostile_clones: hostile clone locations.
+    - has_imp_blacklist / has_lawn_blacklist: booleans for coalition blacklist hits.
+    - has_game_time_notifications / has_skill_injected: notification flags coming from the ESI feed.
+    - has_sus_contacts / sus_contacts: contacts that matched corporate/blacklist criteria.
+    - has_sus_contracts / sus_contracts: hostile contract summaries.
+    - has_sus_mails / sus_mails: hostile mail summaries.
+    - has_sus_trans / sus_trans: hostile wallet transactions.
+    - sp_age_ratio_result: cached SP-per-day data for the skill card.
+    - clone_status: cached alpha/omega detection results.
+    - updated: Django-managed timestamp for when this row last changed.
+    """
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     has_awox_kills = models.BooleanField(default=False)
     awox_kill_links = JSONField(default=dict, blank=True)
@@ -128,6 +148,16 @@ class UserStatus(models.Model):
         verbose_name_plural = "User Statuses"
         
 class CorpStatus(models.Model):
+    """
+    CorpBrother equivalent of UserStatus.
+
+    Fields:
+    - corp_id / corp_name: EVE corporation identity being summarized.
+    - has_hostile_assets / hostile_assets: hostile staging systems for corp assets.
+    - has_sus_contracts / sus_contracts: hostile contracts involving the corp.
+    - has_sus_trans / sus_trans: suspicious corp wallet transactions.
+    - updated: when the cache row last changed.
+    """
     corp_id = models.PositiveIntegerField(default=1)
     corp_name = models.TextField(max_length=50)
     has_hostile_assets = models.BooleanField(default=False)
@@ -143,6 +173,7 @@ class CorpStatus(models.Model):
         verbose_name_plural = "Corp Statuses"
 
 class Messages(models.Model):
+    """Pool of daily Discord messages (text plus `sent_in_cycle` flag)."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -152,6 +183,7 @@ class Messages(models.Model):
         verbose_name_plural = "Daily Messages"
 
 class OptMessages1(models.Model):
+    """Optional message stream #1 (text plus cycle flag)."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -161,6 +193,7 @@ class OptMessages1(models.Model):
         verbose_name_plural = "Opt Messages 1"
 
 class OptMessages2(models.Model):
+    """Optional message stream #2."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -170,6 +203,7 @@ class OptMessages2(models.Model):
         verbose_name_plural = "Opt Messages 2"
 
 class OptMessages3(models.Model):
+    """Optional message stream #3."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -179,6 +213,7 @@ class OptMessages3(models.Model):
         verbose_name_plural = "Opt Messages 3"
 
 class OptMessages4(models.Model):
+    """Optional message stream #4."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -188,6 +223,7 @@ class OptMessages4(models.Model):
         verbose_name_plural = "Opt Messages 4"
 
 class OptMessages5(models.Model):
+    """Optional message stream #5."""
     text = models.TextField(max_length=2000)
     sent_in_cycle = models.BooleanField(default=False)
     def __str__(self):
@@ -198,12 +234,26 @@ class OptMessages5(models.Model):
 
 
 class MessageType(models.Model):
+    """Lookup table for the named message categories referenced in hooks/config."""
     name = models.CharField(max_length=50, unique=True)
 
     def __str__(self):
         return self.name
     
 class PapsConfig(SingletonModel):
+    """
+    Singleton storing how PAP compliance is calculated.
+
+    Fields:
+    - required_paps: baseline PAPs per month for compliance.
+    - corp_modifier / alliance_modifier / coalition_modifier: weights for PAPs earned through each source.
+    - max_corp_paps: cap on corp PAPs counted after modifiers.
+    - group_paps / group_paps_modifier: AA groups that grant bonus PAPs and how many each is worth.
+    - excluded_groups / excluded_groups_get_paps: groups that block other awards and whether they still grant a single bonus.
+    - excluded_users / excluded_users_paps: user-specific overrides that disable all PAPs or only group-derived ones.
+    - capital_groups_get_paps, cap_group/cap_group_paps, super_group/super_group_paps, titan_group/titan_group_paps:
+      toggles and per-capital-group bonuses for members flagged as capital, super, or titan pilots.
+    """
     required_paps = models.PositiveIntegerField(
         default=1, 
         help_text="How many PAPs per month should a user get?"
@@ -318,6 +368,24 @@ class PapsConfig(SingletonModel):
 
 
 class BigBrotherConfig(SingletonModel):
+    """
+    Master configuration for every BigBrother/CorpBrother feature.
+
+    Key field groups:
+    - pingroleID / pingroleID2 and pingrole1_messages / pingrole2_messages /
+      here_messages / everyone_messages: map message types to Discord roles or the default @here/@everyone.
+    - bb_guest_states / bb_member_states: AllianceAuth states that define who is treated as a guest vs. member.
+    - hostile_alliances / hostile_corporations and whitelist_* fields: comma-separated IDs that colour cards red or bypass checks.
+    - ignored_corporations / member_corporations / member_alliances: corp/alliance overrides for CorpBrother membership.
+    - character_scopes / corporation_scopes: comma-separated ESI scopes required for compliance checks.
+    - webhook / loawebhook / dailywebhook / optwebhook1-5: Discord destinations for alerts, LoA notices, daily digests, and optional feeds.
+    - dailyschedule / optschedule1-5: celery-beat schedules for those webhooks; paired with `optwebhook*`.
+    - is_loa_active / is_paps_active / is_warmer_active / are_daily_messages_active / are_opt_messages*_active:
+      feature toggles that gate LoA, PAPs, the cache warmer, and message streams.
+    - dlc_* booleans and apply_module_status(): track which optional DLC modules (CorpBrother, LoA, PAPs, Tickets, Reddit, Daily Messages) are licensed.
+    - main_corporation / main_alliance IDs + names, member thresholds, and handshake booleans (is_active) are populated by the updater.
+    - bigbrother_tokens, bb_install_token, update timing fields, and reddit/daily message pointers track upstream licensing and version checks.
+    """
     pingroleID = models.CharField(
         max_length=255,
         null=True,
@@ -814,15 +882,15 @@ class id_types(models.Model):
 
 class ProcessedMail(models.Model):
     """
-    Tracks which MailMessage IDs we've already generated notes for.
+    Tracks MailMessage IDs that already have generated notes.
     """
     mail_id = models.BigIntegerField(
         primary_key=True,
-        help_text="The MailMessage.id_key that we've processed"
+        help_text="The MailMessage.id_key that has been processed"
     )
     processed_at = models.DateTimeField(
         auto_now_add=True,
-        help_text="When we first processed this mail"
+        help_text="When this mail was first processed"
     )
 
     class Meta:
@@ -869,15 +937,15 @@ class SusMailNote(models.Model):
 
 class ProcessedContract(models.Model):
     """
-    Tracks which Contract IDs we've already generated notes for.
+    Tracks Contract IDs that already have generated notes.
     """
     contract_id = models.BigIntegerField(
         primary_key=True,
-        help_text="The Contract.contract_id that we've processed"
+        help_text="The Contract.contract_id that has been processed"
     )
     processed_at = models.DateTimeField(
         auto_now_add=True,
-        help_text="When we first processed this contract"
+        help_text="When this contract was first processed"
     )
 
     class Meta:
@@ -926,15 +994,15 @@ class SusContractNote(models.Model):
 
 class ProcessedTransaction(models.Model):
     """
-    Tracks which WalletJournalEntry IDs we've already generated notes for.
+    Tracks WalletJournalEntry IDs that already have generated notes.
     """
     entry_id = models.BigIntegerField(
         primary_key=True,
-        help_text="The WalletJournalEntry.entry_id that we've processed"
+        help_text="The WalletJournalEntry.entry_id that has been processed"
     )
     processed_at = models.DateTimeField(
         auto_now_add=True,
-        help_text="When we first processed this transaction"
+        help_text="When this transaction was first processed"
     )
 
     class Meta:
@@ -980,6 +1048,7 @@ class SusTransactionNote(models.Model):
 
 
 class WarmProgress(models.Model):
+    """Tracks cache warmer progress per user (current vs total cards)."""
     user_main = models.CharField(max_length=100, unique=True)
     current   = models.PositiveIntegerField()
     total     = models.PositiveIntegerField()
@@ -990,6 +1059,7 @@ class WarmProgress(models.Model):
     
 
 class EntityInfoCache(models.Model):
+    """Cache of resolved entity info (name + corp/alliance pointers) per timestamp."""
     entity_id  = models.IntegerField()
     as_of      = models.DateTimeField()
     data       = JSONField()
