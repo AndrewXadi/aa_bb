@@ -1,7 +1,7 @@
 """
 Suspicious contact reporting helpers.
 
-We tidy up CharacterContact rows, group them by standing, color-code hostile
+These helpers tidy up CharacterContact rows, group them by standing, color-code hostile
 entities, and expose utilities for producing notification text.
 """
 
@@ -56,7 +56,7 @@ def get_user_contacts(user_id: int) -> dict[int, dict]:
         if ctype == 'character' and is_npc_character(cid):  # Filter NPC characters using helper.
             continue
 
-        if cid not in contacts:  # First time we see this contact; initialize entry.
+        if cid not in contacts:  # First encounter of this contact; initialize entry.
             corp_id = 0
             corp_name = "-"
             alli_id = 0
@@ -162,7 +162,7 @@ def get_cell_style_for_row(cid: int, column: str, row: dict) -> str:
 
 
 def group_contacts_by_standing(contacts: dict[int, dict]) -> dict[int, list[tuple[int, dict]]]:
-    """Bucket contacts into the fixed standings categories we show in UI."""
+    """Bucket contacts into the fixed standings categories displayed in the UI."""
     buckets = {10: [], 5: [], 0: [], -5: [], -10: []}
     for cid, info in contacts.items():
         s = info.get('standing', 0)
