@@ -21,8 +21,9 @@ logging.basicConfig(level=logging.DEBUG)
 @login_required
 @permission_required("aa_bb.can_generate_paps")
 def index(request):
+    """Render the PAP entry form allowing recruiters to input monthly stats."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.is_paps_active:
+    if not cfg.is_paps_active:  # Disable UI when PAP module turned off.
         return render(request, "paps/disabled.html")
 
     today = now()
@@ -37,12 +38,12 @@ def index(request):
     error_messages = []
 
     # Handle bulk data POST
-    if request.method == "POST":
+    if request.method == "POST":  # Bulk upload mode; parse pasted values into POST fields.
         bulk_data = request.POST.get("bulk_data", "")
         lines = bulk_data.strip().split("\n")
         for line in lines:
             parts = line.strip().split()
-            if len(parts) < 3:
+            if len(parts) < 3:  # Need at least name + two columns.
                 continue
             player_name = " ".join(parts[:-2])
             try:
@@ -53,7 +54,7 @@ def index(request):
                 continue
 
             profile = profile_dict.get(player_name)
-            if not profile:
+            if not profile:  # Unknown character name in bulk list.
                 error_messages.append(player_name)
                 continue
 
@@ -65,7 +66,7 @@ def index(request):
     # Build table data
     for profile in profiles:
         excluded_users = PapsConfig.get_solo().excluded_users.all()
-        if profile.user in excluded_users:
+        if profile.user in excluded_users:  # Skip explicitly excluded users.
             continue
         user_id = profile.user.id
         characters = get_user_characters(user_id)
@@ -83,13 +84,13 @@ def index(request):
 
         # Count how many overlap
         matching_count = len(user_groups_set & auth_groups_set)
-        excluded = bool(user_groups_set & excluded_groups_set)
+        excluded = bool(user_groups_set & excluded_groups_set)  # True if user belongs to any excluded group.
         excluded_users_paps = PapsConfig.get_solo().excluded_users_paps.all()
-        if profile.user not in excluded_users_paps:
-            if not excluded:
+        if profile.user not in excluded_users_paps:  # Only award group PAPs when user not excluded.
+            if not excluded:  # Normal path: add modifier times group overlaps.
                 corp_paps = corp_paps + matching_count * PapsConfig.get_solo().group_paps_modifier
             else:
-                if PapsConfig.get_solo().excluded_groups_get_paps:
+                if PapsConfig.get_solo().excluded_groups_get_paps:  # Optionally still award excluded groups.
                     corp_paps = corp_paps + PapsConfig.get_solo().group_paps_modifier
 
         def _group_name(g):
@@ -101,7 +102,7 @@ def index(request):
         
         cfg = PapsConfig.get_solo()
 
-        if cfg.capital_groups_get_paps:
+        if cfg.capital_groups_get_paps:  # Optional extra PAP points for capital pilots.
 
             cap_name   = _group_name(cfg.cap_group)
             super_name = _group_name(cfg.super_group)
@@ -119,7 +120,7 @@ def index(request):
                 corp_paps += paps_to_add
 
 
-        if afat_active():
+        if afat_active():  # Count Alliance FATs per character for corp PAP totals.
             for char in characters:
                 fats = Fat.objects.filter(
                     character__character_id=char,
@@ -129,7 +130,7 @@ def index(request):
                 corp_paps += fats.count()
 
         # Override with POSTed values (manual or bulk)
-        if request.method == "POST":
+        if request.method == "POST":  # Manual overrides from form submission.
             corp_paps = int(request.POST.get(f"corp_paps_{user_id}", corp_paps))
             alliance_paps = int(request.POST.get(f"alliance_paps_{user_id}", alliance_paps))
             coalition_paps = int(request.POST.get(f"coalition_paps_{user_id}", coalition_paps))
@@ -157,8 +158,9 @@ def index(request):
 @login_required
 @permission_required("aa_bb.can_access_paps")
 def history(request):
+    """Show previously generated PAP charts (if they exist)."""
     cfg = BigBrotherConfig.get_solo()
-    if not cfg.is_paps_active:
+    if not cfg.is_paps_active:  # Respect module toggle.
         return render(request, "paps/disabled.html")
     
     today = now()
@@ -186,6 +188,7 @@ def history(request):
 @login_required
 @permission_required("aa_bb.can_generate_paps")
 def generate_pap_chart(request):
+    """Process the submitted PAP form and produce a stacked contribution chart."""
     month = int(request.POST.get("month"))
     year = int(request.POST.get("year"))
 
@@ -197,17 +200,17 @@ def generate_pap_chart(request):
     excluded_users = PapsConfig.get_solo().excluded_users.all()
     conf = PapsConfig.get_solo()
     for profile in get_user_profiles():
-        if profile.user in excluded_users:
+        if profile.user in excluded_users:  # Skip excluded pilots entirely.
             continue
         lr_qs = LeaveRequest.objects.filter(
                 user=profile.user,
                 status="in_progress",
             ).exists()
-        if lr_qs:
+        if lr_qs:  # Ignore LoA members still on leave.
             continue
         user_id = profile.user.id
         corp_raw = int(request.POST.get(f"corp_paps_{user_id}", 0)) * conf.corp_modifier 
-        corp_paps = min(corp_raw, conf.max_corp_paps)  # cap at 4
+        corp_paps = min(corp_raw, conf.max_corp_paps)  # cap at configured maximum
         alliance_paps = int(request.POST.get(f"alliance_paps_{user_id}", 0)) * conf.alliance_modifier
         coalition_paps = int(request.POST.get(f"coalition_paps_{user_id}", 0)) * conf.coalition_modifier
         corp_ab = corp_raw - conf.max_corp_paps
@@ -221,7 +224,7 @@ def generate_pap_chart(request):
             "coalition": coalition_paps,
         })
         # ✅ Update PapCompliance
-        if max_compliance != 0:
+        if max_compliance != 0:  # Update PAP compliance meter when feature enabled.
             pc, _ = PapCompliance.objects.get_or_create(
                 user_profile=profile,
                 defaults={"pap_compliant": starting_compliance},
@@ -241,7 +244,7 @@ def generate_pap_chart(request):
     filepath = os.path.join(app_static_dir, filename)
 
     # Generate stacked chart
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 6))  # Build stacked bar chart in neutral dark theme.
     fig.patch.set_facecolor('#4B4B4B')  # Dark grey background
     ax.set_facecolor('#4B4B4B')
 
@@ -297,14 +300,14 @@ def generate_pap_chart(request):
     ax.legend(loc='upper right', facecolor='#4B4B4B', edgecolor='white', labelcolor='white')
 
     # Add labels above the stacked bars
-    for i, (l, im, c) in enumerate(zip(alliance, coalition, corp)):
+    for i, (l, im, c) in enumerate(zip(alliance, coalition, corp)):  # Label capped totals in contrasting color.
         total = l + im + c
         coll = 'red'
         if total >= conf.required_paps:
             coll = 'white'
         ax.text(i, total, str(total), ha='center', va='bottom', color=coll, fontsize=10)
 
-    for i, (l, im, c, ca) in enumerate(zip(alliance, coalition, corp, corp_abo)):
+    for i, (l, im, c, ca) in enumerate(zip(alliance, coalition, corp, corp_abo)):  # Label above-cap contributions.
         total = l + im + c
         total_c = total + ca
         coll = 'white'
