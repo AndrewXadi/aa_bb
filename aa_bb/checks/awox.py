@@ -43,13 +43,13 @@ def _notify_zkill_down_once(preview: str, status: int | None, content_type: str 
     """
     Fire a single Discord notification when zKill returns junk.
 
-    We keep an in-memory timestamp and bail out if we have already warned
-    within the last ~hour to avoid alert spam when zKill is flaking.
+    An in-memory timestamp prevents duplicate warnings within the last
+    ~hour so alerts do not spam when zKill is flaking.
     """
     global _last_zkill_down_notice_monotonic
     now = time.monotonic()
     # 2 hours = 7200 seconds
-    if now - _last_zkill_down_notice_monotonic < 3500:  # Skip notification if we already warned recently.
+    if now - _last_zkill_down_notice_monotonic < 3500:  # Skip notification if a warning was sent recently.
         return
     _last_zkill_down_notice_monotonic = now
     msg = (
@@ -67,9 +67,9 @@ def fetch_awox_kills(user_id, delay=0.2):
     """
     Return a deduplicated list of awox kill summaries for the given user.
 
-    We prefer a DB cache (so reloading the checklist is cheap), otherwise we
-    pull each character's recent awox activity from zKill, hydrate the full
-    mail via ESI, and cache the resulting summary for future calls.
+    A DB cache keeps checklist reloads cheap; otherwise each character's
+    recent awox activity is pulled from zKill, the full mail is hydrated
+    via ESI, and the resulting summary is cached for future calls.
     """
     # Indefinite DB cache: return cached kills if present
     try:
