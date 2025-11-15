@@ -1,3 +1,8 @@
+"""
+LAWN blacklist helper utilities. All rendering happens elsewhere, but
+collecting the character names in one helper makes templating easier.
+"""
+
 from allianceauth.authentication.models import CharacterOwnership
 
 def get_user_character_names_lawn(user_id):
@@ -12,5 +17,3 @@ def get_user_character_names_lawn(user_id):
         names.append(char_name)
     return "<br>".join(names)
 
-def lawn_bl(userID):
-    return None
