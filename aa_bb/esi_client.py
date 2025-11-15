@@ -23,6 +23,7 @@ DEFAULT_OPERATIONS = [
 
 
 def _setting(name: str, default):
+    """Convenience helper to read optional Django settings with fallbacks."""
     return getattr(settings, name, default)
 
 
@@ -47,6 +48,7 @@ def to_plain(value):
 
 
 def parse_expires(headers: dict | None):
+    """Extract a timezone-aware datetime from HTTP Expires headers (if present)."""
     if not headers:
         return None
     value = headers.get("Expires")
@@ -62,10 +64,12 @@ def parse_expires(headers: dict | None):
 
 
 def call_result(operation, **kwargs):
+    """Execute an OpenAPI operation.result() call and return (data, expires_at)."""
     data, response = operation.result(return_response=True, **kwargs)
     return to_plain(data), parse_expires(response.headers)
 
 
 def call_results(operation, **kwargs):
+    """Execute operation.results() and return (list_data, expires_at) with plain types."""
     data, response = operation.results(return_response=True, **kwargs)
     return to_plain(data), parse_expires(response.headers)
