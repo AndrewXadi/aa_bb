@@ -30,7 +30,6 @@ from aa_bb.checks_cb.hostile_assets import render_assets
 from aa_bb.checks.hostile_clones import render_clones
 from aa_bb.checks.imp_blacklist import generate_blacklist_links
 from aa_bb.checks.lawn_blacklist import get_user_character_names_lawn
-from aa_bb.checks.notifications import game_time, skill_injected
 from aa_bb.checks_cb.sus_trans import (
     get_user_transactions,
     is_transaction_hostile,

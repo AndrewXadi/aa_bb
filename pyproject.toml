@@ -38,7 +38,6 @@ dynamic = [
 ]
 dependencies = [
     "allianceauth>=4.3.1",
-    "pyarmor>=9.0.0",
     "psycopg2-binary>=2.9.9",
     "allianceauth-corptools>=2.9.3",
     "matplotlib>=3.7.2",
@@ -52,6 +51,5 @@ path = "aa_bb/__init__.py"
 
 [tool.hatch.build]
 include = [
-    "aa_bb/**",
-    "pyarmor_runtime_000000/**"
+    "aa_bb/**"
 ]
