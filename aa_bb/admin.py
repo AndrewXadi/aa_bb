@@ -1,3 +1,11 @@
+"""
+Admin registrations for every BigBrother-related model.
+
+Most models are singletons that gate optional DLC modules. The helpers below
+ensure their admin entries only appear when the relevant feature is enabled
+and prevent accidental multi-row creation of what should be one-off configs.
+"""
+
 from solo.admin import SingletonModelAdmin
 
 from django.contrib import admin
@@ -24,7 +32,8 @@ class DLCVisibilityMixin:
     dlc_attr = None
 
     def _allowed(self) -> bool:
-        if not self.dlc_attr:
+        """Return True when the DLC attribute is enabled or not required."""
+        if not self.dlc_attr:  # Always allow when no DLC flag is configured.
             return True
         try:
             cfg = BigBrotherConfig.get_solo()
@@ -33,40 +42,49 @@ class DLCVisibilityMixin:
         return bool(getattr(cfg, self.dlc_attr, False))
 
     def has_module_permission(self, request):
+        """Hide the entire admin module when the DLC is disabled."""
         return self._allowed() and super().has_module_permission(request)
 
     def has_view_permission(self, request, obj=None):
+        """Disable read access when the DLC is disabled."""
         return self._allowed() and super().has_view_permission(request, obj)
 
     def has_add_permission(self, request):
+        """Disable add operations when the DLC is disabled."""
         return self._allowed() and super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):
+        """Disable edit operations when the DLC is disabled."""
         return self._allowed() and super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
+        """Disable delete operations when the DLC is disabled."""
         return self._allowed() and super().has_delete_permission(request, obj)
 
 
 class PapModuleVisibilityMixin(DLCVisibilityMixin):
+    """Restrict admin entries to installs with the PAP DLC."""
     dlc_attr = "dlc_pap_active"
 
 
 class TicketModuleVisibilityMixin(DLCVisibilityMixin):
+    """Restrict admin entries to installs with the ticketing DLC."""
     dlc_attr = "dlc_tickets_active"
 
 
 class LoaModuleVisibilityMixin(DLCVisibilityMixin):
+    """Show admin pages only when the LoA module is enabled."""
     dlc_attr = "dlc_loa_active"
 
 
 class DailyMessagesVisibilityMixin(DLCVisibilityMixin):
+    """Hide daily/optional message models when that DLC is off."""
     dlc_attr = "dlc_daily_messages_active"
 
 
 @admin.register(BigBrotherConfig)
-#class BB_ConfigAdmin(SingletonModelAdmin):
 class BB_ConfigAdmin(SingletonModelAdmin):
+    """Singleton config for the core BigBrother module."""
     readonly_fields = (
         'main_corporation',
         'main_alliance',
@@ -90,17 +108,18 @@ class BB_ConfigAdmin(SingletonModelAdmin):
     )
     
     def has_add_permission(self, request):
-        # Prevent adding new config if one already exists
-        if BigBrotherConfig.objects.exists():
+        """Prevent duplicate singleton rows."""
+        if BigBrotherConfig.objects.exists():  # Disallow when a config already exists.
             return False
         return super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
-        # Prevent deleting the singleton instance
+        """Always allow delete to keep parity with default behavior."""
         return True
 
 @admin.register(PapsConfig)
 class PapsConfigAdmin(PapModuleVisibilityMixin, SingletonModelAdmin):
+    """Controls PAP multipliers/thresholds; singleton per install."""
     filter_horizontal = (
         "group_paps",
         "excluded_groups",
@@ -108,40 +127,44 @@ class PapsConfigAdmin(PapModuleVisibilityMixin, SingletonModelAdmin):
         "excluded_users_paps",
     )
     def has_add_permission(self, request):
-        # Prevent adding new config if one already exists
-        if PapsConfig.objects.exists():
+        """Prevent duplicate PAP config entries."""
+        if PapsConfig.objects.exists():  # Disallow singleton duplication.
             return False
         return super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
-        # Prevent deleting the singleton instance
+        """Allow deletes so admins can rebuild the configuration."""
         return True
     
 @admin.register(TicketToolConfig)
 class TicketToolConfigAdmin(TicketModuleVisibilityMixin, SingletonModelAdmin):
+    """Ticket automation thresholds + templates."""
     filter_horizontal = (
         "excluded_users",
     )
     def has_add_permission(self, request):
-        # Prevent adding new config if one already exists
-        if PapsConfig.objects.exists():
+        """Prevent duplicate ticket config entries."""
+        if PapsConfig.objects.exists():  # Ticket config should remain singleton.
             return False
         return super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
-        # Prevent deleting the singleton instance
+        """Allow deletes when operators need to reset settings."""
         return True
 
 
 class RedditAdminVisibilityMixin(DLCVisibilityMixin):
+    """Hide Reddit admin entries unless DLC + feature flag are active."""
     dlc_attr = "dlc_reddit_active"
 
     def _allowed(self) -> bool:
+        """Require both DLC activation and reddit module visibility."""
         return super()._allowed() and is_reddit_module_visible()
 
 
 @admin.register(BigBrotherRedditSettings)
 class BigBrotherRedditSettingsAdmin(RedditAdminVisibilityMixin, SingletonModelAdmin):
+    """OAuth tokens + scheduling info for the Reddit autoposter."""
     exclude = (
         "reddit_access_token",
         "reddit_refresh_token",
@@ -153,67 +176,81 @@ class BigBrotherRedditSettingsAdmin(RedditAdminVisibilityMixin, SingletonModelAd
     readonly_fields = ("reddit_token_obtained", "last_submission_at", "last_reply_checked_at", "reddit_account_name")
 
     def has_add_permission(self, request):
-        if BigBrotherRedditSettings.objects.exists():
+        """Limit the settings model to a single row."""
+        if BigBrotherRedditSettings.objects.exists():  # Disallow duplicate settings.
             return False
         return super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
+        """Never allow deleting the Reddit credentials row."""
         return False
 
 
 @admin.register(BigBrotherRedditMessage)
 class BigBrotherRedditMessageAdmin(RedditAdminVisibilityMixin, admin.ModelAdmin):
+    """Manage the pool of canned Reddit ads."""
     list_display = ("title", "used_in_cycle", "created")
     list_filter = ("used_in_cycle",)
     search_fields = ("title", "content")
     
 @admin.register(Messages)
 class DailyMessageConfig(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Standard daily webhook messages rotated each cycle."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages1)
 class OptMessage1Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Optional webhook stream #1."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages2)
 class OptMessage2Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Optional webhook stream #2."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages3)
 class OptMessage3Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Optional webhook stream #3."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages4)
 class OptMessage4Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Optional webhook stream #4."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
     
 @admin.register(OptMessages5)
 class OptMessage5Config(DailyMessagesVisibilityMixin, admin.ModelAdmin):
+    """Optional webhook stream #5."""
     search_fields = ['text']
     list_display = ['text', 'sent_in_cycle']
 
 @admin.register(WarmProgress)
 class WarmProgressConfig(admin.ModelAdmin):
+    """Shows which users the cache warmer has processed recently."""
     list_display = ['user_main', 'updated']
 
 @admin.register(UserStatus)
 class UserStatusConfig(admin.ModelAdmin):
+    """Simple heartbeat for per-user card status."""
     list_display = ['user', 'updated']
 
 @admin.register(ComplianceTicket)
 class ComplianceTicketConfig(TicketModuleVisibilityMixin, admin.ModelAdmin):
+    """History of tickets issued by the automation layer."""
     list_display = ['user', 'ticket_id', 'reason']
 
 @admin.register(LeaveRequest)
 class LeaveRequestConfig(LoaModuleVisibilityMixin, admin.ModelAdmin):
+    """Expose LeaveRequest records to staff when LoA is enabled."""
     list_display = ['main_character', 'start_date', 'end_date', 'reason', 'status']
     
 @admin.register(PapCompliance)
 class PapComplianceConfig(PapModuleVisibilityMixin, admin.ModelAdmin):
+    """Shows the most recent PAP compliance calculation per user."""
     search_fields = ['user_profile']
     list_display = ['user_profile', 'pap_compliant']

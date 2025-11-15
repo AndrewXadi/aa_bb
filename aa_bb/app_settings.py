@@ -1,3 +1,11 @@
+"""
+Core helper utilities shared across BigBrother and its companion modules.
+
+This module wraps ESI, caches, and AllianceAuth integration so the rest of
+the codebase can fetch character/corp data, resolve names, and emit Discord
+messages without duplicating all the plumbing.
+"""
+
 from allianceauth.authentication.models import UserProfile, CharacterOwnership
 import logging
 import re
@@ -45,7 +53,7 @@ def _resolve_names_via_esi(ids: list[int]) -> dict[int, str]:
     Resolve a list of EVE IDs into their names using /universe/names via the
     OpenAPI client. Returns a dict mapping id -> name.
     """
-    if not ids:
+    if not ids:  # Nothing to resolve when the caller supplied no IDs.
         return {}
     operation = esi.client.Universe.PostUniverseNames(
         body=ids,
@@ -70,40 +78,36 @@ def get_pings(message_type: str) -> str:
     """
     Given a MessageType instance, return a string of pings separated by spaces.
     """
-    #logger.info(f"message type recieved - {message_type}")
     cfg = BigBrotherConfig.get_solo()
     pings = []
 
-    if cfg.pingrole1_messages.all().filter(name=message_type).exists():
+    if cfg.pingrole1_messages.all().filter(name=message_type).exists():  # Ping role1 when message type is subscribed.
         pings.append(f"<@&{cfg.pingroleID}>")
 
-    if cfg.pingrole2_messages.all().filter(name=message_type).exists():
+    if cfg.pingrole2_messages.all().filter(name=message_type).exists():  # Ping role2 when configured.
         pings.append(f"<@&{cfg.pingroleID2}>")
 
-    if cfg.here_messages.all().filter(name=message_type).exists():
+    if cfg.here_messages.all().filter(name=message_type).exists():  # Include @here when enabled.
         pings.append("@here")
 
-    if cfg.everyone_messages.all().filter(name=message_type).exists():
+    if cfg.everyone_messages.all().filter(name=message_type).exists():  # Include @everyone when enabled.
         pings.append("@everyone")
 
     ping = " " + " ".join(pings) if pings else ""
-    #logger.info(f"pingrole1 - {cfg.pingrole1_messages.all()}")
-    #logger.info(f"pingrole2 - {cfg.pingrole2_messages.all()}")
-    #logger.info(f"here - {cfg.here_messages.all()}")
-    #logger.info(f"everyone - {cfg.everyone_messages.all()}")
-    #logger.info(f"ping sent - {ping}")
 
     return ping
 
 def _find_employment_at(employment: List[dict], date: datetime) -> Optional[dict]:
+    """Return the employment record active at the provided datetime."""
     for rec in employment:
         start = rec.get('start_date')
         end = rec.get('end_date')
-        if start and start <= date and (end is None or date < end):
+        if start and start <= date and (end is None or date < end):  # Overlap indicates active stint at the target time.
             return rec
     return None
 
 def get_main_character_name(user_id):
+    """Convenience wrapper returning the AA profile's main character name."""
     User = get_user_model()
     try:
         user = User.objects.get(id=user_id)
@@ -112,10 +116,11 @@ def get_main_character_name(user_id):
         return None
 
 def _find_alliance_at(history: List[dict], date: datetime) -> Optional[int]:
+    """Return the alliance id active for the corp at the given time."""
     for i, rec in enumerate(history):
         start = rec.get('start_date')
         next_start = history[i+1]['start_date'] if i+1 < len(history) else None
-        if start and start <= date and (next_start is None or date < next_start):
+        if start and start <= date and (next_start is None or date < next_start):  # Period overlaps the requested timestamp.
             return rec.get('alliance_id')
     return None
 
@@ -126,7 +131,7 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
     Returns:
         'character', 'corporation', 'alliance', etc., or None on error/not found.
     """
-    if eve_id is None:
+    if eve_id is None:  # Guard callers that pass falsy IDs.
         logging.warning("No EVE ID provided to get_eve_entity_type_int")
         return None
     max_retries = 3
@@ -156,11 +161,11 @@ def get_eve_entity_type_int(eve_id: int, datasource: str | None = None) -> str |
                 max_retries,
                 exc,
             )
-            if attempt == max_retries:
+            if attempt == max_retries:  # Exhausted retries; surface failure.
                 return None
             time.sleep(delay_seconds * attempt)
 
-    if not results:
+    if not results:  # Nothing was returned from ESI.
         return None
     return results[0].get("category")
 
@@ -193,7 +198,7 @@ def get_eve_entity_type(
 
     # 2. Cache miss — resolve via ESI
     entity_type = get_eve_entity_type_int(eve_id, datasource=datasource)
-    if entity_type is None:
+    if entity_type is None:  # ESI could not resolve the ID.
         return None
 
     # 3. Store in cache
@@ -208,6 +213,7 @@ def get_eve_entity_type(
     return entity_type
 
 def is_npc_character(character_id: int) -> bool:
+    """Check whether a character id falls inside the NPC character range."""
     return 3_000_000 <= character_id < 4_000_000
 
 def get_character_id(name: str) -> int | None:
@@ -246,14 +252,14 @@ def get_character_id(name: str) -> int | None:
             .order_by("-updated")
             .first()
         )
-        if fallback:
+        if fallback:  # Use cached name if ESI fails but we have history.
             fallback.updated = timezone.now()
             fallback.save()
             return fallback.id
         return None
 
     characters = (data or {}).get("characters", [])
-    if not characters:
+    if not characters:  # No match returned from ESI.
         return None
 
     char_id = int(characters[0]["id"])
@@ -264,7 +270,7 @@ def get_character_id(name: str) -> int | None:
             id=char_id,
             defaults={"name": name}
         )
-        if not created and obj.name != name:
+        if not created and obj.name != name:  # Update stale entries when ESI says the canonical name changed.
             obj.name = name
             obj.updated = timezone.now()
             obj.save()
@@ -272,7 +278,7 @@ def get_character_id(name: str) -> int | None:
     # Proactively fix any duplicate rows left over with the same name but different IDs
     try:
         stale_qs = Character_names.objects.filter(name=name).exclude(id=char_id)
-        if stale_qs.exists():
+        if stale_qs.exists():  # Clean up duplicates only when we detect them.
             try:
                 # Resolve correct names for stale IDs using ESI
                 stale_ids = [int(s.id) for s in stale_qs]
@@ -293,7 +299,7 @@ def get_character_id(name: str) -> int | None:
 
             for stale in stale_qs:
                 correct_name = name_rows.get(int(stale.id)) or stale.name
-                if correct_name != stale.name:
+                if correct_name != stale.name:  # Rename rows resolved to a different canonical name.
                     stale.name = correct_name
                     stale.updated = timezone.now()
                     stale.save()
@@ -317,7 +323,7 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
       }
     Caches the result in the DB for 2 hours.
     """
-    if entity_id == None:
+    if entity_id is None:  # Replace missing IDs with placeholder to avoid crashing downstream.
         entity_id = 342545170
         errent = True
     else:
@@ -329,7 +335,7 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
         cache = EntityInfoCache.objects.get(entity_id=entity_id, as_of=as_of)
         cache.updated = timezone.now()
         cache.save()
-        if now - cache.updated < _EXPIRY:
+        if now - cache.updated < _EXPIRY:  # Serve cached data when still within TTL.
             #logger.debug(f"cache hit: entity={entity_id} @ {as_of}")
             return cache.data
         else:
@@ -344,26 +350,26 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
     name = corp_name = alli_name = "-"
     corp_id = alli_id = None
 
-    if etype == "character":
+    if etype == "character":  # Character IDs need corp/alliance context via employment.
         name = resolve_character_name(entity_id)
         emp = get_character_employment(entity_id)
         rec = _find_employment_at(emp, as_of)
-        if rec:
+        if rec:  # Employment record found for timestamp, populate corp/alli metadata.
             corp_id   = rec["corporation_id"]
             corp_name = rec["corporation_name"]
             alli_id   = _find_alliance_at(rec.get("alliance_history", []), as_of)
-            if alli_id:
+            if alli_id:  # Resolve alliance name when an alliance id exists.
                 alli_name = resolve_alliance_name(alli_id)
 
-    elif etype == "corporation":
+    elif etype == "corporation":  # Corp IDs only need alliance info via history.
         corp_id   = entity_id
         corp_name = resolve_corporation_name(entity_id)
         hist      = get_alliance_history_for_corp(entity_id)
         alli_id   = _find_alliance_at(hist, as_of)
-        if alli_id:
+        if alli_id:  # Lookup the alliance name when the corp was in one.
             alli_name = resolve_alliance_name(alli_id)
 
-    elif etype == "alliance":
+    elif etype == "alliance":  # Alliance IDs only require name resolution.
         alli_id   = entity_id
         alli_name = resolve_alliance_name(entity_id)
 
@@ -389,12 +395,12 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
                 )
             break  # Success, exit loop
         except OperationalError as e:
-            if 'Deadlock' in str(e) and attempt < MAX_RETRIES - 1:
+            if 'Deadlock' in str(e) and attempt < MAX_RETRIES - 1:  # Retry transient deadlocks with exponential backoff.
                 time.sleep(0.1 * (attempt + 1))  # small backoff
                 continue
             raise
 
-    if errent:
+    if errent:  # Flag placeholder lookups so downstream consumers know input was missing.
         errmsg = "Error: entity id provided is None "
         info = {
             "name":      errmsg,
@@ -410,10 +416,12 @@ def get_entity_info(entity_id: int, as_of: timezone.datetime) -> Dict:
 TTL_SHORT = timedelta(hours=4)
 
 def _ser_dt(v):
+    """Serialize datetime objects to ISO strings for JSON storage."""
     return v.isoformat() if isinstance(v, datetime) else v
 
 def _deser_dt(v):
-    if isinstance(v, str):
+    """Inverse of _ser_dt; tolerate both ISO strings and already-parsed datetimes."""
+    if isinstance(v, str):  # Convert any ISO-ish strings back into datetime objects.
         try:
             return datetime.fromisoformat(v)
         except ValueError:
@@ -424,6 +432,7 @@ def _deser_dt(v):
     return v
 
 def _ser_employment(rows: list[dict]) -> list[dict]:
+    """Normalize employment rows before storing them in the cache table."""
     out = []
     for r in rows:
         out.append({
@@ -439,6 +448,7 @@ def _ser_employment(rows: list[dict]) -> list[dict]:
     return out
 
 def _deser_employment(rows: list[dict]) -> list[dict]:
+    """Hydrate employment-cache rows back into Python objects."""
     out = []
     for r in rows or []:
         out.append({
@@ -470,7 +480,7 @@ def get_character_employment(character_or_id) -> list[dict]:
     On ESI failure, logs and returns [].
     """
     # 1. Normalize to integer character_id
-    if isinstance(character_or_id, int):
+    if isinstance(character_or_id, int):  # Accept raw IDs directly.
         char_id = character_or_id
     else:
         try:
@@ -490,9 +500,9 @@ def get_character_employment(character_or_id) -> list[dict]:
         cache_entry = ce
         cached_rows = _deser_employment(ce.data)
         now_ts = timezone.now()
-        if expiry_hint and expiry_hint > now_ts:
+        if expiry_hint and expiry_hint > now_ts:  # Cache still valid per redis hint.
             return cached_rows
-        if expiry_hint is None and now_ts - ce.updated < TTL_SHORT:
+        if expiry_hint is None and now_ts - ce.updated < TTL_SHORT:  # Fall back to DB timestamp TTL.
             try:
                 ce.last_accessed = timezone.now()
                 ce.save(update_fields=['last_accessed'])
@@ -511,7 +521,7 @@ def get_character_employment(character_or_id) -> list[dict]:
         set_cached_expiry(expiry_key, new_expiry)
     except HTTPNotModified as exc:
         set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
-        if cache_entry:
+        if cache_entry:  # Use DB cache when ESI returned 304.
             try:
                 cache_entry.updated = timezone.now()
                 cache_entry.last_accessed = timezone.now()
@@ -532,13 +542,13 @@ def get_character_employment(character_or_id) -> list[dict]:
 
     for idx, membership in enumerate(history):
         corp_id = membership.get('corporation_id')
-        if not corp_id or is_npc_corporation(corp_id):
+        if not corp_id or is_npc_corporation(corp_id):  # Skip NPC corps or missing ids.
             continue
 
         start = ensure_datetime(membership.get('start_date'))
         # Next start_date becomes this membership's end_date
         end = None
-        if idx + 1 < len(history):
+        if idx + 1 < len(history):  # Next row's start becomes this row's end.
             end = ensure_datetime(history[idx + 1].get('start_date'))
 
         # Enrich with corp and alliance info
@@ -571,6 +581,7 @@ def get_character_employment(character_or_id) -> list[dict]:
     return rows
 
 def get_user_characters(user_id: int) -> dict[int, str]:
+    """Return {character_id: character_name} for the given AllianceAuth user."""
     qs = CharacterOwnership.objects.filter(user__id=user_id).select_related('character')
     return {
         co.character.character_id: co.character.character_name
@@ -586,6 +597,7 @@ def format_int(value: int) -> str:
     return f"{value:,}".replace(",", ".")
 
 def is_npc_corporation(corp_id):
+    """Return True when the corporation id falls inside the NPC range."""
     return 1_000_000 <= corp_id < 2_000_000
 
 CORP_TTL = timedelta(hours=4)
@@ -602,9 +614,9 @@ def get_corporation_info(corp_id):
         entry = CorporationInfoCache.objects.get(pk=corp_id)
         cached_entry = entry
         now_ts = timezone.now()
-        if expiry_hint and expiry_hint > now_ts:
+        if expiry_hint and expiry_hint > now_ts:  # Cached corp info still valid according to redis.
             return {"name": entry.name, "member_count": entry.member_count}
-        if expiry_hint is None and now_ts - entry.updated < CORP_TTL:
+        if expiry_hint is None and now_ts - entry.updated < CORP_TTL:  # Fall back to DB timestamp TTL when redis hint missing.
             return {"name": entry.name, "member_count": entry.member_count}
     except CorporationInfoCache.DoesNotExist:
         entry = None
@@ -622,7 +634,7 @@ def get_corporation_info(corp_id):
         }
     except HTTPNotModified as exc:
         set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
-        if cached_entry:
+        if cached_entry:  # Serve stale entry if ESI returned 304.
             cached_entry.updated = timezone.now()
             cached_entry.save(update_fields=["updated"])
             return {"name": cached_entry.name, "member_count": cached_entry.member_count}
@@ -652,11 +664,13 @@ def get_corporation_info(corp_id):
 
 
 def ensure_datetime(value):
-    if isinstance(value, str):
+    """Best-effort conversion of ISO strings into timezone-aware datetimes."""
+    if isinstance(value, str):  # Parse ISO strings as timezone-aware datetimes.
         return parse_datetime(value)
     return value
 
 def _fetch_alliance_history(corp_id, expiry_key, cached_history=None):
+    """Wrapper around the alliance-history endpoint that respects caching hints."""
     operation = esi.client.Corporation.GetCorporationsCorporationIdAlliancehistory(
         corporation_id=corp_id
     )
@@ -666,7 +680,7 @@ def _fetch_alliance_history(corp_id, expiry_key, cached_history=None):
         return data
     except HTTPNotModified as exc:
         set_cached_expiry(expiry_key, parse_expires(getattr(exc, "headers", {})))
-        if cached_history is not None:
+        if cached_history is not None:  # Use cached history when ESI returns 304.
             return cached_history
         data, expires_at = call_results(operation, use_etag=False)
         set_cached_expiry(expiry_key, expires_at)
@@ -683,9 +697,9 @@ ALLIANCE_TTL = timedelta(hours=24)
 
 def _parse_datetime(value):
     """Parse ISO8601 string to datetime, return None if invalid."""
-    if isinstance(value, datetime):
+    if isinstance(value, datetime):  # Already parsed datetimes pass through untouched.
         return value
-    if isinstance(value, str):
+    if isinstance(value, str):  # Attempt to parse ISO strings.
         try:
             return datetime.fromisoformat(value)
         except ValueError:
@@ -694,15 +708,16 @@ def _parse_datetime(value):
 
 def _serialize_datetime(value):
     """Recursively convert datetime objects to ISO8601 strings."""
-    if isinstance(value, datetime):
+    if isinstance(value, datetime):  # Serialize datetime objects to strings.
         return value.isoformat()
-    if isinstance(value, list):
+    if isinstance(value, list):  # Recurse into lists.
         return [_serialize_datetime(v) for v in value]
-    if isinstance(value, dict):
+    if isinstance(value, dict):  # Recurse into dicts.
         return {k: _serialize_datetime(v) for k, v in value.items()}
     return value
 
 def get_alliance_history_for_corp(corp_id):
+    """Return chronological alliance-history entries for the given corporation."""
     # 1) Try DB cache first
     cached_history = None
     expiry_key = expiry_cache_key("corp_alliance_history", corp_id)
@@ -717,9 +732,9 @@ def get_alliance_history_for_corp(corp_id):
             for h in entry.history
         ]
         now_ts = timezone.now()
-        if expiry_hint and expiry_hint > now_ts:
+        if expiry_hint and expiry_hint > now_ts:  # Cache still valid according to redis hint.
             return cached_history
-        if expiry_hint is None and entry.is_fresh:
+        if expiry_hint is None and entry.is_fresh:  # DB entry recently refreshed; reuse.
             return cached_history
         entry.delete()
     except AllianceHistoryCache.DoesNotExist:
@@ -755,10 +770,11 @@ def get_alliance_history_for_corp(corp_id):
     return history
 
 def _get_sov_map() -> list:
+    """Fetch (and cache) the sovereignty map used by get_system_owner."""
     entry = None
     try:
         entry = SovereigntyMapCache.objects.get(pk=1)
-        if entry.is_fresh:
+        if entry.is_fresh:  # Use cached sovereignty map when still fresh.
             return entry.data
     except SovereigntyMapCache.DoesNotExist:
         pass
@@ -769,7 +785,7 @@ def _get_sov_map() -> list:
     try:
         data, _ = call_results(operation)
     except HTTPNotModified:
-        if entry:
+        if entry:  # Serve cached data on 304 responses when cache exists.
             try:
                 entry.updated = timezone.now()
                 entry.save(update_fields=["updated"])
@@ -922,14 +938,14 @@ def get_system_owner(system: str) -> Dict[str, str]:
     system_id = system.get("id")
     system_nam = system.get("name")
     system_name = str()
-    if system_nam:
+    if system_nam:  # Convert provided name into a proper string when available.
         system_name = str(system_nam)
 
     # 2) Fetch sovereignty map
     try:
         sov_map = _get_sov_map()
         entry = next((s for s in sov_map if s.get("system_id") == system_id), None)
-        if not entry:
+        if not entry:  # No sovereignty info for this system.
             return {"owner_id": owner_id, "owner_name": f"Unresolvable structure due to lack of docking rights", "owner_type": owner_type}
     except Exception as e:
         logger.exception(f"Failed to fetch sovereignty for system ID {system_id}: {e}")
@@ -940,10 +956,10 @@ def get_system_owner(system: str) -> Dict[str, str]:
     # 3) Determine owner ID and type
     alliance_id = entry.get("alliance_id")
     faction_id = entry.get("faction_id")
-    if alliance_id:
+    if alliance_id:  # Prefer alliance owners when present.
         owner_id = str(alliance_id)
         owner_type = "alliance"
-    elif faction_id:
+    elif faction_id:  # Otherwise fall back to faction ownership.
         owner_id = str(faction_id)
         owner_type = "faction"
     else:
@@ -963,6 +979,7 @@ def get_system_owner(system: str) -> Dict[str, str]:
 
 
 def get_users():
+    """List the character names of every member-state user with a main set."""
     member_states = BigBrotherConfig.get_solo().bb_member_states.all()
     users = list(
         UserProfile.objects.filter(state__in=member_states)
@@ -973,6 +990,7 @@ def get_users():
     return users
 
 def get_user_profiles():
+    """Return queryset of eligible user profiles with main characters eager-loaded."""
     member_states = BigBrotherConfig.get_solo().bb_member_states.all()
     users = (
         UserProfile.objects.filter(state__in=member_states)
@@ -983,6 +1001,7 @@ def get_user_profiles():
     return users
 
 def get_user_id(character_name):
+    """Translate a main-character name into the owning Auth user id."""
     try:
         ownership = CharacterOwnership.objects.select_related('user').get(character__character_name=character_name)
         return ownership.user.id
