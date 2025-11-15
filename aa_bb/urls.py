@@ -7,51 +7,51 @@ app_name = "aa_bb"
 
 urlpatterns = [
     # Main index view
-    path("", views.index, name="index"),
-    path("manual/", views_faq.manual_cards, name="manual"),
-    path("manual/cards/", views_faq.manual_cards, name="manual_cards"),
-    path("manual/settings/", views_faq.manual_settings, name="manual_settings"),
+    path("", views.index, name="index"),  # Landing page showing current dashboard cards.
+    path("manual/", views_faq.manual_cards, name="manual"),  # Top-level manual hub (redirects to cards).
+    path("manual/cards/", views_faq.manual_cards, name="manual_cards"),  # FAQ cards describing each module.
+    path("manual/settings/", views_faq.manual_settings, name="manual_settings"),  # Manual section listing module settings.
     path(
         "manual/settings/bigbrother/",
         views_faq.manual_settings_bb,
         name="manual_settings_bb",
-    ),
+    ),  # BigBrother specific settings reference page.
     path(
         "manual/settings/paps/",
         views_faq.manual_settings_paps,
         name="manual_settings_paps",
-    ),
+    ),  # PAPs module explanation/settings.
     path(
         "manual/settings/tickets/",
         views_faq.manual_settings_tickets,
         name="manual_settings_tickets",
-    ),
-    path("manual/modules/", views_faq.manual_modules, name="manual_modules"),
-    path("manual/modules/reddit/login/", views_faq.reddit_oauth_login, name="reddit_oauth_login"),
+    ),  # Ticket module documentation.
+    path("manual/modules/", views_faq.manual_modules, name="manual_modules"),  # Landing page for module-specific docs.
+    path("manual/modules/reddit/login/", views_faq.reddit_oauth_login, name="reddit_oauth_login"),  # Initiate Reddit OAuth.
     path(
         "manual/modules/reddit/oauth/callback/",
         views_faq.reddit_oauth_callback,
         name="reddit_oauth_callback",
-    ),
-    path("manual/faq/", views_faq.manual_faq, name="manual_faq"),
+    ),  # Handle the Reddit OAuth callback and persist tokens.
+    path("manual/faq/", views_faq.manual_faq, name="manual_faq"),  # General FAQ/guide landing page.
 
     # Bulk loader (not used by paginated SUS_CONTR but retained)
-    path("load_cards/", views.load_cards, name="load_cards"),
+    path("load_cards/", views.load_cards, name="load_cards"),  # Legacy endpoint to generate all SUS cards at once.
 
     # Single card AJAX fetch (all cards except paging for SUS_CONTR)
-    path("load_card/", views.load_card, name="load_card"),
-    path("warm_cache/", views.warm_cache, name="warm_cache"),
-    path("warm-progress/", views.get_warm_progress, name="warm_progress"),
+    path("load_card/", views.load_card, name="load_card"),  # Fetch one card’s HTML payload on-demand.
+    path("warm_cache/", views.warm_cache, name="warm_cache"),  # Trigger backend warm-up of cached card data.
+    path("warm-progress/", views.get_warm_progress, name="warm_progress"),  # Poll for warm-up job status.
 
     # Suspicious Contracts streaming fallback (if desired)
-    path("stream_contracts_sse/", views.stream_contracts_sse, name="stream_contracts_sse"),
-    path("stream_mails_sse/", views.stream_mails_sse, name="stream_mails_sse"),
-    path("stream_transactions_sse/", views.stream_transactions_sse, name="stream_transactions_sse"),
+    path("stream_contracts_sse/", views.stream_contracts_sse, name="stream_contracts_sse"),  # SSE feed for contracts.
+    path("stream_mails_sse/", views.stream_mails_sse, name="stream_mails_sse"),  # SSE feed for suspicious mails.
+    path("stream_transactions_sse/", views.stream_transactions_sse, name="stream_transactions_sse"),  # SSE feed for wallet transactions.
 
     # Paginated Suspicious Contracts endpoints
-    path("list_contract_ids/", views.list_contract_ids, name="list_contract_ids"),
-    path("check_contract_batch/", views.check_contract_batch, name="check_contract_batch"),
+    path("list_contract_ids/", views.list_contract_ids, name="list_contract_ids"),  # Provide IDs for contract pagination.
+    path("check_contract_batch/", views.check_contract_batch, name="check_contract_batch"),  # Fetch specific contract batch details.
 
     # Blacklist management
-    path("blacklist/add/", views.add_blacklist_view, name="add_blacklist"),
+    path("blacklist/add/", views.add_blacklist_view, name="add_blacklist"),  # Simple UI to add entries to corp blacklist.
 ]
