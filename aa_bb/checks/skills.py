@@ -1,3 +1,10 @@
+"""
+Skill-level reporting helpers.
+
+These helpers fetch and render frequently referenced skills as well as
+generic routines (get_user_skill_info) that other check modules import.
+"""
+
 from django.contrib.auth.models import User
 from allianceauth.authentication.models import CharacterOwnership
 from corptools.models import CharacterAudit, Skill, SkillTotals, CorporationHistory
@@ -32,6 +39,7 @@ skill_ids = [
 ]
 
 def get_skill_map():
+    """Return a mapping of skill_id -> localized name parsed from skills.json."""
     try:
         with open(_SKILLS_JSON_PATH, "r", encoding="utf-8") as f:
             _raw = json.load(f)
@@ -44,7 +52,7 @@ def get_skill_map():
         for block in blocks:
             for key, val in block.items():
                 # Skip the “Category ID” entries
-                if key == "Category ID":
+                if key == "Category ID":  # Ignore metadata rows that do not represent actual skills.
                     continue
                 try:
                     sid = int(key)
@@ -85,7 +93,7 @@ def get_user_skill_info(user_id: int, skill_id: int) -> dict:
         except Skill.DoesNotExist:
             trained = 0
             active  = 0
-        if hasattr(audit, "skilltotals"):
+        if hasattr(audit, "skilltotals"):  # Prefer real SkillTotals rows when available.
             totals = audit.skilltotals  # SkillTotals instance
         else:
             class DummyTotals:
@@ -114,7 +122,7 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
     #logger.info(f"ownership: {len(ownership_map)}")
     #logger.info(f"ownership: {str(ownership_map)}")
 
-    if not ownership_map:
+    if not ownership_map:  # Bail out when the user has zero characters.
         return {}
 
     # 2) Fetch audits and related totals and skills in bulk
@@ -135,11 +143,10 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
         totals = audit.skilltotals
 
         # Gather this character's skills into a lookup by skill_id
-        skill_lookup = {
-            s.skill_id: s
-            for s in audit.skill_set.all()
-            if s.skill_id in skill_ids
-        }
+        skill_lookup = {}
+        for s in audit.skill_set.all():
+            if s.skill_id in skill_ids:  # Only map skills that we plan to display.
+                skill_lookup[s.skill_id] = s
 
         # Start with total SP
         entry: dict = {"total_sp": totals.total_sp}
@@ -147,9 +154,15 @@ def get_multiple_user_skill_info(user_id: int, skill_ids: list[int]) -> dict[str
         # Attach each requested skill’s levels
         for sid in skill_ids:
             skill = skill_lookup.get(sid)
+            if skill:  # Skill trained on this character; copy levels.
+                trained_level = skill.trained_skill_level
+                active_level = skill.active_skill_level
+            else:  # Character never trained the skill.
+                trained_level = 0
+                active_level = 0
             entry[sid] = {
-                "trained": skill.trained_skill_level if skill else 0,
-                "active":  skill.active_skill_level   if skill else 0,
+                "trained": trained_level,
+                "active":  active_level,
             }
 
         result[name] = entry
@@ -174,10 +187,13 @@ def render_user_skills_html(user_id: int) -> str:
         total_sp = info.get("total_sp", 0)
         char_id = get_character_id(char_name)
         char_age = get_char_age(char_id)
-        sp_days = (total_sp - 384000) / 64800 if total_sp else 0
+        if total_sp:  # Convert skillpoints to training days when data exists.
+            sp_days = (total_sp - 384000) / 64800
+        else:
+            sp_days = 0
 
         # Guard against missing or zero age
-        if isinstance(char_age, (int, float)) and char_age > 0:
+        if isinstance(char_age, (int, float)) and char_age > 0:  # Only compute ratios when age data available.
             sp_age_ratio = round(sp_days / char_age, 2)
             formatted = mark_safe(f'<span style="color:red;">{sp_age_ratio}</span>')
             ratio_display = sp_age_ratio if sp_age_ratio < 1 else formatted
@@ -214,9 +230,9 @@ def render_user_skills_html(user_id: int) -> str:
             style_t = ''
             style_a = ''
             skill_name = skill_name_map.get(sid, str(sid))
-            if trained > 0 and sid != 3426 or trained > 3:
+            if trained > 0 and sid != 3426 or trained > 3:  # Highlight suspiciously high trained levels.
                 style_t = ' style="color:red;"'
-            if active > 0 and sid != 3426 or active > 3:
+            if active > 0 and sid != 3426 or active > 3:  # Same for active levels beyond alpha caps.
                 style_a = ' style="color:red;"'
             html_parts.append(format_html(
                 "<tr>"
@@ -258,7 +274,7 @@ def get_char_age(char_id: int) -> int | None:
         .order_by('start_date')    # ORDER BY start_date ASC :contentReference[oaicite:0]{index=0}
         .first()
     )
-    if not first_hist:
+    if not first_hist:  # No corp history entries available → cannot compute age.
         return None
 
     # 3) Compute the difference between now() and that start_date

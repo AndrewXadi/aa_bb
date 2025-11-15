@@ -1,3 +1,10 @@
+"""
+Summaries covering corporation roles and ESI token coverage.
+
+The views reuse these helpers to highlight characters that are missing
+required scopes or that still have elevated roles without valid tokens.
+"""
+
 from allianceauth.authentication.models import CharacterOwnership
 from corptools.models import CharacterRoles, CharacterAudit
 from allianceauth.eveonline.models import EveCharacter
@@ -7,6 +14,12 @@ from django.utils.safestring import mark_safe
 from aa_bb.models import BigBrotherConfig
 
 def get_user_roles(user_id):
+    """
+    Return a mapping of character name -> key roles held inside their corp.
+
+    Pulling the CharacterRoles info once here keeps the template logic simple
+    and avoids doing additional DB hits while rendering a table per user.
+    """
     characters = CharacterOwnership.objects.filter(user__id=user_id).select_related("character")
 
     roles_dict = {}
@@ -38,6 +51,12 @@ def get_user_roles(user_id):
     return roles_dict
 
 def get_user_tokens(user_id):
+    """
+    Inspect which ESI scopes the user has granted for each character.
+
+    We track both character audit availability and the presence of the
+    configured corporation scopes so staff can quickly spot gaps.
+    """
     from esi.models import Token, Scope
     
     CHARACTER_SCOPES = BigBrotherConfig.get_solo().character_scopes.split(",")
@@ -81,6 +100,10 @@ def get_user_tokens(user_id):
     return tokens_dict
 
 def get_user_roles_and_tokens(user_id):
+    """
+    Merge the separate role/token dictionaries so a single lookup provides
+    everything needed for both highlighting and CSV exports.
+    """
     roles = get_user_roles(user_id)
     tokens = get_user_tokens(user_id)
 
@@ -89,9 +112,9 @@ def get_user_roles_and_tokens(user_id):
     # union of all characters in roles or tokens
     for char_name in set(roles.keys()) | set(tokens.keys()):
         combined[char_name] = {}
-        if char_name in roles:
+        if char_name in roles:  # Copy role flags when available.
             combined[char_name].update(roles[char_name])
-        if char_name in tokens:
+        if char_name in tokens:  # Merge token coverage metadata.
             combined[char_name].update(tokens[char_name])
 
     return combined
@@ -132,7 +155,7 @@ def render_user_roles_tokens_html(user_id: int) -> str:
         ):
             val = info.get(key, False)
             # highlight True roles in red if corporation_token is False
-            if val:
+            if val:  # Highlight key roles even if tokens missing.
                 val_txt = mark_safe('<span style="color:orange;">True</span>')
                 has_roles = True
             else:
@@ -148,10 +171,10 @@ def render_user_roles_tokens_html(user_id: int) -> str:
         ):
             val = info.get(key, False)
             # if character_token is False → make it red
-            if key == "character_token" and not val:
+            if key == "character_token" and not val:  # Character audit missing entirely.
                 val_txt = mark_safe('<span style="color:red;">False</span>')
-            elif key == "corporation_token" and not val:
-                if has_roles:
+            elif key == "corporation_token" and not val:  # No corp token; severity depends on corp roles.
+                if has_roles:  # Elevated corp roles without corp token is especially risky.
                     val_txt = mark_safe('<span style="color:red;">False</span>')
                 else:
                     val_txt = mark_safe('False')
