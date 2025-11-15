@@ -231,7 +231,7 @@ def get_current_stint_days_in_corp(char_id: int, corp_id: int) -> int:
         if not history:  # No employment history returned -> treat as zero.
             return 0
 
-        # Latest membership is always at the end of our list
+        # Latest membership entry appears at the end of the history list
         latest = history[-1]
         if latest["corporation_id"] != corp_id:  # Character left the corp already.
             return 0

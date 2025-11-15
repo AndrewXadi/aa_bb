@@ -125,7 +125,7 @@ def get_cell_style_for_contract_row(column: str, row: dict) -> str:
     """Return inline CSS so tables/exports highlight blacklist/hostile hits."""
     if column == 'issuer_name':  # Color issuer names if the character is suspect.
         cid = row.get("issuer_id")
-        if check_char_corp_bl(cid):  # Issuer is on our blacklist.
+        if check_char_corp_bl(cid):  # Issuer is on the blacklist.
             return 'color: red;'
         else:
             return ''

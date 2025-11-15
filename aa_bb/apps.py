@@ -15,7 +15,7 @@ class AaBbConfig(AppConfig):
     verbose_name = "aa_bb"
 
     def ready(self):
-        """Register signals and ensure our celery beat tasks/message types exist."""
+        """Register signals and ensure Celery beat tasks/message types exist."""
         import aa_bb.signals
         import aa_bb.tasks_reddit  # noqa: F401  # ensure Celery auto-discovery
         import logging
