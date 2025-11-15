@@ -1,12 +1,26 @@
+"""
+Helpers for integrating with the AllianceAuth blacklist plugin.
+
+These checks expose both read-only HTML summaries and the admin helper that
+evaluates every character owned by a user and pushes them into the shared
+blacklist when authorized staff request it.
+"""
+
 from allianceauth.authentication.models import CharacterOwnership
 from ..app_settings import aablacklist_active, send_message, get_pings
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
-from django.urls import reverse 
-from django.middleware.csrf import get_token 
+from django.urls import reverse
+from django.middleware.csrf import get_token
 
 def check_corp_bl(user_id):
-    if not aablacklist_active():
+    """
+    Return a mapping of character name -> bool (is blacklisted).
+
+    The helper gracefully no-ops when the optional aablacklist plugin is not
+    enabled so the rest of the dashboard can reuse the same code path.
+    """
+    if not aablacklist_active():  # Skip lookups entirely when plugin disabled.
         return None
     status_map = {}
     for co in CharacterOwnership.objects.filter(user__id=user_id):
@@ -15,7 +29,11 @@ def check_corp_bl(user_id):
     return status_map
 
 def check_char_corp_bl(cid):
-    if not aablacklist_active():
+    """
+    Lightweight helper used by multiple checks to see if a character id
+    appears in the blacklist table. Returns True when blacklisted.
+    """
+    if not aablacklist_active():  # Optional plugin absent → treat as not blacklisted.
         return False
     from blacklist.models import EveNote
     blacklisted_ids = EveNote.objects.filter(
@@ -25,11 +43,15 @@ def check_char_corp_bl(cid):
     return cid in blacklisted_ids
 
 def get_corp_blacklist_html(
-    request,                   # ← new first parameter
+    request,
     issuer_user_id: int,
     target_user_id: int
 ) -> str:
-    if not aablacklist_active():
+    """
+    Render a simple HTML summary (one line per four characters) along with
+    a POST form that lets moderators enqueue a blacklist request.
+    """
+    if not aablacklist_active():  # Without the plugin installed there is nothing to display.
         return (
             "Please "
             "<a href='https://github.com/Solar-Helix-Independent-Transport/"
@@ -61,7 +83,7 @@ def get_corp_blacklist_html(
         )
         html.append(f"    <li>{line}</li>")
 
-    if request.user.has_perm("aa_bb.can_blacklist_characters"):
+    if request.user.has_perm("aa_bb.can_blacklist_characters"):  # Only staff can see the POST form.
         action_url = reverse("BigBrother:add_blacklist")
         token      = get_token(request)
         html += [
@@ -87,39 +109,40 @@ def add_user_characters_to_blacklist(
     reason: str,
     max_reason_length: int = 4000
 ) -> list[str]:
-    if not aablacklist_active():
+    """
+    Blacklist every character owned by `target_user_id` with attribution.
+
+    We annotate each EveNote with who issued the action, the target's main,
+    and the staff-provided reason so that the record remains auditable.
+    """
+    if not aablacklist_active():  # No-op when blacklist plugin is missing.
         return None
 
     from blacklist.models import EveNote
-    """
-    Blacklist every character owned by `target_user_id`, tagging each entry
-    with the issuing user's main character (or username) and the given reason.
-    Returns the list of newly blacklisted character names.
-    """
 
     # 1. Load issuer and determine their “main” character
     issuer = User.objects.get(pk=issuer_user_id)
     try:
         main_char = issuer.profile.main_character
-    except (ObjectDoesNotExist, AttributeError):
+    except (ObjectDoesNotExist, AttributeError):  # Profiles may not exist for every user.
         main_char = None
-    if main_char is None:
+    if main_char is None:  # As fallback, just take the first owned character.
         co_first = CharacterOwnership.objects.filter(user=issuer).first()
         main_char = co_first.character if co_first else None
     added_by = main_char.character_name if main_char else issuer.get_username()
 
     # 2. Truncate and clean the reason
     reason_clean = (reason or "").strip()
-    if len(reason_clean) > max_reason_length:
+    if len(reason_clean) > max_reason_length:  # Enforce database length limit.
         reason_clean = reason_clean[:max_reason_length]
 
     # 3. Fetch target user’s main character
     target_user = User.objects.get(pk=target_user_id)
     try:
         target_main_char = target_user.profile.main_character
-    except (ObjectDoesNotExist, AttributeError):
+    except (ObjectDoesNotExist, AttributeError):  # Same profile caveat for targets.
         target_main_char = None
-    if target_main_char is None:
+    if target_main_char is None:  # Fallback to first character if no profile/main set.
         co_first_t = CharacterOwnership.objects.filter(user=target_user).first()
         target_main_char = co_first_t.character if co_first_t else None
     target_main_name = (
@@ -146,7 +169,7 @@ def add_user_characters_to_blacklist(
             eve_catagory='character',
             blacklisted=True
         ).exists()
-        if exists:
+        if exists:  # Skip characters already blacklisted.
             continue
 
         EveNote.objects.create(
