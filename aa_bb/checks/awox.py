@@ -1,3 +1,11 @@
+"""
+Fetches and caches "awox" killmails (friendly fire) for a user's characters.
+
+The functions here encapsulate the networking against zKillboard/ESI,
+cache management, and rendering helpers so the calling views do not have to
+care about throttling or HTML generation.
+"""
+
 import requests
 import time
 import logging
@@ -32,10 +40,16 @@ _last_zkill_down_notice_monotonic = 0.0
 
 
 def _notify_zkill_down_once(preview: str, status: int | None, content_type: str | None):
+    """
+    Fire a single Discord notification when zKill returns junk.
+
+    We keep an in-memory timestamp and bail out if we have already warned
+    within the last ~hour to avoid alert spam when zKill is flaking.
+    """
     global _last_zkill_down_notice_monotonic
     now = time.monotonic()
     # 2 hours = 7200 seconds
-    if now - _last_zkill_down_notice_monotonic < 3500:
+    if now - _last_zkill_down_notice_monotonic < 3500:  # Skip notification if we already warned recently.
         return
     _last_zkill_down_notice_monotonic = now
     msg = (
@@ -48,7 +62,15 @@ def _notify_zkill_down_once(preview: str, status: int | None, content_type: str 
     except Exception as e:
         logger.warning(f"Failed to send zKill down notification: {e}")
 
+
 def fetch_awox_kills(user_id, delay=0.2):
+    """
+    Return a deduplicated list of awox kill summaries for the given user.
+
+    We prefer a DB cache (so reloading the checklist is cheap), otherwise we
+    pull each character's recent awox activity from zKill, hydrate the full
+    mail via ESI, and cache the resulting summary for future calls.
+    """
     # Indefinite DB cache: return cached kills if present
     try:
         cache = AwoxKillsCache.objects.get(pk=user_id)
@@ -91,7 +113,7 @@ def fetch_awox_kills(user_id, delay=0.2):
             not content_type.startswith("application/json")
             or "so a big oops happened" in text_lower
             or "cdn-cgi/challenge-platform" in text_lower
-        ):
+        ):  # Bail out when zKill returns HTML (Cloudflare/error) instead of JSON payloads.
             logger.warning(
                 "Non-JSON response from zKillboard for %s: status=%s content_type=%s body='%s'",
                 char_id,
@@ -120,9 +142,9 @@ def fetch_awox_kills(user_id, delay=0.2):
             hash_ = kill.get("zkb", {}).get("hash")
             value = kill.get("zkb", {}).get("totalValue", 0)
 
-            if not kill_id or not hash_:
+            if not kill_id or not hash_:  # Ignore malformed entries that lack identifiers.
                 continue
-            if kill_id in kills_by_id:
+            if kill_id in kills_by_id:  # Skip duplicates pulled from multiple characters.
                 continue
 
             #time.sleep(delay)
@@ -145,10 +167,10 @@ def fetch_awox_kills(user_id, delay=0.2):
             attacker_names = set()
             for attacker in attackers:
                 a_id = attacker.get("character_id")
-                if a_id in char_ids and a_id != victim_id:
+                if a_id in char_ids and a_id != victim_id:  # Friendly fire only counts when attacker differs from victim.
                     attacker_names.add(char_id_map.get(a_id))
 
-            if not attacker_names:
+            if not attacker_names:  # No awox behaviour detected for this killmail.
                 continue
 
             kills_by_id[kill_id] = {
@@ -169,8 +191,14 @@ def fetch_awox_kills(user_id, delay=0.2):
 
 
 def render_awox_kills_html(userID):
+    """
+    Render the cached awox data into a simple Bootstrap friendly table.
+
+    Returning `None` allows callers to skip rendering the section entirely
+    when the user has no awox history (better UX than a blank table).
+    """
     kills = fetch_awox_kills(userID)
-    if not kills:
+    if not kills:  # Nothing to render, let callers hide the section entirely.
         return None
 
     html = '<table class="table table-striped">'
@@ -188,8 +216,12 @@ def render_awox_kills_html(userID):
     return html
 
 def get_awox_kill_links(user_id):
+    """
+    Convenience helper used by notification code to embed kill links
+    without having to duplicate the fetch/cache logic.
+    """
     kills = fetch_awox_kills(user_id)
-    if not kills:
+    if not kills:  # No cached kills yet; callers expect empty list.
         return []
 
-    return [kill["link"] for kill in kills if "link" in kill]
+    return [kill["link"] for kill in kills if "link" in kill]  # Only return entries that include a URL.
