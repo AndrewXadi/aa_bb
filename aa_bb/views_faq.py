@@ -162,13 +162,6 @@ def manual_modules(request: WSGIRequest):
     register_issue(
         core_issues,
         core_actions,
-        not cfg.token,
-        format_html("{} is empty.", code("BigBrotherConfig.token")),
-        format_html("Paste the issued token into {} and save the singleton.", code("BigBrotherConfig")),
-    )
-    register_issue(
-        core_issues,
-        core_actions,
         not cfg.is_active,
         format_html("{} reports the plugin as inactive.", code("BigBrotherConfig.is_active")),
         format_html("Validate the token (check Celery logs) and rerun the updater until {} flips to True.", code("is_active")),
