@@ -102,8 +102,7 @@ aa_bb was originally created and developed by
 The project was actively maintained by the original author up to version
 `3.0.2`.
 
-After that point, ongoing development and maintenance continued as a
-community-driven fork maintained by
+After that point, ongoing development and maintenance continued by
 [BroodLK](https://github.com/BroodLK).
 
 This repository preserves the original development history and serves as
