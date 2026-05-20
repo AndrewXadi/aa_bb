@@ -1,18 +1,6 @@
-## Project History
-
-aa_bb was originally created and developed by
-[AndrewXadi](https://github.com/AndrewXadi).
-
-The project was actively maintained by the original author up to version
-`3.0.2`.
-
-After that point, ongoing development and maintenance continued as a
-community-driven fork maintained by
-[BroodLK](https://github.com/BroodLK).
-
-This repository preserves the original development history and serves as
-the source repository for the initial architecture and implementation of
-the project.
+> [!NOTE]
+> Active development currently continues in the community-maintained fork:
+> https://github.com/BroodLK/aa_bb
 
 # BigBrother
 
@@ -104,3 +92,20 @@ aa_bb/
 - Alliance Auth ≥ 4.3.1 with `allianceauth-corptools`, `django-esi`, `aadiscordbot`, and `django-celery-beat`.
 - Celery workers + beat scheduler so the periodic tasks declared in `apps.py` can run.
 - Access to Eve ESI scopes listed in `models.DEFAULT_CHARACTER_SCOPES` and `.DEFAULT_CORPORATION_SCOPES`, plus zKillboard and Reddit (if the module is enabled).
+
+
+## Project History
+
+aa_bb was originally created and developed by
+[AndrewXadi](https://github.com/AndrewXadi).
+
+The project was actively maintained by the original author up to version
+`3.0.2`.
+
+After that point, ongoing development and maintenance continued as a
+community-driven fork maintained by
+[BroodLK](https://github.com/BroodLK).
+
+This repository preserves the original development history and serves as
+the source repository for the initial architecture and implementation of
+the project.
