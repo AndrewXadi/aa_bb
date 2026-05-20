@@ -1,3 +1,19 @@
+## Project History
+
+aa_bb was originally created and developed by
+[AndrewXadi](https://github.com/AndrewXadi).
+
+The project was actively maintained by the original author up to version
+`3.0.2`.
+
+After that point, ongoing development and maintenance continued as a
+community-driven fork maintained by
+[BroodLK](https://github.com/BroodLK).
+
+This repository preserves the original development history and serves as
+the source repository for the initial architecture and implementation of
+the project.
+
 # BigBrother
 
 BigBrother is an Alliance Auth plugin for EVE Online corps and alliances.  
